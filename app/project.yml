@@ -1,0 +1,116 @@
+name: MoAIStudio
+options:
+  bundleIdPrefix: ai.mo.moai
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+  xcodeVersion: "26.4"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    CLANG_ENABLE_MODULES: "YES"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    # Rust 정적 라이브러리 링크 경로 (workspace root 기준)
+    LIBRARY_SEARCH_PATHS:
+      - "$(PROJECT_DIR)/../core/target/release"
+    # swift-bridge 생성 헤더 탐색 경로
+    HEADER_SEARCH_PATHS:
+      - "$(PROJECT_DIR)/../core/crates/moai-ffi/generated"
+      - "$(PROJECT_DIR)/../core/crates/moai-ffi/generated/moai-ffi"
+    # GhosttyKit xcframework 탐색 경로
+    FRAMEWORK_SEARCH_PATHS:
+      - "$(PROJECT_DIR)/Frameworks"
+    OTHER_LDFLAGS:
+      - "-lmoai_ffi"
+      - "-framework"
+      - "Security"
+      - "-framework"
+      - "CoreFoundation"
+
+targets:
+  MoAIStudio:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/App
+      - path: Sources/Bridge
+      - path: Sources/Shell
+      - path: Sources/ViewModels
+      - path: ../core/crates/moai-ffi/generated/SwiftBridgeCore.swift
+        buildPhase: sources
+      - path: ../core/crates/moai-ffi/generated/moai-ffi/moai-ffi.swift
+        buildPhase: sources
+      - path: Sources/App/ModuleBridge.h
+        buildPhase: none
+    info:
+      path: Sources/App/Info.plist
+      properties:
+        CFBundleName: MoAI Studio
+        CFBundleDisplayName: MoAI Studio
+        CFBundleShortVersionString: "1.0.0"
+        LSMinimumSystemVersion: "14.0"
+        NSHighResolutionCapable: true
+        NSPrincipalClass: NSApplication
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.mo.moai.studio
+        ENABLE_HARDENED_RUNTIME: "YES"
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        SWIFT_OBJC_BRIDGING_HEADER: "Sources/App/ModuleBridge.h"
+    preBuildScripts:
+      - name: "Build Rust Core (libmoai_ffi.a)"
+        script: |
+          set -e
+          export PATH="$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+          if ! command -v cargo >/dev/null 2>&1; then
+            echo "warning: cargo not found in PATH; skipping Rust build (artifact must be pre-built)"
+            exit 0
+          fi
+          cd "$PROJECT_DIR/../core"
+          cargo build -p moai-ffi --release
+        basedOnDependencyAnalysis: false
+
+  MoAIStudioTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: MoAIStudio
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: "YES"
+        PRODUCT_BUNDLE_IDENTIFIER: ai.mo.moai.studio.tests
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MoAIStudio.app/Contents/MacOS/MoAIStudio"
+
+  MoAIStudioUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: MoAIStudio
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: "YES"
+        PRODUCT_BUNDLE_IDENTIFIER: ai.mo.moai.studio.uitests
+
+schemes:
+  MoAIStudio:
+    build:
+      targets:
+        MoAIStudio: all
+        MoAIStudioTests: [test]
+        MoAIStudioUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - MoAIStudioTests
+        - MoAIStudioUITests

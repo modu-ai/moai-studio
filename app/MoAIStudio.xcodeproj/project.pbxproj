@@ -1,0 +1,724 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		097E52418AE503A3ABA1923F /* StatusIconTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32455BA320F8203C1B921D08 /* StatusIconTests.swift */; };
+		1D8A2724B9D84405F45D04BE /* RustCore+Generated.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFDEBB79EA10814E96446786 /* RustCore+Generated.swift */; };
+		3A05E8A7312257F155C6D2EB /* NewWorkspaceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1AA063C74B9ECCE57D8524D /* NewWorkspaceSheet.swift */; };
+		3AF18A232B49DAB745E62B0E /* WorkspaceListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 031BEE7A43DEED7EA2484A4F /* WorkspaceListView.swift */; };
+		412EF96432CBE76406ADA649 /* WindowStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D02C5A3321E51CDF4DA227E6 /* WindowStateTests.swift */; };
+		4619C2FEB0AF55203C8851BE /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00223DCCC041D1ED3AE019C /* MainWindow.swift */; };
+		495D28553AC2CE947DF6395B /* moai-ffi.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2D2ECC4A57D9D0BB7C99A2F /* moai-ffi.swift */; };
+		499D685E5FF14858D1D5B8D8 /* TerminalSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E89086EB5C10260453985F8 /* TerminalSurface.swift */; };
+		52B13E3200736D3824EB99A0 /* WindowStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97145620FCA16219518DE913 /* WindowStateStore.swift */; };
+		52D29407A824690BF7D08534 /* WorkspaceViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 256FBC43583C48AF13D4AEB7 /* WorkspaceViewModelTests.swift */; };
+		5E5FB0B19901FDCA20E7C2AF /* TerminalFallback.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5C6B2BFAF37129F93BC4E83 /* TerminalFallback.swift */; };
+		61281BDBC1C793DC8D78146A /* TerminalBackendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BF2915D43B15A2289BDB20D /* TerminalBackendTests.swift */; };
+		7021B018BD3A9055340FC047 /* ContextMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57F58AE5116A90123C87CF48 /* ContextMenu.swift */; };
+		7EA034310D6ACBA60E0B6C43 /* ContentArea.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A9CA12E4F3DF608041EB780 /* ContentArea.swift */; };
+		979E6B50D7AF06A90478EB20 /* MockRustCoreBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = D94B218F07D9AB20DD141FDB /* MockRustCoreBridge.swift */; };
+		A5ABCB02F8573EEDC94814AB /* WorkspaceViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0B99183928D6155F60DC975 /* WorkspaceViewModel.swift */; };
+		C5B7C94D4DDDC994940216E6 /* SwiftBridgeCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1531AEC75C1DE366E380641D /* SwiftBridgeCore.swift */; };
+		DCEE7C4E0DF25DF572F4E41F /* StatusIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A5EA2F46273818069920D97 /* StatusIcon.swift */; };
+		E61D9EBF826F911116E9E1AC /* E2EShellSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 786814ED2E69ACAB17FA3983 /* E2EShellSmokeTests.swift */; };
+		EBC56300F8698762DF72C7F3 /* MoAIStudioApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7732630991974857F6C0F14 /* MoAIStudioApp.swift */; };
+		F388F7E93FA712147799FE5E /* RootSplitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6458F354FB0F0F14D9EF2FAE /* RootSplitView.swift */; };
+		F4CACA0A67F29962C87EEF65 /* EmptyState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 463EBA624B7368098A1339FE /* EmptyState.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		900BCC77DB5009F846A19EF5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DB054EDE37DFCF1249806B25 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E36264984640B1262EE9ED85;
+			remoteInfo = MoAIStudio;
+		};
+		A37422509B147650969365BB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DB054EDE37DFCF1249806B25 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E36264984640B1262EE9ED85;
+			remoteInfo = MoAIStudio;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		031BEE7A43DEED7EA2484A4F /* WorkspaceListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceListView.swift; sourceTree = "<group>"; };
+		0E89086EB5C10260453985F8 /* TerminalSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalSurface.swift; sourceTree = "<group>"; };
+		1531AEC75C1DE366E380641D /* SwiftBridgeCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftBridgeCore.swift; sourceTree = "<group>"; };
+		256FBC43583C48AF13D4AEB7 /* WorkspaceViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceViewModelTests.swift; sourceTree = "<group>"; };
+		32455BA320F8203C1B921D08 /* StatusIconTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusIconTests.swift; sourceTree = "<group>"; };
+		40BA6A69CCCCEAF8043F2CF1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		43912288AC483C27109D5550 /* MoAIStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MoAIStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		463EBA624B7368098A1339FE /* EmptyState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyState.swift; sourceTree = "<group>"; };
+		51255B076CCDBFB810A4E9B8 /* MoAIStudioUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MoAIStudioUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		57F58AE5116A90123C87CF48 /* ContextMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextMenu.swift; sourceTree = "<group>"; };
+		5BF2915D43B15A2289BDB20D /* TerminalBackendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalBackendTests.swift; sourceTree = "<group>"; };
+		6458F354FB0F0F14D9EF2FAE /* RootSplitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootSplitView.swift; sourceTree = "<group>"; };
+		6A5EA2F46273818069920D97 /* StatusIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusIcon.swift; sourceTree = "<group>"; };
+		6A9CA12E4F3DF608041EB780 /* ContentArea.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentArea.swift; sourceTree = "<group>"; };
+		786814ED2E69ACAB17FA3983 /* E2EShellSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = E2EShellSmokeTests.swift; sourceTree = "<group>"; };
+		960020ADC55D23960F0E18A5 /* ModuleBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ModuleBridge.h; sourceTree = "<group>"; };
+		97145620FCA16219518DE913 /* WindowStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowStateStore.swift; sourceTree = "<group>"; };
+		A0B99183928D6155F60DC975 /* WorkspaceViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceViewModel.swift; sourceTree = "<group>"; };
+		A2D2ECC4A57D9D0BB7C99A2F /* moai-ffi.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "moai-ffi.swift"; sourceTree = "<group>"; };
+		AF79009B30BF4963E599F95F /* MoAIStudioTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MoAIStudioTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D00223DCCC041D1ED3AE019C /* MainWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindow.swift; sourceTree = "<group>"; };
+		D02C5A3321E51CDF4DA227E6 /* WindowStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowStateTests.swift; sourceTree = "<group>"; };
+		D7732630991974857F6C0F14 /* MoAIStudioApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoAIStudioApp.swift; sourceTree = "<group>"; };
+		D94B218F07D9AB20DD141FDB /* MockRustCoreBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockRustCoreBridge.swift; sourceTree = "<group>"; };
+		DFDEBB79EA10814E96446786 /* RustCore+Generated.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RustCore+Generated.swift"; sourceTree = "<group>"; };
+		F1AA063C74B9ECCE57D8524D /* NewWorkspaceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewWorkspaceSheet.swift; sourceTree = "<group>"; };
+		F5C6B2BFAF37129F93BC4E83 /* TerminalFallback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalFallback.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		07AD8B35C727FC3C3C41B475 /* generated */ = {
+			isa = PBXGroup;
+			children = (
+				1531AEC75C1DE366E380641D /* SwiftBridgeCore.swift */,
+				C83BDE766ACAED2417727FB0 /* moai-ffi */,
+			);
+			path = generated;
+			sourceTree = "<group>";
+		};
+		2458926CC3AFFBC5D154CD05 /* core */ = {
+			isa = PBXGroup;
+			children = (
+				5EA7D8C6B1B3AE841F1EB6CA /* crates */,
+			);
+			path = core;
+			sourceTree = "<group>";
+		};
+		245BF371E1D2EC0B670CB8FF = {
+			isa = PBXGroup;
+			children = (
+				E5998B107465505C1DDCD6D1 /* moai-studio */,
+				7420C00B06FAD53BE3FD8E6B /* Sources */,
+				BB63E5203F12AF9BA3CFD022 /* Tests */,
+				49CFFB2CC499BE41B67C979A /* UITests */,
+				F21175F1BE9ECB18A0D9A4D4 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		2506C1A7A41C436F1F12882A /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				A0B99183928D6155F60DC975 /* WorkspaceViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		38DE7999C81ED4710BE552B5 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				40BA6A69CCCCEAF8043F2CF1 /* Info.plist */,
+				D7732630991974857F6C0F14 /* MoAIStudioApp.swift */,
+				960020ADC55D23960F0E18A5 /* ModuleBridge.h */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		49CFFB2CC499BE41B67C979A /* UITests */ = {
+			isa = PBXGroup;
+			children = (
+				786814ED2E69ACAB17FA3983 /* E2EShellSmokeTests.swift */,
+			);
+			path = UITests;
+			sourceTree = "<group>";
+		};
+		5EA7D8C6B1B3AE841F1EB6CA /* crates */ = {
+			isa = PBXGroup;
+			children = (
+				DD6141397550B1D9B01803E0 /* moai-ffi */,
+			);
+			path = crates;
+			sourceTree = "<group>";
+		};
+		73919DE49D7FB70B0367DDB4 /* Content */ = {
+			isa = PBXGroup;
+			children = (
+				6A9CA12E4F3DF608041EB780 /* ContentArea.swift */,
+				463EBA624B7368098A1339FE /* EmptyState.swift */,
+				F5C6B2BFAF37129F93BC4E83 /* TerminalFallback.swift */,
+				0E89086EB5C10260453985F8 /* TerminalSurface.swift */,
+			);
+			path = Content;
+			sourceTree = "<group>";
+		};
+		7420C00B06FAD53BE3FD8E6B /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				38DE7999C81ED4710BE552B5 /* App */,
+				F4B0D7CB441857B83AC2E94C /* Bridge */,
+				955C5E1A82ED28BEE03BB85B /* Shell */,
+				2506C1A7A41C436F1F12882A /* ViewModels */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		955C5E1A82ED28BEE03BB85B /* Shell */ = {
+			isa = PBXGroup;
+			children = (
+				D00223DCCC041D1ED3AE019C /* MainWindow.swift */,
+				6458F354FB0F0F14D9EF2FAE /* RootSplitView.swift */,
+				97145620FCA16219518DE913 /* WindowStateStore.swift */,
+				73919DE49D7FB70B0367DDB4 /* Content */,
+				C35BFED6CC6B90AE04383C45 /* Sidebar */,
+			);
+			path = Shell;
+			sourceTree = "<group>";
+		};
+		BB63E5203F12AF9BA3CFD022 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				D94B218F07D9AB20DD141FDB /* MockRustCoreBridge.swift */,
+				32455BA320F8203C1B921D08 /* StatusIconTests.swift */,
+				5BF2915D43B15A2289BDB20D /* TerminalBackendTests.swift */,
+				D02C5A3321E51CDF4DA227E6 /* WindowStateTests.swift */,
+				256FBC43583C48AF13D4AEB7 /* WorkspaceViewModelTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		C35BFED6CC6B90AE04383C45 /* Sidebar */ = {
+			isa = PBXGroup;
+			children = (
+				57F58AE5116A90123C87CF48 /* ContextMenu.swift */,
+				F1AA063C74B9ECCE57D8524D /* NewWorkspaceSheet.swift */,
+				6A5EA2F46273818069920D97 /* StatusIcon.swift */,
+				031BEE7A43DEED7EA2484A4F /* WorkspaceListView.swift */,
+			);
+			path = Sidebar;
+			sourceTree = "<group>";
+		};
+		C83BDE766ACAED2417727FB0 /* moai-ffi */ = {
+			isa = PBXGroup;
+			children = (
+				A2D2ECC4A57D9D0BB7C99A2F /* moai-ffi.swift */,
+			);
+			path = "moai-ffi";
+			sourceTree = "<group>";
+		};
+		DD6141397550B1D9B01803E0 /* moai-ffi */ = {
+			isa = PBXGroup;
+			children = (
+				07AD8B35C727FC3C3C41B475 /* generated */,
+			);
+			path = "moai-ffi";
+			sourceTree = "<group>";
+		};
+		E5998B107465505C1DDCD6D1 /* moai-studio */ = {
+			isa = PBXGroup;
+			children = (
+				2458926CC3AFFBC5D154CD05 /* core */,
+			);
+			name = "moai-studio";
+			path = ..;
+			sourceTree = "<group>";
+		};
+		F21175F1BE9ECB18A0D9A4D4 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				43912288AC483C27109D5550 /* MoAIStudio.app */,
+				AF79009B30BF4963E599F95F /* MoAIStudioTests.xctest */,
+				51255B076CCDBFB810A4E9B8 /* MoAIStudioUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		F4B0D7CB441857B83AC2E94C /* Bridge */ = {
+			isa = PBXGroup;
+			children = (
+				DFDEBB79EA10814E96446786 /* RustCore+Generated.swift */,
+			);
+			path = Bridge;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2CF97948715FE916E00D04FB /* MoAIStudioUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4998DCDBEC1D2E10969C5B5A /* Build configuration list for PBXNativeTarget "MoAIStudioUITests" */;
+			buildPhases = (
+				F9995055EDDB1418CDC1A685 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3817B4A141C60BC10F5287C1 /* PBXTargetDependency */,
+			);
+			name = MoAIStudioUITests;
+			packageProductDependencies = (
+			);
+			productName = MoAIStudioUITests;
+			productReference = 51255B076CCDBFB810A4E9B8 /* MoAIStudioUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		500438DE57379FF918C8CC4A /* MoAIStudioTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F356497E4883359BC31E1B3E /* Build configuration list for PBXNativeTarget "MoAIStudioTests" */;
+			buildPhases = (
+				60ED820A82C9C8F09F702E6A /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				03A892BA6517B5DB01FD8883 /* PBXTargetDependency */,
+			);
+			name = MoAIStudioTests;
+			packageProductDependencies = (
+			);
+			productName = MoAIStudioTests;
+			productReference = AF79009B30BF4963E599F95F /* MoAIStudioTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		E36264984640B1262EE9ED85 /* MoAIStudio */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1926A401C707AB63C01E68BD /* Build configuration list for PBXNativeTarget "MoAIStudio" */;
+			buildPhases = (
+				05C5B1967478635DFE970910 /* Build Rust Core (libmoai_ffi.a) */,
+				9215A50AFDD77B98D8DDF7D4 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MoAIStudio;
+			packageProductDependencies = (
+			);
+			productName = MoAIStudio;
+			productReference = 43912288AC483C27109D5550 /* MoAIStudio.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		DB054EDE37DFCF1249806B25 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2640;
+				TargetAttributes = {
+					2CF97948715FE916E00D04FB = {
+						TestTargetID = E36264984640B1262EE9ED85;
+					};
+					E36264984640B1262EE9ED85 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 6AA5E9B07F404C52EB2C5F1F /* Build configuration list for PBXProject "MoAIStudio" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 245BF371E1D2EC0B670CB8FF;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = F21175F1BE9ECB18A0D9A4D4 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E36264984640B1262EE9ED85 /* MoAIStudio */,
+				500438DE57379FF918C8CC4A /* MoAIStudioTests */,
+				2CF97948715FE916E00D04FB /* MoAIStudioUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		05C5B1967478635DFE970910 /* Build Rust Core (libmoai_ffi.a) */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Rust Core (libmoai_ffi.a)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nexport PATH=\"$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH\"\nif ! command -v cargo >/dev/null 2>&1; then\n  echo \"warning: cargo not found in PATH; skipping Rust build (artifact must be pre-built)\"\n  exit 0\nfi\ncd \"$PROJECT_DIR/../core\"\ncargo build -p moai-ffi --release\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		60ED820A82C9C8F09F702E6A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				979E6B50D7AF06A90478EB20 /* MockRustCoreBridge.swift in Sources */,
+				097E52418AE503A3ABA1923F /* StatusIconTests.swift in Sources */,
+				61281BDBC1C793DC8D78146A /* TerminalBackendTests.swift in Sources */,
+				412EF96432CBE76406ADA649 /* WindowStateTests.swift in Sources */,
+				52D29407A824690BF7D08534 /* WorkspaceViewModelTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9215A50AFDD77B98D8DDF7D4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7EA034310D6ACBA60E0B6C43 /* ContentArea.swift in Sources */,
+				7021B018BD3A9055340FC047 /* ContextMenu.swift in Sources */,
+				F4CACA0A67F29962C87EEF65 /* EmptyState.swift in Sources */,
+				4619C2FEB0AF55203C8851BE /* MainWindow.swift in Sources */,
+				EBC56300F8698762DF72C7F3 /* MoAIStudioApp.swift in Sources */,
+				3A05E8A7312257F155C6D2EB /* NewWorkspaceSheet.swift in Sources */,
+				F388F7E93FA712147799FE5E /* RootSplitView.swift in Sources */,
+				1D8A2724B9D84405F45D04BE /* RustCore+Generated.swift in Sources */,
+				DCEE7C4E0DF25DF572F4E41F /* StatusIcon.swift in Sources */,
+				C5B7C94D4DDDC994940216E6 /* SwiftBridgeCore.swift in Sources */,
+				5E5FB0B19901FDCA20E7C2AF /* TerminalFallback.swift in Sources */,
+				499D685E5FF14858D1D5B8D8 /* TerminalSurface.swift in Sources */,
+				52B13E3200736D3824EB99A0 /* WindowStateStore.swift in Sources */,
+				3AF18A232B49DAB745E62B0E /* WorkspaceListView.swift in Sources */,
+				A5ABCB02F8573EEDC94814AB /* WorkspaceViewModel.swift in Sources */,
+				495D28553AC2CE947DF6395B /* moai-ffi.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F9995055EDDB1418CDC1A685 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E61D9EBF826F911116E9E1AC /* E2EShellSmokeTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		03A892BA6517B5DB01FD8883 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E36264984640B1262EE9ED85 /* MoAIStudio */;
+			targetProxy = A37422509B147650969365BB /* PBXContainerItemProxy */;
+		};
+		3817B4A141C60BC10F5287C1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E36264984640B1262EE9ED85 /* MoAIStudio */;
+			targetProxy = 900BCC77DB5009F846A19EF5 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0AB2E196916281897CA007E0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ai.mo.moai.studio.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MoAIStudio.app/Contents/MacOS/MoAIStudio";
+			};
+			name = Debug;
+		};
+		80934BAE054117F4AB5B0A6A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ai.mo.moai.studio.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MoAIStudio.app/Contents/MacOS/MoAIStudio";
+			};
+			name = Release;
+		};
+		9C078F2878E23FA7F87B78FE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = Sources/App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ai.mo.moai.studio;
+				SDKROOT = macosx;
+				SWIFT_OBJC_BRIDGING_HEADER = Sources/App/ModuleBridge.h;
+			};
+			name = Release;
+		};
+		C44A256F0ADA3E8D6D990B9E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/Frameworks",
+				);
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/../core/crates/moai-ffi/generated",
+					"$(PROJECT_DIR)/../core/crates/moai-ffi/generated/moai-ffi",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/../core/target/release",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				OTHER_LDFLAGS = (
+					"-lmoai_ffi",
+					"-framework",
+					Security,
+					"-framework",
+					CoreFoundation,
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.10;
+			};
+			name = Debug;
+		};
+		D1A62556D6FCC106379B90AC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ai.mo.moai.studio.uitests;
+				SDKROOT = macosx;
+				TEST_TARGET_NAME = MoAIStudio;
+			};
+			name = Debug;
+		};
+		D2A2F11D81FFFDB51ED2FB38 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ai.mo.moai.studio.uitests;
+				SDKROOT = macosx;
+				TEST_TARGET_NAME = MoAIStudio;
+			};
+			name = Release;
+		};
+		DF9EA1984A771B5DCF103C58 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = Sources/App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ai.mo.moai.studio;
+				SDKROOT = macosx;
+				SWIFT_OBJC_BRIDGING_HEADER = Sources/App/ModuleBridge.h;
+			};
+			name = Debug;
+		};
+		F8FFD6D07C361EBAD052748C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/Frameworks",
+				);
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/../core/crates/moai-ffi/generated",
+					"$(PROJECT_DIR)/../core/crates/moai-ffi/generated/moai-ffi",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/../core/target/release",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				OTHER_LDFLAGS = (
+					"-lmoai_ffi",
+					"-framework",
+					Security,
+					"-framework",
+					CoreFoundation,
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.10;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1926A401C707AB63C01E68BD /* Build configuration list for PBXNativeTarget "MoAIStudio" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DF9EA1984A771B5DCF103C58 /* Debug */,
+				9C078F2878E23FA7F87B78FE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		4998DCDBEC1D2E10969C5B5A /* Build configuration list for PBXNativeTarget "MoAIStudioUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D1A62556D6FCC106379B90AC /* Debug */,
+				D2A2F11D81FFFDB51ED2FB38 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		6AA5E9B07F404C52EB2C5F1F /* Build configuration list for PBXProject "MoAIStudio" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C44A256F0ADA3E8D6D990B9E /* Debug */,
+				F8FFD6D07C361EBAD052748C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F356497E4883359BC31E1B3E /* Build configuration list for PBXNativeTarget "MoAIStudioTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0AB2E196916281897CA007E0 /* Debug */,
+				80934BAE054117F4AB5B0A6A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = DB054EDE37DFCF1249806B25 /* Project object */;
+}
