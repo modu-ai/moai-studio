@@ -7,12 +7,19 @@ license.workspace = true
 [lib]
 # staticlib: Swift SPM 링킹용 정적 라이브러리 (.a)
 # cdylib: 동적 라이브러리 (.dylib) — 옵션
-# rlib: cargo test가 사용하는 Rust 라이브러리
+# rlib: cargo test / 내부 통합용
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
 moai-core = { path = "../moai-core" }
+swift-bridge = "0.1"
+# tokio: 이벤트 스트림 발행·구독용 런타임 브릿지
+tokio = { workspace = true, features = ["rt-multi-thread", "sync", "macros", "time"] }
+# once_cell: 프로세스 전역 tokio runtime 핸들 지연 초기화
+once_cell = "1"
+# uuid: workspace id 생성
+uuid = { version = "1", features = ["v4"] }
 tracing = { workspace = true }
 
 [build-dependencies]
-swift-bridge-build = "0.1.59"
+swift-bridge-build = "0.1"

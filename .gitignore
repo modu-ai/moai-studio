@@ -136,3 +136,6 @@ node_modules/
 .next/
 out/
 app/.build/
+
+# swift-bridge 생성 파일 (빌드 시 재생성)
+core/crates/moai-ffi/generated/

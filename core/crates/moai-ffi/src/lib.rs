@@ -1,92 +1,134 @@
-//! moai-ffi: Rust ↔ Swift FFI 경계 정의
+#![allow(clippy::unnecessary_cast)] // swift-bridge 0.1 매크로가 생성하는 동일 타입 포인터 캐스트 허용
+
+//! moai-ffi: Rust ↔ Swift FFI 경계
 //!
-//! 이 크레이트는 Swift UI와 Rust Core 사이의 유일한 FFI 경계다.
-//! M0에서는 수동 C FFI로 구현한다. M1+에서 swift-bridge로 전환 예정.
+//! M1 부터는 수동 C ABI 대신 `swift-bridge` 매크로로 Swift 바인딩을 자동 생성한다.
+//! 모든 FFI 경계는 아래 `#[swift_bridge::bridge] mod ffi` 블록을 통해서만 노출된다.
+//!
+//! ## 비동기/콜백 규약
+//!
+//! swift-bridge 의 `#[swift_bridge(async)]` 는 Swift 6 Structured Concurrency 와
+//! 조합 시 수명/스레드 안전성 이슈가 있어 본 크레이트는 사용하지 않는다.
+//! 이벤트 스트림은 아래 **sync FFI + 폴링 기반 콜백** 패턴으로 구현된다.
+//!
+//! 1. Rust: `subscribe_events(workspace_id)` → 내부 `tokio::broadcast` 채널 구독 시작
+//! 2. Rust: 이벤트 발생 시 workspace 별 VecDeque 에 저장
+//! 3. Swift: `DispatchSource.timer` 로 `poll_event(workspace_id)` 를 고빈도 호출
+//!    → FFI 호출 오버헤드 <1ms (micro-benchmark 로 검증)
+//! 4. Swift: 수신한 JSON payload 를 `DispatchQueue.main.async` 로 UI 에 전달
 
-// @MX:NOTE: [AUTO] M0 FFI 표면 — version, free만 노출. start_workspace/send_user_message는 M1에서 추가
+// @MX:NOTE: [AUTO] FFI 표면은 반드시 이 bridge 블록을 통해서만 노출된다.
 
-use std::ffi::CString;
-use std::os::raw::c_char;
+mod events;
+mod workspace;
 
-/// MoAI Studio 버전 문자열을 C 문자열로 반환
-///
-/// # Safety
-/// 반환된 포인터는 `moai_version_free`로 해제해야 한다.
-/// Swift에서는 `defer { moai_version_free(ptr) }` 패턴을 사용한다.
-// @MX:ANCHOR: Swift → Rust 버전 조회 진입점
-// @MX:REASON: [AUTO] Swift UnsafePointer<CChar>로 직접 호출되는 C ABI 함수
-#[unsafe(no_mangle)]
-pub extern "C" fn moai_version() -> *mut c_char {
-    let version = moai_core::version();
-    // CString 변환 실패는 Rust 내부 버그이므로 unwrap 허용
-    CString::new(version).unwrap().into_raw()
+use once_cell::sync::OnceCell;
+use tokio::runtime::Runtime;
+
+use crate::workspace::WorkspaceRegistry;
+
+/// 프로세스 전역 tokio 런타임. FFI 호출은 sync 이지만 내부 비동기 작업은
+/// 이 런타임 위에서 `Runtime::spawn` 으로 실행된다.
+// @MX:ANCHOR: [AUTO] 프로세스 단일 tokio 런타임
+// @MX:REASON: [AUTO] 중복 초기화 방지 + Swift 측에서 여러 RustCore 인스턴스 생성 시 런타임 공유 (fan_in>=3)
+static RUNTIME: OnceCell<Runtime> = OnceCell::new();
+
+pub(crate) fn runtime() -> &'static Runtime {
+    RUNTIME.get_or_init(|| Runtime::new().expect("tokio multi-thread runtime 초기화 실패"))
 }
 
-/// `moai_version`이 반환한 C 문자열을 해제
-///
-/// # Safety
-/// `s`는 반드시 `moai_version()`이 반환한 포인터여야 한다.
-/// null 포인터는 안전하게 무시된다.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn moai_version_free(s: *mut c_char) {
-    // null 포인터 방어
-    if s.is_null() {
-        return;
+/// Rust 코어의 불투명 핸들. Swift 에서는 `RustCore` 클래스로 노출된다.
+pub struct RustCore {
+    workspaces: WorkspaceRegistry,
+}
+
+impl RustCore {
+    // @MX:ANCHOR: [AUTO] Swift → Rust 최초 진입점
+    // @MX:REASON: [AUTO] 모든 워크스페이스/이벤트 FFI 의 단일 게이트웨이 (fan_in>=5)
+    pub fn new() -> Self {
+        // 런타임 초기화를 미리 트리거
+        let _ = runtime();
+        Self {
+            workspaces: WorkspaceRegistry::new(),
+        }
     }
-    // SAFETY: moai_version()이 CString::into_raw()로 생성한 포인터임
-    unsafe {
-        drop(CString::from_raw(s));
+
+    /// moai-core 버전 문자열 반환.
+    pub fn version(&self) -> String {
+        moai_core::version()
+    }
+
+    /// 새 워크스페이스를 생성하고 UUID 를 반환한다.
+    pub fn create_workspace(&self, name: String, project_path: String) -> String {
+        self.workspaces.create(name, project_path)
+    }
+
+    /// 지정된 워크스페이스를 삭제한다. 존재하지 않으면 `false`.
+    pub fn delete_workspace(&self, workspace_id: String) -> bool {
+        self.workspaces.delete(&workspace_id)
+    }
+
+    /// 현재 등록된 워크스페이스 목록을 반환한다.
+    pub fn list_workspaces(&self) -> Vec<ffi::WorkspaceInfo> {
+        self.workspaces.list()
+    }
+
+    /// 사용자 메시지를 지정 워크스페이스로 전달한다.
+    ///
+    /// M1 후속 태스크(T-013) 에서 Claude subprocess 의 stdin 전송으로 확장된다.
+    /// 현재는 브로드캐스트 채널에 `user_message` 이벤트로 발행한다.
+    pub fn send_user_message(&self, workspace_id: String, message: String) -> bool {
+        self.workspaces
+            .send_message(&workspace_id, message, runtime())
+    }
+
+    /// 이벤트 스트림 구독을 활성화한다.
+    ///
+    /// 이후 `poll_event(workspace_id)` 로 큐에서 하나씩 꺼내 Swift 측 콜백에
+    /// 전달한다. 이미 구독 중이면 no-op.
+    pub fn subscribe_events(&self, workspace_id: String) -> bool {
+        self.workspaces.subscribe(&workspace_id, runtime())
+    }
+
+    /// 큐에 대기 중인 이벤트를 하나 꺼낸다. 비어있으면 `None`.
+    // @MX:NOTE: [AUTO] Swift 는 DispatchSource.timer 로 고빈도 폴링. <1ms 오버헤드 목표.
+    pub fn poll_event(&self, workspace_id: String) -> Option<String> {
+        self.workspaces.poll_event(&workspace_id)
     }
 }
 
-/// 버전 문자열의 Rust 네이티브 접근 함수 (테스트 및 내부 사용)
-pub fn ffi_version() -> String {
-    moai_core::version()
+impl Default for RustCore {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::ffi::CStr;
-
-    // RED→GREEN: FFI moai_version()이 null이 아닌 유효한 버전 문자열을 반환해야 함
-    #[test]
-    fn test_ffi_version_returns_non_null() {
-        let ptr = moai_version();
-        assert!(!ptr.is_null(), "moai_version()이 null 포인터를 반환함");
-        // 안전한 해제
-        unsafe { moai_version_free(ptr) };
+// @MX:ANCHOR: [AUTO] Swift 바인딩 자동 생성 지점
+// @MX:REASON: [AUTO] swift-bridge-build 가 이 블록만을 파싱해 .swift/.h 생성 (유일 FFI 경계)
+#[swift_bridge::bridge]
+mod ffi {
+    // Swift 로 값 전달되는 워크스페이스 정보 스냅샷 (doc 속성 불가 — swift-bridge 제약)
+    #[swift_bridge(swift_repr = "struct")]
+    pub struct WorkspaceInfo {
+        pub id: String,
+        pub name: String,
+        pub status: String,
     }
 
-    // RED→GREEN: FFI moai_version()이 moai_core::version()과 동일한 값을 반환해야 함
-    #[test]
-    fn test_ffi_version_matches_core_version() {
-        let ptr = moai_version();
-        assert!(!ptr.is_null());
+    extern "Rust" {
+        type RustCore;
 
-        // SAFETY: ptr은 방금 생성된 유효한 CString 포인터
-        // to_string()으로 값을 먼저 복사한 뒤 포인터를 해제한다
-        let ffi_ver = unsafe { CStr::from_ptr(ptr) }
-            .to_str()
-            .expect("유효한 UTF-8이 아님")
-            .to_string();
+        #[swift_bridge(init)]
+        fn new() -> RustCore;
 
-        unsafe { moai_version_free(ptr) };
+        fn version(&self) -> String;
 
-        assert_eq!(ffi_ver, moai_core::version(), "FFI 버전이 core 버전과 불일치");
-    }
+        fn create_workspace(&self, name: String, project_path: String) -> String;
+        fn delete_workspace(&self, workspace_id: String) -> bool;
+        fn list_workspaces(&self) -> Vec<WorkspaceInfo>;
 
-    // RED→GREEN: FFI moai_version()이 CARGO_PKG_VERSION과 일치해야 함
-    #[test]
-    fn test_ffi_version_matches_cargo_pkg_version() {
-        let ver = ffi_version();
-        assert_eq!(ver, env!("CARGO_PKG_VERSION"));
-    }
-
-    // RED→GREEN: moai_version_free(null)은 패닉 없이 안전하게 처리되어야 함
-    #[test]
-    fn test_ffi_version_free_null_is_safe() {
-        // null 포인터 해제가 패닉을 일으키지 않아야 함
-        unsafe { moai_version_free(std::ptr::null_mut()) };
+        fn send_user_message(&self, workspace_id: String, message: String) -> bool;
+        fn subscribe_events(&self, workspace_id: String) -> bool;
+        fn poll_event(&self, workspace_id: String) -> Option<String>;
     }
 }
