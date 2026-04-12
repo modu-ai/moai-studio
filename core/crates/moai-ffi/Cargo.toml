@@ -4,4 +4,14 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[lib]
+# cdylib: Swift가 링크하는 동적 라이브러리
+# rlib: cargo test가 사용하는 Rust 라이브러리
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
+moai-core = { path = "../moai-core" }
+tracing = { workspace = true }
+
+[build-dependencies]
+swift-bridge-build = "0.1.59"
