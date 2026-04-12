@@ -2,6 +2,10 @@
 //!
 //! 워크스페이스 관리를 위한 Git 작업(워크트리, 상태, 브랜치)을 제공한다.
 
+pub mod worktree;
+
+pub use worktree::{WorktreeManager, WorktreeSummary};
+
 use std::path::Path;
 use thiserror::Error;
 

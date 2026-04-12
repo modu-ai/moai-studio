@@ -61,7 +61,11 @@ mod tests {
     #[test]
     fn test_moai_core_version_matches_cargo_pkg_version() {
         let v = version();
-        assert_eq!(v, env!("CARGO_PKG_VERSION"), "버전이 CARGO_PKG_VERSION과 불일치");
+        assert_eq!(
+            v,
+            env!("CARGO_PKG_VERSION"),
+            "버전이 CARGO_PKG_VERSION과 불일치"
+        );
     }
 
     // RED→GREEN: CoreHandle::new()가 패닉 없이 생성되어야 함

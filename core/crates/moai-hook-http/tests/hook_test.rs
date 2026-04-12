@@ -1,9 +1,7 @@
 //! moai-hook-http 통합 테스트
 //! TDD RED 단계: 구현 전 실패하는 테스트를 먼저 작성
 
-use moai_hook_http::{
-    HookEventRequest, HookResponse, HookSpecificOutput, HookServer,
-};
+use moai_hook_http::{HookEventRequest, HookResponse, HookServer, HookSpecificOutput};
 
 // ─── test 1: PreToolUse JSON 역직렬화 ───────────────────────────────────────
 
@@ -73,7 +71,9 @@ fn test_hook_response_with_updated_input() {
     let json_val: serde_json::Value =
         serde_json::from_str(&serde_json::to_string(&response).unwrap()).unwrap();
 
-    let output = json_val.get("hookSpecificOutput").expect("hookSpecificOutput 없음");
+    let output = json_val
+        .get("hookSpecificOutput")
+        .expect("hookSpecificOutput 없음");
     assert_eq!(output["permissionDecision"], "allow");
     assert_eq!(output["updatedInput"], updated);
 }
@@ -164,9 +164,14 @@ async fn test_hook_server_pre_tool_use_allow() {
     let json_val: serde_json::Value = response.json().await.expect("응답 JSON 파싱 실패");
 
     // hookEventName 필드가 없어야 함 (Errata E6)
-    assert!(json_val.get("hookEventName").is_none(), "Errata E6 위반: hookEventName 존재");
+    assert!(
+        json_val.get("hookEventName").is_none(),
+        "Errata E6 위반: hookEventName 존재"
+    );
 
-    let output = json_val.get("hookSpecificOutput").expect("hookSpecificOutput 없음");
+    let output = json_val
+        .get("hookSpecificOutput")
+        .expect("hookSpecificOutput 없음");
     assert_eq!(
         output["permissionDecision"], "allow",
         "PreToolUse 기본 응답은 allow 여야 함"

@@ -12,6 +12,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
 moai-core = { path = "../moai-core" }
+moai-store = { path = "../moai-store" }
+moai-supervisor = { path = "../moai-supervisor" }
 swift-bridge = "0.1"
 # tokio: 이벤트 스트림 발행·구독용 런타임 브릿지
 tokio = { workspace = true, features = ["rt-multi-thread", "sync", "macros", "time"] }

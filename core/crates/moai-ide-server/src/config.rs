@@ -34,8 +34,7 @@ mod tests {
             "전송 타입은 sse여야 한다"
         );
         assert_eq!(
-            config["mcpServers"]["moai"]["url"],
-            "http://127.0.0.1:8080/sse",
+            config["mcpServers"]["moai"]["url"], "http://127.0.0.1:8080/sse",
             "URL은 포트를 포함한 SSE 엔드포인트여야 한다"
         );
     }

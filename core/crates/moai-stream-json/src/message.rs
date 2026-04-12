@@ -363,18 +363,18 @@ impl<'de> Deserialize<'de> for SDKMessage {
                 let subtype = raw.subtype.as_deref().unwrap_or("");
                 match subtype {
                     "init" => {
-                        let init: SystemInit = serde_json::from_value(full_value)
-                            .map_err(serde::de::Error::custom)?;
+                        let init: SystemInit =
+                            serde_json::from_value(full_value).map_err(serde::de::Error::custom)?;
                         Ok(SDKMessage::System(SystemMessage::Init(init)))
                     }
                     "hook_started" => {
-                        let h: SystemHookStarted = serde_json::from_value(full_value)
-                            .map_err(serde::de::Error::custom)?;
+                        let h: SystemHookStarted =
+                            serde_json::from_value(full_value).map_err(serde::de::Error::custom)?;
                         Ok(SDKMessage::System(SystemMessage::HookStarted(h)))
                     }
                     "hook_response" => {
-                        let h: SystemHookResponse = serde_json::from_value(full_value)
-                            .map_err(serde::de::Error::custom)?;
+                        let h: SystemHookResponse =
+                            serde_json::from_value(full_value).map_err(serde::de::Error::custom)?;
                         Ok(SDKMessage::System(SystemMessage::HookResponse(h)))
                     }
                     other => {
@@ -384,8 +384,8 @@ impl<'de> Deserialize<'de> for SDKMessage {
                 }
             }
             "assistant" => {
-                let msg: AssistantMessage = serde_json::from_value(full_value)
-                    .map_err(serde::de::Error::custom)?;
+                let msg: AssistantMessage =
+                    serde_json::from_value(full_value).map_err(serde::de::Error::custom)?;
                 Ok(SDKMessage::Assistant(msg))
             }
             "user" => {
@@ -394,16 +394,16 @@ impl<'de> Deserialize<'de> for SDKMessage {
                 Ok(SDKMessage::User(msg))
             }
             "rate_limit_event" => {
-                let msg: RateLimitEvent = serde_json::from_value(full_value)
-                    .map_err(serde::de::Error::custom)?;
+                let msg: RateLimitEvent =
+                    serde_json::from_value(full_value).map_err(serde::de::Error::custom)?;
                 Ok(SDKMessage::RateLimitEvent(msg))
             }
             "result" => {
                 let subtype = raw.subtype.as_deref().unwrap_or("");
                 match subtype {
                     "success" => {
-                        let s: ResultSuccess = serde_json::from_value(full_value)
-                            .map_err(serde::de::Error::custom)?;
+                        let s: ResultSuccess =
+                            serde_json::from_value(full_value).map_err(serde::de::Error::custom)?;
                         Ok(SDKMessage::Result(ResultMessage::Success(s)))
                     }
                     other => {
@@ -418,37 +418,39 @@ impl<'de> Deserialize<'de> for SDKMessage {
                 let data_value = raw.data.unwrap_or(full_value);
                 match event_type {
                     "message_start" => {
-                        let d: MessageStartData = serde_json::from_value(data_value)
-                            .map_err(serde::de::Error::custom)?;
+                        let d: MessageStartData =
+                            serde_json::from_value(data_value).map_err(serde::de::Error::custom)?;
                         Ok(SDKMessage::StreamEvent(StreamEventData::MessageStart(d)))
                     }
                     "content_block_start" => {
-                        let d: ContentBlockStartData = serde_json::from_value(data_value)
-                            .map_err(serde::de::Error::custom)?;
+                        let d: ContentBlockStartData =
+                            serde_json::from_value(data_value).map_err(serde::de::Error::custom)?;
                         Ok(SDKMessage::StreamEvent(StreamEventData::ContentBlockStart(
                             d,
                         )))
                     }
                     "content_block_delta" => {
-                        let d: ContentBlockDeltaData = serde_json::from_value(data_value)
-                            .map_err(serde::de::Error::custom)?;
+                        let d: ContentBlockDeltaData =
+                            serde_json::from_value(data_value).map_err(serde::de::Error::custom)?;
                         Ok(SDKMessage::StreamEvent(StreamEventData::ContentBlockDelta(
                             d,
                         )))
                     }
                     "content_block_stop" => {
-                        let d: ContentBlockStopData = serde_json::from_value(data_value)
-                            .map_err(serde::de::Error::custom)?;
-                        Ok(SDKMessage::StreamEvent(StreamEventData::ContentBlockStop(d)))
+                        let d: ContentBlockStopData =
+                            serde_json::from_value(data_value).map_err(serde::de::Error::custom)?;
+                        Ok(SDKMessage::StreamEvent(StreamEventData::ContentBlockStop(
+                            d,
+                        )))
                     }
                     "message_delta" => {
-                        let d: MessageDeltaData = serde_json::from_value(data_value)
-                            .map_err(serde::de::Error::custom)?;
+                        let d: MessageDeltaData =
+                            serde_json::from_value(data_value).map_err(serde::de::Error::custom)?;
                         Ok(SDKMessage::StreamEvent(StreamEventData::MessageDelta(d)))
                     }
                     "message_stop" => {
-                        let d: MessageStopData = serde_json::from_value(data_value)
-                            .map_err(serde::de::Error::custom)?;
+                        let d: MessageStopData =
+                            serde_json::from_value(data_value).map_err(serde::de::Error::custom)?;
                         Ok(SDKMessage::StreamEvent(StreamEventData::MessageStop(d)))
                     }
                     other => {

@@ -1,9 +1,9 @@
 //! NDJSON 코덱 통합 테스트
 //! 스트리밍 JSON 라인 처리와 SdkMessageStream 검증
 
+use futures::StreamExt;
 use moai_stream_json::{SDKMessage, SdkMessageCodec, SdkMessageStream};
 use tokio_util::codec::FramedRead;
-use futures::StreamExt;
 
 // ───────────────────────────────────────────────
 // 다중 라인 NDJSON 스트림 → Vec<SDKMessage> 테스트

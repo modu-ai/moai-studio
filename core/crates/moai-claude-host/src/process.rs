@@ -272,10 +272,18 @@ impl ClaudeProcessConfig {
 
         // 커맨드를 빌드하고 스폰
         let mut cmd = self.build_command();
-        let mut child = cmd.spawn().map_err(|e| ProcessError::SpawnFailed { source: e })?;
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| ProcessError::SpawnFailed { source: e })?;
 
-        let stdout = child.stdout.take().expect("stdout 파이프 없음 (build_command에서 설정됨)");
-        let stdin = child.stdin.take().expect("stdin 파이프 없음 (build_command에서 설정됨)");
+        let stdout = child
+            .stdout
+            .take()
+            .expect("stdout 파이프 없음 (build_command에서 설정됨)");
+        let stdin = child
+            .stdin
+            .take()
+            .expect("stdin 파이프 없음 (build_command에서 설정됨)");
 
         Ok(ClaudeProcess::from_parts(child, stdout, stdin))
     }

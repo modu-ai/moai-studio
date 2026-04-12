@@ -1,7 +1,7 @@
 //! SDKMessage 파싱 통합 테스트
 //! Claude CLI stream-json 프로토콜의 모든 메시지 타입을 검증
 
-use moai_stream_json::{SDKMessage, ContentBlock, UserContentBlock, StreamEventData};
+use moai_stream_json::{ContentBlock, SDKMessage, StreamEventData, UserContentBlock};
 
 // ───────────────────────────────────────────────
 // system/init 파싱 테스트
@@ -56,15 +56,13 @@ fn test_parse_assistant_tool_use() {
     let json = r#"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"tu_1","name":"Bash","input":{"command":"ls"}}]}}"#;
     let msg: SDKMessage = serde_json::from_str(json).unwrap();
     match msg {
-        SDKMessage::Assistant(a) => {
-            match &a.message.content[0] {
-                ContentBlock::ToolUse(tu) => {
-                    assert_eq!(tu.id, "tu_1");
-                    assert_eq!(tu.name, "Bash");
-                }
-                _ => panic!("예상: ToolUse 블록"),
+        SDKMessage::Assistant(a) => match &a.message.content[0] {
+            ContentBlock::ToolUse(tu) => {
+                assert_eq!(tu.id, "tu_1");
+                assert_eq!(tu.name, "Bash");
             }
-        }
+            _ => panic!("예상: ToolUse 블록"),
+        },
         _ => panic!("예상: Assistant 메시지"),
     }
 }
@@ -78,15 +76,13 @@ fn test_parse_assistant_thinking() {
     let json = r#"{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking","thinking":"Let me think...","signature":"sig_xyz"}]}}"#;
     let msg: SDKMessage = serde_json::from_str(json).unwrap();
     match msg {
-        SDKMessage::Assistant(a) => {
-            match &a.message.content[0] {
-                ContentBlock::Thinking(th) => {
-                    assert_eq!(th.thinking, "Let me think...");
-                    assert_eq!(th.signature, "sig_xyz");
-                }
-                _ => panic!("예상: Thinking 블록"),
+        SDKMessage::Assistant(a) => match &a.message.content[0] {
+            ContentBlock::Thinking(th) => {
+                assert_eq!(th.thinking, "Let me think...");
+                assert_eq!(th.signature, "sig_xyz");
             }
-        }
+            _ => panic!("예상: Thinking 블록"),
+        },
         _ => panic!("예상: Assistant 메시지"),
     }
 }
@@ -193,7 +189,8 @@ fn test_parse_unknown_preserves_raw_value() {
 
 #[test]
 fn test_parse_system_hook_started() {
-    let json = r#"{"type":"system","subtype":"hook_started","hook_type":"PreToolUse","tool_name":"Bash"}"#;
+    let json =
+        r#"{"type":"system","subtype":"hook_started","hook_type":"PreToolUse","tool_name":"Bash"}"#;
     let msg: SDKMessage = serde_json::from_str(json).unwrap();
     match msg {
         SDKMessage::System(sys) => match sys {

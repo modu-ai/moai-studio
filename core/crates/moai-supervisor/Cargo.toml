@@ -8,3 +8,9 @@ license.workspace = true
 tokio = { workspace = true, features = ["sync", "rt", "time", "macros", "rt-multi-thread"] }
 tracing = { workspace = true }
 thiserror = { workspace = true }
+moai-store = { path = "../moai-store" }
+moai-git = { path = "../moai-git" }
+moai-fs = { path = "../moai-fs" }
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,10 +1,9 @@
 //! MCP 서버 모듈 — rmcp + axum 기반 Streamable HTTP 서버
 
-use rmcp::{handler::server::wrapper::Parameters, schemars, tool, tool_router};
 use rmcp::transport::streamable_http_server::{
-    StreamableHttpServerConfig, StreamableHttpService,
-    session::local::LocalSessionManager,
+    StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
 };
+use rmcp::{handler::server::wrapper::Parameters, schemars, tool, tool_router};
 use serde::Deserialize;
 use tokio_util::sync::CancellationToken;
 

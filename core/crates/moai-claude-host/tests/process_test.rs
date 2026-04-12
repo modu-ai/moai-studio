@@ -26,18 +26,39 @@ fn test_build_command_has_required_args() {
 
     // tokio::process::Command → 내부 std::process::Command 접근
     let std_cmd = cmd.as_std();
-    let args: Vec<&str> = std_cmd
-        .get_args()
-        .map(|a| a.to_str().unwrap())
-        .collect();
+    let args: Vec<&str> = std_cmd.get_args().map(|a| a.to_str().unwrap()).collect();
 
     assert!(args.contains(&"--bare"), "args에 --bare가 없음: {:?}", args);
-    assert!(args.contains(&"--output-format"), "args에 --output-format이 없음: {:?}", args);
-    assert!(args.contains(&"stream-json"), "args에 stream-json이 없음: {:?}", args);
-    assert!(args.contains(&"--tools"), "args에 --tools가 없음: {:?}", args);
-    assert!(args.contains(&"--permission-mode"), "args에 --permission-mode가 없음: {:?}", args);
-    assert!(args.contains(&"--include-partial-messages"), "args에 --include-partial-messages가 없음: {:?}", args);
-    assert!(args.contains(&"--verbose"), "args에 --verbose가 없음: {:?}", args);
+    assert!(
+        args.contains(&"--output-format"),
+        "args에 --output-format이 없음: {:?}",
+        args
+    );
+    assert!(
+        args.contains(&"stream-json"),
+        "args에 stream-json이 없음: {:?}",
+        args
+    );
+    assert!(
+        args.contains(&"--tools"),
+        "args에 --tools가 없음: {:?}",
+        args
+    );
+    assert!(
+        args.contains(&"--permission-mode"),
+        "args에 --permission-mode가 없음: {:?}",
+        args
+    );
+    assert!(
+        args.contains(&"--include-partial-messages"),
+        "args에 --include-partial-messages가 없음: {:?}",
+        args
+    );
+    assert!(
+        args.contains(&"--verbose"),
+        "args에 --verbose가 없음: {:?}",
+        args
+    );
 }
 
 /// CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0 환경 변수가 설정되어 있는지 검증
@@ -54,7 +75,11 @@ fn test_build_command_has_env_scrub() {
             && val.and_then(|v| v.to_str()) == Some("0")
     });
 
-    assert!(found, "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0이 환경 변수에 없음: {:?}", envs);
+    assert!(
+        found,
+        "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0이 환경 변수에 없음: {:?}",
+        envs
+    );
 }
 
 /// ANTHROPIC_API_KEY가 환경 변수에 포함되어 있는지 검증
@@ -82,10 +107,7 @@ fn test_build_command_tools_flag() {
     let cmd = config.build_command();
 
     let std_cmd = cmd.as_std();
-    let args: Vec<&str> = std_cmd
-        .get_args()
-        .map(|a| a.to_str().unwrap())
-        .collect();
+    let args: Vec<&str> = std_cmd.get_args().map(|a| a.to_str().unwrap()).collect();
 
     // --allowedTools 가 아닌 --tools 사용
     assert!(
@@ -93,7 +115,11 @@ fn test_build_command_tools_flag() {
         "--allowedTools는 사용하면 안 됨 (Errata E2): {:?}",
         args
     );
-    assert!(args.contains(&"--tools"), "args에 --tools가 없음: {:?}", args);
+    assert!(
+        args.contains(&"--tools"),
+        "args에 --tools가 없음: {:?}",
+        args
+    );
 
     // --tools 다음 값이 쉼표로 구분된 목록인지 확인
     let tools_idx = args.iter().position(|&a| a == "--tools").unwrap();
@@ -103,8 +129,16 @@ fn test_build_command_tools_flag() {
         "--tools 값이 쉼표 구분 목록이 아님: {}",
         tools_value
     );
-    assert!(tools_value.contains("Bash"), "--tools 값에 Bash가 없음: {}", tools_value);
-    assert!(tools_value.contains("Read"), "--tools 값에 Read가 없음: {}", tools_value);
+    assert!(
+        tools_value.contains("Bash"),
+        "--tools 값에 Bash가 없음: {}",
+        tools_value
+    );
+    assert!(
+        tools_value.contains("Read"),
+        "--tools 값에 Read가 없음: {}",
+        tools_value
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -268,11 +302,7 @@ async fn test_process_wait_success() {
     let mut process = ClaudeProcess::from_parts(child, stdout, stdin);
     let result = process.wait().await;
 
-    assert!(
-        result.is_ok(),
-        "정상 종료 시 Ok가 아님: {:?}",
-        result
-    );
+    assert!(result.is_ok(), "정상 종료 시 Ok가 아님: {:?}", result);
 }
 
 /// T-7: wait()이 비정상 종료 시 ProcessCrashed를 반환해야 함
@@ -308,10 +338,7 @@ fn test_build_command_optional_mcp_config() {
     config.mcp_config_path = Some(PathBuf::from("/tmp/mcp.json"));
     let cmd = config.build_command();
     let std_cmd = cmd.as_std();
-    let args: Vec<&str> = std_cmd
-        .get_args()
-        .map(|a| a.to_str().unwrap())
-        .collect();
+    let args: Vec<&str> = std_cmd.get_args().map(|a| a.to_str().unwrap()).collect();
     assert!(
         args.contains(&"--mcp-config"),
         "mcp_config_path가 Some일 때 --mcp-config가 없음: {:?}",

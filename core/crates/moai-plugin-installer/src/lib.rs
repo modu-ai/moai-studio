@@ -63,7 +63,10 @@ impl PluginInstaller {
         std::fs::create_dir_all(&self.target_dir)?;
 
         // plugin.json 복사
-        let plugin_json_src = self.plugin_source_dir.join(".claude-plugin").join("plugin.json");
+        let plugin_json_src = self
+            .plugin_source_dir
+            .join(".claude-plugin")
+            .join("plugin.json");
         let plugin_json_dst = self.target_dir.join("plugin.json");
         if plugin_json_src.exists() {
             std::fs::copy(&plugin_json_src, &plugin_json_dst)?;
@@ -143,11 +146,7 @@ mod tests {
         // hooks/hooks.json 생성
         let hooks_dir = source_dir.join("hooks");
         fs::create_dir_all(&hooks_dir).unwrap();
-        fs::write(
-            hooks_dir.join("hooks.json"),
-            r#"{"hooks":[]}"#,
-        )
-        .unwrap();
+        fs::write(hooks_dir.join("hooks.json"), r#"{"hooks":[]}"#).unwrap();
     }
 
     /// default_target_dir가 올바른 경로를 반환하는지 테스트
@@ -213,7 +212,10 @@ mod tests {
 
         // 내용 검증
         let content = fs::read_to_string(plugin_json).unwrap();
-        assert!(content.contains("moai-studio"), "plugin.json 내용이 올바르지 않습니다");
+        assert!(
+            content.contains("moai-studio"),
+            "plugin.json 내용이 올바르지 않습니다"
+        );
     }
 
     /// install()이 hooks.json을 복사하는지 테스트
@@ -247,13 +249,19 @@ mod tests {
         let installer = PluginInstaller::new(source.path().to_path_buf(), target_path.clone());
 
         // 설치 전에는 미설치 상태
-        assert!(!installer.is_installed(), "설치 전에 is_installed()가 true입니다");
+        assert!(
+            !installer.is_installed(),
+            "설치 전에 is_installed()가 true입니다"
+        );
 
         // Act
         installer.install().expect("설치 실패");
 
         // Assert: 설치 후 is_installed()가 true
-        assert!(installer.is_installed(), "설치 후 is_installed()가 false입니다");
+        assert!(
+            installer.is_installed(),
+            "설치 후 is_installed()가 false입니다"
+        );
     }
 
     /// uninstall()이 대상 디렉토리를 제거하는지 테스트
@@ -274,7 +282,10 @@ mod tests {
 
         // Assert: 대상 디렉토리가 제거됨
         assert!(!target_path.exists(), "제거 후 디렉토리가 남아있습니다");
-        assert!(!installer.is_installed(), "제거 후 is_installed()가 true입니다");
+        assert!(
+            !installer.is_installed(),
+            "제거 후 is_installed()가 true입니다"
+        );
     }
 
     /// AlreadyInstalled 에러 테스트
@@ -293,7 +304,10 @@ mod tests {
         let result = installer.install();
 
         // Assert: AlreadyInstalled 에러
-        assert!(result.is_err(), "이미 설치된 상태에서 에러가 발생하지 않았습니다");
+        assert!(
+            result.is_err(),
+            "이미 설치된 상태에서 에러가 발생하지 않았습니다"
+        );
         assert!(
             matches!(result.unwrap_err(), InstallerError::AlreadyInstalled(_)),
             "AlreadyInstalled 에러가 아닙니다"

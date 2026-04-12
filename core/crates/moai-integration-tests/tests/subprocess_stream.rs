@@ -44,7 +44,11 @@ async fn test_stream_decodes_system_init() {
     let mut stream = process.message_stream();
 
     // 첫 번째 메시지를 읽어 system/init인지 확인
-    let msg = stream.next().await.expect("스트림이 비어있다").expect("메시지 디코딩 실패");
+    let msg = stream
+        .next()
+        .await
+        .expect("스트림이 비어있다")
+        .expect("메시지 디코딩 실패");
 
     match msg {
         SDKMessage::System(moai_stream_json::SystemMessage::Init(init)) => {
@@ -66,25 +70,34 @@ async fn test_stream_decodes_result_success() {
     let process = spawn_mock_process(vec![FIXTURE_RESULT_SUCCESS]).await;
 
     let mut stream = process.message_stream();
-    let msg = stream.next().await.expect("스트림이 비어있다").expect("메시지 디코딩 실패");
+    let msg = stream
+        .next()
+        .await
+        .expect("스트림이 비어있다")
+        .expect("메시지 디코딩 실패");
 
     match msg {
         SDKMessage::Result(moai_stream_json::ResultMessage::Success(result)) => {
-            assert_eq!(result.result, "테스트 완료", "result 필드가 올바르게 파싱되어야 한다");
-            assert_eq!(result.duration_ms, 100, "duration_ms가 올바르게 파싱되어야 한다");
+            assert_eq!(
+                result.result, "테스트 완료",
+                "result 필드가 올바르게 파싱되어야 한다"
+            );
+            assert_eq!(
+                result.duration_ms, 100,
+                "duration_ms가 올바르게 파싱되어야 한다"
+            );
         }
-        other => panic!("Result::Success 메시지를 예상했으나 다른 타입 수신: {:?}", other),
+        other => panic!(
+            "Result::Success 메시지를 예상했으나 다른 타입 수신: {:?}",
+            other
+        ),
     }
 }
 
 /// 여러 메시지가 순서대로 디코딩되는지 검증
 #[tokio::test]
 async fn test_stream_decodes_multiple_messages_in_order() {
-    let process = spawn_mock_process(vec![
-        FIXTURE_SYSTEM_INIT,
-        FIXTURE_RESULT_SUCCESS,
-    ])
-    .await;
+    let process = spawn_mock_process(vec![FIXTURE_SYSTEM_INIT, FIXTURE_RESULT_SUCCESS]).await;
 
     let mut stream = process.message_stream();
     let messages: Vec<SDKMessage> = async {
@@ -153,7 +166,11 @@ async fn test_stream_decodes_unknown_type_as_unknown() {
     let process = spawn_mock_process(vec![unknown_json]).await;
 
     let mut stream = process.message_stream();
-    let msg = stream.next().await.expect("스트림이 비어있다").expect("메시지 디코딩 실패");
+    let msg = stream
+        .next()
+        .await
+        .expect("스트림이 비어있다")
+        .expect("메시지 디코딩 실패");
 
     assert!(
         matches!(msg, SDKMessage::Unknown(_)),

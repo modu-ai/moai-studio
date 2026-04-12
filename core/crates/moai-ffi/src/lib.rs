@@ -60,17 +60,17 @@ impl RustCore {
 
     /// 새 워크스페이스를 생성하고 UUID 를 반환한다.
     pub fn create_workspace(&self, name: String, project_path: String) -> String {
-        self.workspaces.create(name, project_path)
+        self.workspaces.create(name, project_path, runtime())
     }
 
     /// 지정된 워크스페이스를 삭제한다. 존재하지 않으면 `false`.
     pub fn delete_workspace(&self, workspace_id: String) -> bool {
-        self.workspaces.delete(&workspace_id)
+        self.workspaces.delete(&workspace_id, runtime())
     }
 
     /// 현재 등록된 워크스페이스 목록을 반환한다.
     pub fn list_workspaces(&self) -> Vec<ffi::WorkspaceInfo> {
-        self.workspaces.list()
+        self.workspaces.list(runtime())
     }
 
     /// 사용자 메시지를 지정 워크스페이스로 전달한다.

@@ -5,6 +5,9 @@
 // @MX:ANCHOR: FsWatcher 공개 API 진입점 — 모든 파일 감시 기능의 루트
 // @MX:REASON: 외부 크레이트에서 직접 사용하는 공개 인터페이스
 
+pub mod watcher;
+pub use watcher::{FsEventBus, WorkspaceEvent, WorkspaceKey};
+
 use std::path::{Path, PathBuf};
 use std::sync::mpsc as std_mpsc;
 use std::time::Duration;
@@ -129,7 +132,11 @@ mod tests {
         let result = FsWatcher::new();
 
         // Assert: 에러 없이 생성됨
-        assert!(result.is_ok(), "감시자 생성이 실패했습니다: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "감시자 생성이 실패했습니다: {:?}",
+            result.err()
+        );
         let (_watcher, _rx) = result.unwrap();
     }
 
@@ -185,7 +192,10 @@ mod tests {
         })
         .await;
 
-        assert!(received.is_ok(), "타임아웃: 파일 생성 이벤트를 받지 못했습니다");
+        assert!(
+            received.is_ok(),
+            "타임아웃: 파일 생성 이벤트를 받지 못했습니다"
+        );
         assert!(received.unwrap(), "파일 생성 이벤트 경로 불일치");
     }
 

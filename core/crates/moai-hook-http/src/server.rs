@@ -1,12 +1,12 @@
 //! axum 기반 HTTP 훅 수신 서버
 
 use axum::{
+    Json, Router,
     extract::{Path, Request, State},
     http::StatusCode,
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::post,
-    Json, Router,
 };
 use std::sync::Arc;
 use tokio::task::JoinHandle;
@@ -46,9 +46,7 @@ impl HookServer {
     }
 
     /// 서버를 시작하고 (실제 바인딩 포트, JoinHandle) 을 반환
-    pub async fn start(
-        &self,
-    ) -> Result<(u16, JoinHandle<()>), HookServerError> {
+    pub async fn start(&self) -> Result<(u16, JoinHandle<()>), HookServerError> {
         let state = AppState {
             auth_token: Arc::new(self.auth_token.clone()),
         };
@@ -62,8 +60,7 @@ impl HookServer {
             .with_state(state);
 
         // OS 에 포트 자동 할당 요청 (port = 0)
-        let listener =
-            tokio::net::TcpListener::bind(format!("127.0.0.1:{}", self.port)).await?;
+        let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", self.port)).await?;
         let actual_port = listener.local_addr()?.port();
 
         info!("훅 수신 서버 시작: 127.0.0.1:{}", actual_port);
@@ -79,11 +76,7 @@ impl HookServer {
 // ─── 인증 미들웨어 ───────────────────────────────────────────────────────────
 
 /// X-Auth-Token 헤더를 검증하는 미들웨어
-async fn auth_middleware(
-    State(state): State<AppState>,
-    request: Request,
-    next: Next,
-) -> Response {
+async fn auth_middleware(State(state): State<AppState>, request: Request, next: Next) -> Response {
     let token = request
         .headers()
         .get("x-auth-token")

@@ -39,14 +39,17 @@ async fn test_hook_pre_tool_use_allow_with_valid_auth() {
         .await
         .expect("PreToolUse 요청 실패");
 
-    assert_eq!(resp.status(), 200, "유효한 인증으로 PreToolUse 요청은 200이어야 한다");
+    assert_eq!(
+        resp.status(),
+        200,
+        "유효한 인증으로 PreToolUse 요청은 200이어야 한다"
+    );
 
     let response_body: serde_json::Value = resp.json().await.expect("응답 JSON 파싱 실패");
 
     // permissionDecision이 "allow"인지 확인
     assert_eq!(
-        response_body["hookSpecificOutput"]["permissionDecision"],
-        "allow",
+        response_body["hookSpecificOutput"]["permissionDecision"], "allow",
         "PreToolUse 응답의 permissionDecision은 'allow'여야 한다"
     );
 }

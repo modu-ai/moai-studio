@@ -14,10 +14,7 @@ fn test_generate_mcp_config_valid_json_structure() {
     let config = generate_mcp_config(port, server_name);
 
     // JSON 최상위 구조 검증
-    assert!(
-        config.is_object(),
-        "설정은 JSON 객체여야 한다"
-    );
+    assert!(config.is_object(), "설정은 JSON 객체여야 한다");
     assert!(
         config["mcpServers"].is_object(),
         "mcpServers 필드가 객체여야 한다"
@@ -94,9 +91,18 @@ fn test_generate_auth_token_is_unique() {
     let token2 = generate_auth_token();
     let token3 = generate_auth_token();
 
-    assert_ne!(token1, token2, "연속 호출 시 서로 다른 토큰이 생성되어야 한다");
-    assert_ne!(token2, token3, "연속 호출 시 서로 다른 토큰이 생성되어야 한다");
-    assert_ne!(token1, token3, "연속 호출 시 서로 다른 토큰이 생성되어야 한다");
+    assert_ne!(
+        token1, token2,
+        "연속 호출 시 서로 다른 토큰이 생성되어야 한다"
+    );
+    assert_ne!(
+        token2, token3,
+        "연속 호출 시 서로 다른 토큰이 생성되어야 한다"
+    );
+    assert_ne!(
+        token1, token3,
+        "연속 호출 시 서로 다른 토큰이 생성되어야 한다"
+    );
 }
 
 /// 설정과 토큰을 함께 생성하는 전체 흐름 검증
@@ -115,14 +121,14 @@ fn test_config_and_token_generation_full_flow() {
         .as_str()
         .expect("url 필드가 존재해야 한다");
 
-    assert!(
-        url.contains("54321"),
-        "설정 URL에 포트가 포함되어야 한다"
-    );
+    assert!(url.contains("54321"), "설정 URL에 포트가 포함되어야 한다");
 
     // 4단계: 설정을 JSON 문자열로 직렬화 가능한지 확인
     let config_str = serde_json::to_string(&config).expect("설정이 JSON으로 직렬화 가능해야 한다");
-    assert!(!config_str.is_empty(), "직렬화된 설정이 비어있지 않아야 한다");
+    assert!(
+        !config_str.is_empty(),
+        "직렬화된 설정이 비어있지 않아야 한다"
+    );
     assert!(
         config_str.contains("mcpServers"),
         "직렬화된 설정에 mcpServers 키가 포함되어야 한다"
