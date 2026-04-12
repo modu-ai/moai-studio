@@ -45,6 +45,11 @@ xcuserdata/
 *.o
 *.a
 
+# xcframework 빌드 산출물 (app/Frameworks/ 는 .gitkeep 으로만 추적)
+app/Frameworks/*.xcframework
+app/Frameworks/*/
+!app/Frameworks/.gitkeep
+
 # ===========================================
 # Rust
 # ===========================================
