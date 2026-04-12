@@ -5,3 +5,17 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+rmcp = { version = "1.4.0", features = ["server", "macros", "transport-streamable-http-server"] }
+axum = { workspace = true }
+tokio = { workspace = true, features = ["net", "sync", "rt", "macros"] }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ring = "0.17"
+hex = "0.4"
+tokio-util = "0.7"
+anyhow = "1.0.102"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros", "test-util"] }
+reqwest = { version = "0.12", features = ["json"] }

@@ -1,3 +1,31 @@
 {
-  "hooks": {}
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "*",
+      "hooks": [{
+        "type": "http",
+        "url": "http://127.0.0.1:${user_config.ide_port}/hooks/PreToolUse",
+        "headers": { "X-Auth-Token": "${user_config.auth_token}" },
+        "timeout": 5000
+      }]
+    }],
+    "PostToolUse": [{
+      "matcher": "*",
+      "hooks": [{
+        "type": "http",
+        "url": "http://127.0.0.1:${user_config.ide_port}/hooks/PostToolUse",
+        "headers": { "X-Auth-Token": "${user_config.auth_token}" },
+        "timeout": 5000
+      }]
+    }],
+    "SessionStart": [{
+      "matcher": "*",
+      "hooks": [{
+        "type": "http",
+        "url": "http://127.0.0.1:${user_config.ide_port}/hooks/SessionStart",
+        "headers": { "X-Auth-Token": "${user_config.auth_token}" },
+        "timeout": 5000
+      }]
+    }]
+  }
 }
