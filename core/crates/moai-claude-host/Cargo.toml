@@ -1,0 +1,19 @@
+[package]
+name = "moai-claude-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tokio = { workspace = true, features = ["process", "io-util", "sync"] }
+tokio-util = { version = "0.7", features = ["codec"] }
+tokio-stream = "0.1"
+tracing = { workspace = true }
+thiserror = { workspace = true }
+moai-stream-json = { path = "../moai-stream-json" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros", "test-util"] }
+tokio-stream = "0.1"
