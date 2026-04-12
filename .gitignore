@@ -1,59 +1,132 @@
-# macOS
+# ============================================
+# MoAI Studio .gitignore
+# ============================================
+# Project: Swift (UI) + Rust (Core) macOS App
+# Updated: 2026-04-12
+# ============================================
+
+# ===========================================
+# OS Files
+# ===========================================
 .DS_Store
+.AppleDouble
+.LSOverride
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+[Dd]esktop.ini
+Thumbs.db
+.directory
+
+# ===========================================
+# IDE & Editors
+# ===========================================
+.vscode/
+.idea/
+.cursor/
 *.swp
+*.swo
+*.sw?
 *~
+.#*
 
-# Reference symlinks (local development only)
-.references/
-
-# Build artifacts
-build/
-dist/
-target/
-DerivedData/
-*.o
-*.a
-*.dSYM
-
-# Rust
-Cargo.lock
-.cargo/
-
+# ===========================================
 # Swift / Xcode
+# ===========================================
+DerivedData/
 *.xcuserdata
 xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/
+*.dSYM/
+*.o
+*.a
 
-# Node (plugin tooling)
-node_modules/
-npm-debug.log
-yarn-error.log
+# ===========================================
+# Rust
+# ===========================================
+target/
+Cargo.lock
+.cargo/
+*.profraw
+*.profdata
 
-# Environment
+# ===========================================
+# Build Artifacts
+# ===========================================
+build/
+dist/
+
+# ===========================================
+# Logs & Temporary Files
+# ===========================================
+*.log
+logs/
+*.tmp
+*.temp
+*.bak
+
+# ===========================================
+# Secrets and Credentials
+# ===========================================
 .env
-.env.local
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+private-key*
+*-api-key.*
+*-secret-key.*
+secret-key-*
+.aws/config
+.aws/credentials
 
-# moai-cli runtime state
+# ===========================================
+# Claude Code Configuration
+# ===========================================
+.claude/settings.local.json
+.claude/settings.local.*.json
+.claude/.env.local*
+.claude/local/
+.claude/plans/
+.claude/agent-memory/
+.claude/worktrees/
+.claude/skills/*/.env*
+.claude/skills/*/secrets/
+
+# ===========================================
+# MoAI Local State (never commit)
+# ===========================================
+.moai/status_line.sh
+.moai/memory/
+.moai/worktrees/
 .moai/cache/
 .moai/logs/
 .moai/state/
 .moai/reports/
 .moai/manifest.json
+.moai-backups/
 
-# Claude Code local settings
-.claude/settings.local.json
+# ===========================================
+# Reference Symlinks (local dev only)
+# ===========================================
+.references/
 
-# IDE
-.vscode/
-.idea/
-
-# Temporary
-*.tmp
-*.bak
-*.log
-
-# Test artifacts
+# ===========================================
+# Test Coverage
+# ===========================================
 coverage/
-*.profraw
-*.profdata
+htmlcov/
+.coverage
+coverage.json
+
+# ===========================================
+# Node.js (docs/Nextra only)
+# ===========================================
+node_modules/
+.next/
+out/

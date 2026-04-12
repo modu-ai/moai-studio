@@ -1,12 +1,16 @@
-# moai-cli
+# MoAI Studio
 
-> **moai-adk 의 공식 macOS 네이티브 IDE-쉘.**
+> **moai-adk 의 공식 macOS 네이티브 Agent IDE.**
 > Claude Code 를 subprocess 로 호스트하여 27개 hook 이벤트 + 26 전문 에이전트 + TRUST 5 품질 게이트 + @MX 태그 시스템 + Kanban/SPEC 워크플로우를 한 화면에서 시각화 · 조작한다.
 
 **Status**: Design phase (v4 draft). Implementation not started.
 **Platform**: macOS only (macOS 14+, Apple Silicon + Intel).
 **License**: MIT
 **Language**: Swift (UI) + Rust (Core)
+**Brand**: MoAI Studio (확정 — 2026-04-11, DESIGN.v4 §14 O6 RESOLVED)
+**Package**: `moai-studio` (바이너리/패키지 식별자)
+
+> **저장소 리네임 안내**: 본 저장소의 디스크 경로 (`~/moai/moai-cli`) 와 GitHub URL (`modu-ai/moai-cli`) 은 브랜드 확정에 따라 **장래 `moai-studio` 로 리네임 예정**. 설계 문서와 setup 명령의 현 경로 표기는 실제 디스크 상태와의 정합성을 위해 리네임 시점까지 유지한다.
 
 ---
 
@@ -29,18 +33,18 @@
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│           moai-cli.app (macOS, SwiftUI + Rust)           │
-│                                                          │
-│  Swift UI (SwiftUI + AppKit)                             │
-│     │ swift-bridge FFI                                   │
-│     ▼                                                    │
-│  Rust Core (moai-core workspace)                         │
-│     - ClaudeSubprocessManager                            │
-│     - StreamJsonCodec                                    │
-│     - IdeMcpServer (127.0.0.1 + ~/.claude/ide/*.lock)    │
-│     - HookHttpEndpoint                                   │
-│     - Store (rusqlite WAL)                               │
-│     - Git (git2)                                         │
+│           MoAI Studio.app (macOS, SwiftUI + Rust)       │
+│                                                         │
+│  Swift UI (SwiftUI + AppKit)                            │
+│     │ swift-bridge FFI                                  │
+│     ▼                                                   │
+│  Rust Core (moai-core workspace)                        │
+│     - ClaudeSubprocessManager                           │
+│     - StreamJsonCodec                                   │
+│     - IdeMcpServer (127.0.0.1 + ~/.claude/ide/*.lock)   │
+│     - HookHttpEndpoint                                  │
+│     - Store (rusqlite WAL)                              │
+│     - Git (git2)                                        │
 └──────────────┬─────────────────────────┬────────────────┘
                │ stdin/stdout            │ HTTP loopback
                ▼                         ▼
@@ -69,7 +73,7 @@
 ## 저장소 구조
 
 ```
-moai-cli/
+moai-cli/                  ← 현 저장소 이름 (MoAI Studio 로 리네임 예정)
 ├── README.md              ← 이 파일
 ├── DESIGN.md              ← v2 (참고)
 ├── DESIGN.v3.md           ← v3 (참고)
@@ -128,7 +132,7 @@ ln -sf /path/to/claude-code-map .references/claude-code-map
 4 단계 작업 계획:
 1. **Pre-M0 검증 스파이크** (3-4일) — Claude CLI 공식 경로, IDE MCP, plugin http hook, GhosttyKit xcframework 검증
 2. **M0 킥오프** (2주) — Rust core skeleton + Swift UI shell + 첫 hook 왕복
-3. **열린 결정 (O1-O6)** — swift-bridge, rmcp, 미문서화 field 정책 등
+3. **열린 결정 (O1-O5)** — swift-bridge, rmcp, 미문서화 field 정책 등 (O6 브랜딩은 RESOLVED)
 4. **커뮤니티 시작 신호** — README 로드맵, HN 예고, cmux 팀 outreach
 
 ---
@@ -137,7 +141,7 @@ ln -sf /path/to/claude-code-map .references/claude-code-map
 
 출처: [Claude Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview)
 
-- ✅ 허용: "moai-cli", "MoAI Agent IDE", "moai + Claude", "Powered by Claude"
+- ✅ 허용: "MoAI Studio", "MoAI Agent IDE", "moai + Claude", "Powered by Claude"
 - ❌ **금지**: "Claude Code" 명칭 사용, "Claude Code Agent", Claude Code ASCII art 차용
 - ❌ **금지**: claude.ai OAuth 로그인 구현
 - ✅ 인증: `ANTHROPIC_API_KEY`, Bedrock, Vertex, Foundry
@@ -152,6 +156,6 @@ MIT License © 2026 modu-ai
 
 ## 관련 저장소
 
-- [modu-ai/moai-adk](https://github.com/modu-ai/moai-adk) — Go CLI, moai-cli 가 통합하는 본체
+- [modu-ai/moai-adk](https://github.com/modu-ai/moai-adk) — Go CLI, MoAI Studio 가 통합하는 본체
 - [ghostty-org/ghostty](https://github.com/ghostty-org/ghostty) — 터미널 엔진 (libghostty)
 - [anthropics/claude-code](https://github.com/anthropics/claude-code) — Claude Code CLI

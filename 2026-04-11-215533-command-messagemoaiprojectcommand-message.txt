@@ -1,0 +1,1298 @@
+ ▐▛███▜▌   Claude Code v2.1.101
+▝▜█████▛▘  Opus 4.6 (1M context) · Claude Max
+  ▘▘ ▝▝    ~/MoAI/moai-cli
+
+❯ /moai:project 생성된 문서들 참고해서 프로젝트 문서를 생성하자. ultrathink     
+
+⏺ Skill(moai)
+  ⎿  Successfully loaded skill · 12 tools allowed
+
+  Read 1 file, listed 1 directory (ctrl+o to expand)
+  ⎿  Loaded .claude/rules/moai/development/skill-authoring.md
+
+⏺ 이미 풍부한 설계 문서들이 있네요. 인터뷰 단계는 건너뛰고 기존 문서를 분석해서
+  product.md, structure.md, tech.md를 생성하겠습니다. 먼저 문서들을 병렬로
+  읽어보겠습니다.
+
+  Read 4 files (ctrl+o to expand)
+
+⏺ 이미 충분한 컨텍스트를 확보했습니다. 코드는 아직 없는 설계 단계이므로 "신규
+  프로젝트" 경로로 처리하되, 인터뷰는 건너뛰고 기존 설계 문서(README, DESIGN.v4,
+   NEXT-STEPS, REFERENCES)를 권위 있는 출처로 사용합니다.
+
+  Read 2 files, ran 1 bash command (ctrl+o to expand)
+  ⎿  Loaded .claude/rules/moai/core/settings-management.md
+  ⎿  Loaded .claude/rules/moai/workflow/workflow-modes.md
+  ⎿  Loaded .claude/rules/moai/workflow/spec-workflow.md
+
+⏺ quality.yaml의 development_mode: tdd는 이미 신규 프로젝트 자동 감지 결과와
+  일치합니다. 이제 세 개의 문서와 codemaps placeholder를 생성하겠습니다.
+
+⏺ Write(.moai/project/product.md)
+  ⎿  Wrote 217 lines to .moai/project/product.md
+       1 # product.md — moai-cli
+       2 
+       3 > **출처**: README.md, DESIGN.v4.md (현 기준), NEXT-STEPS.md, RE
+         FERENCES.md
+       4 > **상태**: Design Phase (v4 draft, 코드 미작성)
+       5 > **버전**: 0.1.0 (pre-implementation)
+       6 > **작성일**: 2026-04-11
+       7 
+       8 ---
+       9 
+      10 ## 1. 한 줄 정의
+     … +207 lines (ctrl+o to expand)
+
+⏺ Write(.moai/project/structure.md)
+  ⎿  Wrote 297 lines to .moai/project/structure.md
+      1 # structure.md — moai-cli
+      2 
+      3 > **출처**: README.md, DESIGN.v4.md §3, §8, REFERENCES.md
+      4 > **상태**: 현재 트리(설계 단계) + 목표 트리(M0 이후) 모두 명시
+      5 > **작성일**: 2026-04-11
+      6 
+      7 ---
+      8 
+      9 ## 1. 5단 계층 모델 (런타임 도메인)
+     … +287 lines (ctrl+o to expand)
+
+⏺ Write(.moai/project/tech.md)
+  ⎿  Wrote 428 lines to .moai/project/tech.md
+      1 # tech.md — moai-cli
+      2 
+      3 > **출처**: DESIGN.v4.md §0, §4, §7, §11
+      4 > **상태**: Stack 확정. 일부 항목은 Pre-M0 spike 검증 후 fix.
+      5 > **작성일**: 2026-04-11
+      6 
+      7 ---
+      8 
+      9 ## 1. 핵심 결정 요약
+     … +418 lines (ctrl+o to expand)
+
+⏺ Write(.moai/project/codemaps/overview.md)
+  ⎿  Wrote 168 lines to .moai/project/codemaps/overview.md
+       1 # codemaps/overview.md — moai-cli
+       2 
+       3 > **Status**: Pre-implementation placeholder.
+       4 > 코드가 아직 작성되지 않았으므로 본 codemap 은 **목표 아키텍처 
+         스냅샷** 만 담는다.
+       5 > M0 완료 후 실제 코드 분석 결과로 교체될 예정.
+       6 >
+       7 > **Source of truth**: DESIGN.v4.md
+       8 > **작성일**: 2026-04-11
+       9 
+      10 ---
+     … +158 lines (ctrl+o to expand)
+
+⏺ 네 개 문서를 모두 생성했습니다. 결과 요약입니다.
+
+  🤖 MoAI ★ 완료 ────────────────────────────
+  ✅ 프로젝트 문서 생성 완료
+  ────────────────────────────────────────────
+
+  📦 생성된 문서
+
+  ┌────────────────────────────────────┬───────┬─────────────────────────────┐
+  │                파일                │ 크기  │            출처             │
+  ├────────────────────────────────────┼───────┼─────────────────────────────┤
+  │                                    │       │ README + DESIGN.v4 (제품    │
+  │ .moai/project/product.md           │ ~7KB  │ 정의, 14 기능, 7 moat,      │
+  │                                    │       │ 시나리오, 로드맵)           │
+  ├────────────────────────────────────┼───────┼─────────────────────────────┤
+  │                                    │       │ DESIGN.v4 §3, §8 (5단 계층  │
+  │ .moai/project/structure.md         │ ~9KB  │ + 현재 트리 + 목표 모노레포 │
+  │                                    │       │  트리)                      │
+  ├────────────────────────────────────┼───────┼─────────────────────────────┤
+  │                                    │       │ DESIGN.v4 §0, §4, §7, §11   │
+  │ .moai/project/tech.md              │ ~12KB │ (Swift+Rust 스택, 통합      │
+  │                                    │       │ 패턴, 보안, 테스트)         │
+  ├────────────────────────────────────┼───────┼─────────────────────────────┤
+  │ .moai/project/codemaps/overview.md │ ~5KB  │ Pre-M0 placeholder (목표    │
+  │                                    │       │ 아키텍처 청사진)            │
+  └────────────────────────────────────┴───────┴─────────────────────────────┘
+
+  🎯 핵심 의사결정 반영
+
+  - 신규 프로젝트 분기 + 인터뷰 스킵: 코드는 0줄이지만
+  DESIGN.v4·NEXT-STEPS·README·REFERENCES 가 이미 SSOT 역할 → 형님 명시 요청대로
+  인터뷰 건너뛰고 기존 문서를 권위 출처로 사용
+  - 언어: language.yaml 의 conversation_language: ko 준수, 본문 모두 한글
+  - 개발 방법론: quality.yaml 의 development_mode: tdd 가 이미 신규 프로젝트
+  자동 감지 결과와 일치 → 변경 불필요
+  - 출처 추적성: 각 문서 상단/하단에 Source of truth 명시 (DESIGN.v4 섹션
+  번호까지)
+  - Codemaps 는 placeholder: 코드가 없으므로 modules.md/dependencies.md 등은
+  생성하지 않고 M0 이후 /moai codemaps 로 자동 생성하도록 정책 명시
+
+  ⚠️ 검토 권장 사항
+
+  1. brand 가제 (moai-cli vs moai-ide vs Moai Studio) — O6 결정 대기 중. 문서
+  전체에 moai-cli 가 박혀있어 향후 일괄 교체 필요
+  2. .references/ 경로 — /Users/goos/MoAI/moai-adk-go,
+  /Users/goos/moai/claude-code-map 가 머신 종속이므로 다른 머신 복제 시
+  REFERENCES.md 의 setup 절차 필요
+  3. development_mode: tdd — Pre-M0 spike 단계는 Bash 검증 위주라 TDD 가 어색할
+  수 있음. M0 D3 (Rust crate 작성) 부터 본격 적용 권장
+
+  🚀 다음 단계 제안
+
+  NEXT-STEPS.md 의 즉시 액션과 정렬:
+
+  - A. Pre-M0 spike 시작: /moai plan SPEC-SPIKE-001 로 4일 검증 작업을 SPEC 화
+  - B. 열린 결정 인터뷰: O1~O6 6개 결정을 AskUserQuestion 으로 수집하여
+  DESIGN.v4 §14 갱신
+  - C. 리뷰 후 종료: 생성된 4개 문서 형님이 직접 검토 후 수정
+
+  어떤 단계로 진행하시겠습니까?
+
+  DONE
+
+✻ Worked for 7m 10s
+
+❯ brand를 어떤것이 가장 좋을까? 에이전틱 코딩 종합 툴인데..지금 문서를 분석해서 
+   가장 적합한 브렌드를 추천해줘                                                
+
+⏺ 문서를 종합 분석해서 브랜드 최적안을 추천드립니다.
+
+  🔍 제품 본질 분해
+
+  ┌────────┬─────────────────────────────────────────────────────────────────┐
+  │   축   │                            실제 내용                            │
+  ├────────┼─────────────────────────────────────────────────────────────────┤
+  │ 형태   │ macOS 네이티브 앱 (CLI 아님, 단순 터미널도 아님)                │
+  ├────────┼─────────────────────────────────────────────────────────────────┤
+  │ 범위   │ 10개 surface (터미널 + 코드뷰어 + 칸반 + 메모리 + 브라우저 +    │
+  │        │ ...)                                                            │
+  ├────────┼─────────────────────────────────────────────────────────────────┤
+  │ 포지션 │ "한 화면에서 시각화·조작" — 관찰 + 개입이 동시에 가능한 관제탑  │
+  ├────────┼─────────────────────────────────────────────────────────────────┤
+  │ 차별   │ Claude 가 UI 를 직접 조작 (mcp__moai__*), Live agent control    │
+  ├────────┼─────────────────────────────────────────────────────────────────┤
+  │ 파생   │ .references/ 필수 사용, 에이전트 16+ 병렬 운영                  │
+  └────────┴─────────────────────────────────────────────────────────────────┘
+
+  핵심은 에이전트 오케스트레이션 관제탑 — 단순 에디터도, 쉘도, CLI 도 아닙니다.
+
+  ⚖️ 현 후보 평가 (DESIGN.v4 §14 O6)
+
+  ┌────────────┬────────────────────────────────────────────────────────────┐
+  │    후보    │                            평가                            │
+  ├────────────┼────────────────────────────────────────────────────────────┤
+  │ moai-cli   │ ❌ 치명적 오류 — GUI 앱인데 "cli" 는 사실과 정면 충돌.     │
+  │            │ 설치 후 사용자 혼란 유발                                   │
+  ├────────────┼────────────────────────────────────────────────────────────┤
+  │ moai-shell │ ❌ "쉘" 은 전체의 10% (Terminal surface). 나머지 9개       │
+  │            │ surface 를 과소 대표                                       │
+  ├────────────┼────────────────────────────────────────────────────────────┤
+  │ moai-ide   │ ⚠️ 정확하지만 기술 서술어, 브랜드 아님. 차별화 0           │
+  ├────────────┼────────────────────────────────────────────────────────────┤
+  │ MoAI       │ ✅ 강력 — Visual Studio / Android Studio / RStudio 계보,   │
+  │ Studio     │ "종합 툴" 메시지 즉시 전달                                 │
+  └────────────┴────────────────────────────────────────────────────────────┘
+
+  ★ 최종 추천: MoAI Studio
+
+  선택 근거
+
+  1. 업계 계보 연결 — "Studio" 접미사는 "이것은 CLI 가 아니라 통합 작업
+  환경이다" 를 0.1초 만에 전달. 형님의 "종합 툴" 요구와 완벽 정렬
+  2. MoAI 패밀리 확장성 — moai-adk (Go CLI, 엔진) + MoAI Studio (macOS GUI,
+  플래그십) 의 명확한 역할 분리. 이름만 봐도 "어느 쪽이 사용자가 여는 앱인가" 를
+   즉답 가능
+  3. Anthropic 브랜딩 제약 안전 — "Claude Code" 와 0 충돌, "Powered by Claude"
+  서브라인 자연스러움
+  4. 실행 파일 / 도메인 — MoAI Studio.app, moai-studio CLI, 도메인
+  moaistudio.app 또는 moai.studio 확보 가능성 높음
+  5. 포지셔닝 문장 — "MoAI Studio: The agentic coding studio for macOS." 로 6
+  단어 헤드라인 완성
+
+  단점 솔직 공개
+
+  - "Studio" 는 다소 흔함 → 하지만 MoAI 접두사 가 차별화 담당 (MoAI = 모아이
+  석상, 강한 비주얼 아이덴티티)
+  - "Android Studio" 와 철자 유사 → 오히려 professional IDE 카테고리 진입 티켓
+
+  🥈 Distinctive 대안 (차별화 원한다면)
+
+  ┌──────────┬────────────────┬────────────────────┬───────────────────────┐
+  │   후보   │      컨셉      │        장점        │         단점          │
+  ├──────────┼────────────────┼────────────────────┼───────────────────────┤
+  │ Moai     │ 함교 + 스택 +  │ 짧음, 유니크,      │ "Deck" 단독은 의미    │
+  │ Deck     │ Kanban 카드    │ Kanban surface 와  │ 약함                  │
+  │          │ 삼중 의미      │ 자연 결합          │                       │
+  ├──────────┼────────────────┼────────────────────┼───────────────────────┤
+  │ Moai     │ 장인 공방      │ TRUST 5 / 품질     │ 프랑스어, 한국어권    │
+  │ Atelier  │ (Craft + 품질) │ 게이트 철학과      │ 진입 장벽             │
+  │          │                │ 결합, 프리미엄 감  │                       │
+  ├──────────┼────────────────┼────────────────────┼───────────────────────┤
+  │ Moai     │ 함교 (Ship     │                    │ v2 에서 "Bridge" 를   │
+  │ Bridge   │ bridge)        │ 관제탑 은유 완벽   │ 기술 용어로 쓴 이력   │
+  │          │                │                    │ 있어 혼란 가능        │
+  └──────────┴────────────────┴────────────────────┴───────────────────────┘
+
+  📝 권고 액션
+
+  1. DESIGN.v4.md §14 O6 결정: moai-cli → MoAI Studio 로 확정
+  2. 일괄 치환: README, DESIGN.v4, NEXT-STEPS, CLAUDE.md 내 moai-cli → MoAI 
+  Studio (바이너리명은 moai-studio 유지)
+  3. 도메인 확보: moai.studio, moaistudio.app 즉시 등록
+  4. 저장소 리네임: modu-ai/moai-cli → modu-ai/moai-studio (GitHub 리다이렉트
+  자동 생성됨)
+
+  ---
+  원하시면 O6 결정을 DESIGN.v4 §14 에 반영하고 4개 프로젝트 문서 (product.md,
+  structure.md, tech.md, codemaps/overview.md) 에 일괄 치환 작업을 바로 실행할
+  수 있습니다. 진행할까요?
+
+✻ Brewed for 1m 42s
+
+❯   1. DESIGN.v4.md §14 O6 결정: moai-cli → MoAI Studio 로 확정 모든 문서에     
+  일괄 치환 하자.                                                               
+
+⏺ 먼저 모든 "moai-cli" 출현 위치를 매핑한 후, 문맥별로 치환 전략을
+  결정하겠습니다.
+
+  Searched for 3 patterns (ctrl+o to expand)
+⏺ 전략: (1) 브랜드/패키지 식별자는 MoAI Studio / moai-studio 로 전환, (2) 현재
+  디스크 경로(/Users/goos/MoAI/moai-cli, ~/moai/moai-cli)는 유지 — 저장소 rename
+   은 별도 작업이며, 유지해야 setup 명령이 정상 동작. 4개 project 문서 + README
+  + REFERENCES 는 Write 로 재작성하고, DESIGN.v4/NEXT-STEPS 는 Edit replace_all
+  시퀀스로 처리합니다. v2/v3 설계 문서는 evolution 기록이라 건드리지 않습니다.
+
+  먼저 쉬운 6개 파일을 병렬 재작성하겠습니다.
+
+⏺ Write(README.md)
+  ⎿  Added 22 lines, removed 18 lines
+       1 -# moai-cli                                                     
+       1 +# MoAI Studio                                                  
+       2  
+       3 -> **moai-adk 의 공식 macOS 네이티브 IDE-쉘.**                  
+       3 +> **moai-adk 의 공식 macOS 네이티브 Agent IDE.**               
+       4  > Claude Code 를 subprocess 로 호스트하여 27개 hook 이벤트 + 26
+           전문 에이전트 + TRUST 5 품질 게이트 + @MX 태그 시스템 + Kanban
+          /SPEC 워크플로우를 한 화면에서 시각화 · 조작한다.
+       5  
+       6  **Status**: Design phase (v4 draft). Implementation not started
+          .
+       7  **Platform**: macOS only (macOS 14+, Apple Silicon + Intel).
+       8  **License**: MIT
+       9  **Language**: Swift (UI) + Rust (Core)
+      10 +**Brand**: MoAI Studio (확정 — 2026-04-11, DESIGN.v4 §14 O6 RES
+         +OLVED)                                                         
+      11 +**Package**: `moai-studio` (바이너리/패키지 식별자)            
+      12  
+      13 +> **저장소 리네임 안내**: 본 저장소의 디스크 경로 (`~/moai/moai
+         +-cli`) 와 GitHub URL (`modu-ai/moai-cli`) 은 브랜드 확정에 따라
+         + **장래 `moai-studio` 로 리네임 예정**. 설계 문서와 setup 명령 
+         +의 현 경로 표기는 실제 디스크 상태와의 정합성을 위해 리네임 시 
+         +점까지 유지한다.                                               
+      14 +                                                               
+      15  ---
+      16  
+      17  ## 현재 상태
+     ...
+      33  
+      34  ```
+      35  ┌─────────────────────────────────────────────────────────┐
+      32 -│           moai-cli.app (macOS, SwiftUI + Rust)           │   
+      33 -│                                                          │   
+      34 -│  Swift UI (SwiftUI + AppKit)                             │   
+      35 -│     │ swift-bridge FFI                                   │   
+      36 -│     ▼                                                    │   
+      37 -│  Rust Core (moai-core workspace)                         │   
+      38 -│     - ClaudeSubprocessManager                            │   
+      39 -│     - StreamJsonCodec                                    │   
+      40 -│     - IdeMcpServer (127.0.0.1 + ~/.claude/ide/*.lock)    │   
+      41 -│     - HookHttpEndpoint                                   │   
+      42 -│     - Store (rusqlite WAL)                               │   
+      43 -│     - Git (git2)                                         │   
+      36 +│           MoAI Studio.app (macOS, SwiftUI + Rust)       │    
+      37 +│                                                         │    
+      38 +│  Swift UI (SwiftUI + AppKit)                            │    
+      39 +│     │ swift-bridge FFI                                  │    
+      40 +│     ▼                                                   │    
+      41 +│  Rust Core (moai-core workspace)                        │    
+      42 +│     - ClaudeSubprocessManager                           │    
+      43 +│     - StreamJsonCodec                                   │    
+      44 +│     - IdeMcpServer (127.0.0.1 + ~/.claude/ide/*.lock)   │    
+      45 +│     - HookHttpEndpoint                                  │    
+      46 +│     - Store (rusqlite WAL)                              │    
+      47 +│     - Git (git2)                                        │    
+      48  └──────────────┬─────────────────────────┬────────────────┘
+      49                 │ stdin/stdout            │ HTTP loopback
+      50                 ▼                         ▼
+     ...
+      73  ## 저장소 구조
+      74  
+      75  ```
+      72 -moai-cli/                                                      
+      76 +moai-cli/                  ← 현 저장소 이름 (MoAI Studio 로 리 
+         +네임 예정)                                                     
+      77  ├── README.md              ← 이 파일
+      78  ├── DESIGN.md              ← v2 (참고)
+      79  ├── DESIGN.v3.md           ← v3 (참고)
+     ...
+      132  4 단계 작업 계획:
+      133  1. **Pre-M0 검증 스파이크** (3-4일) — Claude CLI 공식 경로, ID
+           E MCP, plugin http hook, GhosttyKit xcframework 검증
+      134  2. **M0 킥오프** (2주) — Rust core skeleton + Swift UI shell +
+            첫 hook 왕복
+      131 -3. **열린 결정 (O1-O6)** — swift-bridge, rmcp, 미문서화 field 
+          -정책 등                                                       
+      135 +3. **열린 결정 (O1-O5)** — swift-bridge, rmcp, 미문서화 field 
+          +정책 등 (O6 브랜딩은 RESOLVED)                                
+      136  4. **커뮤니티 시작 신호** — README 로드맵, HN 예고, cmux 팀 ou
+           treach
+      137  
+      138  ---
+     ...
+      141  
+      142  출처: [Claude Agent SDK overview](https://code.claude.com/docs
+           /en/agent-sdk/overview)
+      143  
+      140 -- ✅ 허용: "moai-cli", "MoAI Agent IDE", "moai + Claude", "Pow
+          -ered by Claude"                                               
+      144 +- ✅ 허용: "MoAI Studio", "MoAI Agent IDE", "moai + Claude", "
+          +Powered by Claude"                                            
+      145  - ❌ **금지**: "Claude Code" 명칭 사용, "Claude Code Agent", C
+           laude Code ASCII art 차용
+      146  - ❌ **금지**: claude.ai OAuth 로그인 구현
+      147  - ✅ 인증: `ANTHROPIC_API_KEY`, Bedrock, Vertex, Foundry
+     ...
+      156  
+      157  ## 관련 저장소
+      158  
+      155 -- [modu-ai/moai-adk](https://github.com/modu-ai/moai-adk) — Go
+          - CLI, moai-cli 가 통합하는 본체                               
+      159 +- [modu-ai/moai-adk](https://github.com/modu-ai/moai-adk) — Go
+          + CLI, MoAI Studio 가 통합하는 본체                            
+      160  - [ghostty-org/ghostty](https://github.com/ghostty-org/ghostty
+           ) — 터미널 엔진 (libghostty)
+      161  - [anthropics/claude-code](https://github.com/anthropics/claud
+           e-code) — Claude Code CLI
+
+⏺ Write(REFERENCES.md)
+  ⎿  Added 13 lines, removed 10 lines
+       1  # Reference Repositories Setup
+       2  
+       3 -`moai-cli` 개발 중 외부 저장소 소스 코드를 자주 참조합니다. 이 
+         -문서는 **로컬 개발 환경에서 참조 저장소를 설정하는 방법**을 설 
+         -명합니다.                                                      
+       3 +**MoAI Studio** 개발 중 외부 저장소 소스 코드를 자주 참조합니다
+         +. 이 문서는 **로컬 개발 환경에서 참조 저장소를 설정하는 방법** 
+         +을 설명합니다.                                                 
+       4  
+       5  참조 저장소는 `.references/` 디렉토리에 **심볼릭 링크**로 배치
+          되며, **gitignored** 입니다. 즉, 저장소 외부의 코드를 복사하거
+          나 fork 하지 않고 읽기 전용으로 참조합니다.
+       6  
+       7 +> **경로 안내**: 아래 setup 명령은 저장소의 현재 디스크 위치인 
+         +`~/moai/moai-cli` 를 기준으로 작성되었습니다. 저장소가 장래 `mo
+         +ai-studio` 로 리네임되면 명령의 `cd` 대상도 함께 업데이트됩니다
+         +.                                                              
+       8 +                                                               
+       9  ---
+      10  
+      11  ## 왜 참조 저장소가 필요한가
+      12  
+      11 -moai-cli 는 두 가지 외부 시스템 위에 구축됩니다:               
+      13 +MoAI Studio 는 두 가지 외부 시스템 위에 구축됩니다:            
+      14  
+      13 -1. **moai-adk** (Go CLI) — moai-cli 가 통합하는 본체. Hook 핸들
+         -러, plugin 설정, 27 이벤트 wiring, SPEC workflow, TRUST 5 게이 
+         -지, @MX 태그 스캐너가 여기에 구현되어 있습니다.                
+      14 -2. **Claude Code CLI** (TypeScript + React+Ink) — moai-cli 가 s
+         -ubprocess 로 호스트하는 대상. stream-json 프로토콜, SDKMessage 
+         -타입, hook 이벤트 스키마, MCP 통합, plugin 시스템이 여기에 구현
+         -되어 있습니다.                                                 
+      15 +1. **moai-adk** (Go CLI) — MoAI Studio 가 통합하는 본체. Hook  
+         +핸들러, plugin 설정, 27 이벤트 wiring, SPEC workflow, TRUST 5  
+         +게이지, @MX 태그 스캐너가 여기에 구현되어 있습니다.            
+      16 +2. **Claude Code CLI** (TypeScript + React+Ink) — MoAI Studio  
+         +가 subprocess 로 호스트하는 대상. stream-json 프로토콜, SDKMess
+         +age 타입, hook 이벤트 스키마, MCP 통합, plugin 시스템이 여기에 
+         +구현되어 있습니다.                                             
+      17  
+      16 -moai-cli 코드를 작성할 때 이 두 소스를 **반복적으로 검증** 해야
+         - 합니다 — "moai-adk 가 Hook 을 어떻게 등록하는가?", "Claude Cod
+         -e 가 `PreToolUse` payload 에 어떤 필드를 채워 보내는가?" 같은  
+         -질문이 계속 발생합니다.                                        
+      18 +MoAI Studio 코드를 작성할 때 이 두 소스를 **반복적으로 검증**  
+         +해야 합니다 — "moai-adk 가 Hook 을 어떻게 등록하는가?", "Claude
+         + Code 가 `PreToolUse` payload 에 어떤 필드를 채워 보내는가?" 같
+         +은 질문이 계속 발생합니다.                                     
+      19  
+      20  v2, v3 에서 경험한 **추측 기반 가정의 함정** (예: `.moai/hooks.
+          yaml` 이 존재한다고 오인) 을 피하려면 소스를 직접 grep 하는 것
+          이 유일한 안전한 방법입니다. `.references/` 는 이를 위한 장치입
+          니다.
+      21  
+     ...
+      26  복제 직후 또는 재설치 시:
+      27  
+      28  ```bash
+      27 -cd ~/moai/moai-cli                                             
+      29 +cd ~/moai/moai-cli    # 현 디스크 경로. 리네임 후에는 ~/moai/mo
+         +ai-studio                                                      
+      30  mkdir -p .references
+      31  
+      32  # moai-adk Go CLI 소스
+     ...
+      112  
+      113  `.references/` 디렉토리 안에서 파일을 **편집하거나 생성하지 마
+           십시오**. 이는 외부 저장소를 오염시킵니다.
+      114  
+      113 -moai-cli 코드는 항상 저장소 루트 (`~/moai/moai-cli/`) 안에만  
+          -작성합니다.                                                   
+      115 +MoAI Studio 코드는 항상 저장소 루트 (`~/moai/moai-cli/` — 리네
+          +임 전 기준) 안에만 작성합니다.                                
+      116  
+      117  ### .references/ 는 gitignored
+      118  
+     ...
+      137  
+      138  ## Claude Code 접근 팁
+      139  
+      138 -`claude` 세션이 moai-cli 디렉토리에서 시작되면 `.references/` 
+          -를 통해 외부 소스를 읽을 수 있습니다:                         
+      140 +`claude` 세션이 MoAI Studio 디렉토리에서 시작되면 `.references
+          +/` 를 통해 외부 소스를 읽을 수 있습니다:                      
+      141  
+      142  ```
+      143  Read .references/claude-code-map/src/entrypoints/sdk/coreSchem
+           as.ts
+     ...
+      159  git pull
+      160  cd /Users/goos/moai/claude-code-map && git pull  # 또는 재생성
+      161  
+      160 -# moai-cli 쪽에서는 아무 것도 할 필요 없음                    
+      162 +# MoAI Studio 쪽에서는 아무 것도 할 필요 없음                 
+      163  ```
+      164  
+      165  ---
+      166  
+      165 -**Version**: 1.0.0                                            
+      167 +**Version**: 1.1.0                                            
+      168  **Last Updated**: 2026-04-11
+      169 +**Brand**: MoAI Studio (confirmed)                            
+
+⏺ Write(.moai/project/product.md)
+  ⎿  Added 25 lines, removed 11 lines
+       1 -# product.md — moai-cli                                        
+       1 +# product.md — MoAI Studio                                     
+       2  
+       3  > **출처**: README.md, DESIGN.v4.md (현 기준), NEXT-STEPS.md, R
+          EFERENCES.md
+       4  > **상태**: Design Phase (v4 draft, 코드 미작성)
+       5  > **버전**: 0.1.0 (pre-implementation)
+       6 +> **브랜드**: MoAI Studio (확정 — DESIGN.v4 §14 O6 RESOLVED, 20
+         +26-04-11)                                                      
+       7 +> **패키지 식별자**: `moai-studio`                             
+       8  > **작성일**: 2026-04-11
+       9  
+      10  ---
+      11  
+      12  ## 1. 한 줄 정의
+      13  
+      12 -**moai-cli** 는 **moai-adk 의 공식 macOS 네이티브 IDE-쉘** 이다
+         -.                                                              
+      14 +**MoAI Studio** 는 **moai-adk 의 공식 macOS 네이티브 Agent IDE*
+         +* 다.                                                          
+      15  Claude Code 를 subprocess 로 호스트하여 **27개 hook 이벤트 + 26
+           전문 에이전트 + TRUST 5 품질 게이트 + @MX 태그 시스템 + Kanban
+          /SPEC 워크플로우** 를 한 화면에서 시각화 · 조작한다.
+      16  
+      17  ---
+     ...
+      20  
+      21  | 항목 | 내용 |
+      22  |---|---|
+      21 -| 제품명 | moai-cli (가제 — O6 결정 대기) |                    
+      22 -| 카테고리 | macOS 네이티브 IDE-쉘 / Agent IDE |               
+      23 +| 제품명 (브랜드) | **MoAI Studio** |                          
+      24 +| 패키지/바이너리 식별자 | `moai-studio` |                     
+      25 +| 카테고리 | macOS 네이티브 Agent IDE / 에이전틱 코딩 종합 툴 |
+      26  | 본체 | [modu-ai/moai-adk](https://github.com/modu-ai/moai-adk
+          ) (Go CLI) |
+      27  | 호스트 대상 | Claude Code CLI (subprocess + stream-json) |
+      28  | 통합 패턴 | **공식 IDE MCP Server Pattern** (VS Code 확장과 
+          동일) |
+      29  | 라이선스 | MIT |
+      30  | 플랫폼 | **macOS 14+ 영구 단독** (Apple Silicon + Intel) |
+      31  | 언어 | Swift (UI) + Rust (Core) |
+      32 +| 앱 번들 | `MoAI Studio.app` |                                
+      33  
+      34  ### 한 문장 포지셔닝
+      35  
+      32 -> cmux 가 터미널 멀티화 + 브라우저 surface 를 잘 한다면, moai-c
+         -li 는 그 위에 **SPEC/TRUST/@MX/Kanban 워크플로우 시각화** 와 **
+         -Claude 가 직접 UI 를 조작할 수 있는 공식 IDE MCP Server Pattern
+         -** 을 올린다.                                                  
+      36 +> cmux 가 터미널 멀티화 + 브라우저 surface 를 잘 한다면, **MoAI
+         + Studio** 는 그 위에 **SPEC/TRUST/@MX/Kanban 워크플로우 시각화*
+         +* 와 **Claude 가 직접 UI 를 조작할 수 있는 공식 IDE MCP Server 
+         +Pattern** 을 올린다.                                           
+      37  
+      38 +### 브랜드 선택 근거 (O6 RESOLVED)                             
+      39 +                                                               
+      40 +DESIGN.v4 §14 O6 의 4개 후보 — `moai-cli`, `moai-ide`, `moai-sh
+         +ell`, `MoAI Studio` — 중 **MoAI Studio 를 확정**. 주요 근거:   
+      41 +                                                               
+      42 +1. **"Studio" = 업계 계보** (Visual Studio / Android Studio / R
+         +Studio) — "이것은 CLI 가 아니라 종합 작업 환경이다" 를 즉시 전 
+         +달                                                             
+      43 +2. **"cli" 철거** — 실제로는 10개 surface 를 가진 GUI 앱이므로 
+         +"cli" suffix 는 사실과 정면 충돌                               
+      44 +3. **"shell" 철거** — Terminal surface 는 전체의 10% 에 불과   
+      45 +4. **MoAI 패밀리 역할 분리** — `moai-adk` (Go CLI, 엔진) vs **M
+         +oAI Studio** (macOS GUI, 플래그십) 의 경계가 명확              
+      46 +5. **Anthropic 브랜딩 제약 준수** — "Claude Code" 명칭과 0 충돌
+      47 +                                                               
+      48  ### Linux/WSL/Windows 영구 폐기
+      49  
+      50  B5 리서치 결과 (Ghostty WSL 미지원, GTK4 on WSLg 다수 버그, 9P 
+          파일시스템 ~9배 느림, libghostty/VTE 백엔드 이중화 복잡도)에 근
+          거해 **macOS 단독 전략을 영구 확정**. cmux 의 검증된 선택과 동
+          일.
+     ...
+       98  
+       99  ### 경쟁사 매트릭스 (요약)
+      100  
+       87 -| 축 | cmux | Warp | Wave | Zed | Ghostty | **moai-cli** |    
+      101 +| 축 | cmux | Warp | Wave | Zed | Ghostty | **MoAI Studio** | 
+      102  |---|---|---|---|---|---|---|
+      103  | Claude 통합 | teammate shim | cloud agents | badge | ACP (ho
+           ok X) | 없음 | **공식 IDE MCP Server** |
+      104  | Hook 노출 | OSC 만 | ❌ | badge | ❌ | ❌ | **18~25 양방향**
+            |
+     ...
+      115  ### 시나리오 1 — SPEC 기반 개발 워크플로우
+      116  
+      117  1. 형님이 Kanban 보드의 Backlog 카드를 **Doing** 으로 드래그
+      104 -2. moai-cli 가 자동으로:                                      
+      118 +2. MoAI Studio 가 자동으로:                                   
+      119     - `git worktree add` 로 워크스페이스 격리
+      120     - Claude subprocess spawn (`claude --bare -p --output-forma
+           t stream-json ...`)
+      121     - `SDKUserMessage` 로 `/moai run SPEC-AUTH-042` 전송
+     ...
+      130  User: "SPEC-AUTH-042 를 Doing 으로 옮기고 시작해줘"
+      131  Claude:
+      132    1. mcp__moai__kanban_move_card({id: 42, to: "doing"})
+      119 -     → moai-cli UI 가 즉시 카드 이동 애니메이션               
+      133 +     → MoAI Studio UI 가 즉시 카드 이동 애니메이션            
+      134    2. mcp__moai__workspace_create({spec_id: "SPEC-AUTH-042"})
+      135       → git worktree add + Claude subprocess spawn
+      136    3. mcp__moai__surface_reveal({surface: "agent_run"})
+     ...
+      171  
+      172  ### 허용
+      173  
+      160 -- ✅ "moai-cli", "MoAI Agent IDE", "moai + Claude", "Powered b
+          -y Claude"                                                     
+      161 -- ✅ "A native macOS IDE shell for Claude-powered agent develo
+          -pment"                                                        
+      174 +- ✅ "MoAI Studio", "MoAI Agent IDE", "moai + Claude", "Powere
+          +d by Claude"                                                  
+      175 +- ✅ "A native macOS Agent IDE for Claude-powered development"
+      176  - ✅ 인증: `ANTHROPIC_API_KEY`, Bedrock, Vertex, Foundry
+      177  
+      178  ### 금지
+     ...
+      221  
+      222  ## 10. 관련 저장소
+      223  
+      210 -- [modu-ai/moai-adk](https://github.com/modu-ai/moai-adk) — Go
+          - CLI, moai-cli 가 통합하는 본체                               
+      224 +- [modu-ai/moai-adk](https://github.com/modu-ai/moai-adk) — Go
+          + CLI, MoAI Studio 가 통합하는 본체                            
+      225  - [ghostty-org/ghostty](https://github.com/ghostty-org/ghostty
+           ) — 터미널 엔진 (libghostty)
+      226  - [anthropics/claude-code](https://github.com/anthropics/claud
+           e-code) — Claude Code CLI
+      227  
+
+⏺ Write(.moai/project/structure.md)
+  ⎿  Added 24 lines, removed 20 lines
+      1 -# structure.md — moai-cli                                       
+      1 +# structure.md — MoAI Studio                                    
+      2  
+      3  > **출처**: README.md, DESIGN.v4.md §3, §8, REFERENCES.md
+      4  > **상태**: 현재 트리(설계 단계) + 목표 트리(M0 이후) 모두 명시
+      5 +> **브랜드**: MoAI Studio (확정)                                
+      6 +> **패키지 식별자**: `moai-studio`                              
+      7  > **작성일**: 2026-04-11
+      8  
+      9  ---
+     ...
+      37  
+      38  ```
+      39  ┌─────────────────────────────────────────────────────────┐
+      38 -│            moai-cli.app (macOS, SwiftUI + Rust)         │    
+      40 +│           MoAI Studio.app (macOS, SwiftUI + Rust)       │    
+      41  │                                                         │
+      42  │  ┌──────────────────────────────────┐                   │
+      43  │  │     Swift UI Layer               │                   │
+     ...
+      84  
+      85  ## 3. 현재 저장소 트리 (설계 단계)
+      86  
+      87 +> 디스크상 저장소 디렉토리 이름은 현재 `moai-cli` 입니다. 브랜 
+         +드 확정에 따라 장래 `moai-studio` 로 리네임 예정입니다. 아래 트
+         +리는 **실제 디스크 상태** 를 반영합니다.                       
+      88 +                                                               
+      89  ```
+      86 -moai-cli/                                                      
+      90 +moai-cli/                  ← 현 저장소 디렉토리 (→ moai-studio 
+         +로 리네임 예정)                                                
+      91  ├── README.md              ← 진입점
+      92  ├── DESIGN.md              ← v2 (참고)
+      93  ├── DESIGN.v3.md           ← v3 (참고)
+     ...
+      159  DESIGN.v4 §8 의 목표 구조. M0 D1 에서 `app/`, `core/`, `plugin
+           /`, `vendor/`, `scripts/`, `tests/` 디렉토리가 추가됨.
+      160  
+      161  ```
+      158 -moai-cli/                                                     
+      162 +moai-studio/                       # 저장소 리네임 후         
+      163  ├── (위의 모든 설계 문서 + .moai/.claude/.agency 유지)
+      164  │
+      165  ├── app/                          # macOS Xcode 프로젝트
+      162 -│   ├── moai-cli.xcodeproj                                    
+      166 +│   ├── MoAI Studio.xcodeproj                                 
+      167  │   ├── Sources/
+      168  │   │   ├── App/                  # @main, AppDelegate
+      169  │   │   ├── Shell/                # Sidebar, Tabs, Splits, Com
+           mandPalette
+     ...
+      195  │   │   ├── moai-store/           # rusqlite store + migration
+           s
+      196  │   │   ├── moai-git/             # git2 wrapper
+      197  │   │   ├── moai-fs/              # notify wrapper
+      194 -│   │   ├── moai-plugin-installer/  # ~/.claude/plugins/moai-c
+          -li@local/                                                     
+      198 +│   │   ├── moai-plugin-installer/  # ~/.claude/plugins/moai-s
+          +tudio@local/                                                  
+      199  │   │   └── moai-ffi/             # swift-bridge definitions
+      200  │   └── xtask/                    # xcframework 빌드 스크립트
+      201  │
+      198 -├── plugin/                       # moai-cli-plugin           
+      202 +├── plugin/                       # moai-studio-plugin        
+      203  │   ├── .claude-plugin/plugin.json
+      204  │   ├── hooks.json                # 18~20 이벤트 http type
+      201 -│   ├── mcp-config.json           # moai-cli IDE server 연결  
+      205 +│   ├── mcp-config.json           # MoAI Studio IDE server 연 
+          +결                                                            
+      206  │   ├── lsp.json                  # 6개 언어 LSP
+      203 -│   ├── commands/                 # /moai-cli:kanban|memory|co
+          -nnect|surface                                                 
+      207 +│   ├── commands/                 # /moai-studio:kanban|memory
+          +|connect|surface                                              
+      208  │   ├── skills/
+      209  │   ├── output-styles/            # forceForPlugin: true
+      210  │   └── agents/                   # moai-adk 26 에이전트 참조
+     ...
+      216  ├── scripts/
+      217  │   ├── build-ghostty-xcframework.sh
+      218  │   ├── build-rust-xcframework.sh
+      215 -│   ├── install-plugin.sh         # ~/.claude/plugins/moai-cli
+          -@local/ drop                                                  
+      219 +│   ├── install-plugin.sh         # ~/.claude/plugins/moai-stu
+          +dio@local/ drop                                               
+      220  │   └── reload.sh
+      221  │
+      222  ├── tests/
+     ...
+      239  | `core/crates/moai-core/` | 외부 facade. Swift 가 import 하는
+            단일 공개 API |
+      240  | `core/crates/moai-*/` | 단일 책임 crate. 서로 간섭 최소화. 
+           단위 테스트 격리 |
+      241  | `core/crates/moai-ffi/` | swift-bridge `#[bridge]` 정의. **
+           유일한 FFI 경계** |
+      238 -| `plugin/` | Claude Code plugin manifest. moai-cli 가 자동 설
+          -치 (`~/.claude/plugins/moai-cli@local/`) |                    
+      242 +| `plugin/` | Claude Code plugin manifest. MoAI Studio 가 자동
+          + 설치 (`~/.claude/plugins/moai-studio@local/`) |              
+      243  | `vendor/ghostty/` | submodule. **소스 수정 금지**. xcframewo
+           rk 빌드만 |
+      244  | `tests/stress/` | 16 workspace 동시 실행 + mock Claude flood
+            |
+      245  
+     ...
+      261  
+      262  | 데이터 | 위치 | 형식 |
+      263  |---|---|---|
+      260 -| 프로젝트/워크스페이스/Pane/Surface 메타 | `~/Library/Applica
+          -tion Support/moai-cli/store.db` | rusqlite WAL |              
+      264 +| 프로젝트/워크스페이스/Pane/Surface 메타 | `~/Library/Applica
+          +tion Support/MoAI Studio/store.db` | rusqlite WAL |           
+      265  | Hook event stream | 같은 store, `hook_events` 테이블 | rusql
+           ite WAL, 30일 TTL |
+      266  | Cost updates | 같은 store, `cost_updates` 테이블 | rusqlite 
+           WAL |
+      267  | task-metrics 미러 | 같은 store, `task_metrics_mirror` | rusq
+           lite WAL |
+      268  | Memory (Claude Code 본 저장소) | `~/.claude/projects/<root>/
+           memory/` | Markdown (외부 소스) |
+      269  | IDE MCP lockfile | `~/.claude/ide/<port>.lock` | JSON, 0600 
+           |
+      270  | Auth token | macOS Keychain | — |
+      267 -| Plugin install | `~/.claude/plugins/moai-cli@local/` | manif
+          -est + assets |                                                
+      271 +| Plugin install | `~/.claude/plugins/moai-studio@local/` | ma
+          +nifest + assets |                                             
+      272  
+      273  ---
+      274  
+     ...
+      276  
+      277  | 경계 | 프로토콜 | 인증 |
+      278  |---|---|---|
+      275 -| moai-cli ↔ Claude subprocess | stdin/stdout stream-json | (s
+          -ubprocess 격리) |                                             
+      276 -| Claude ↔ moai-cli IDE MCP server | WebSocket / HTTP @ 127.0.
+          -0.1:`<port>` | Bearer token (lockfile) |                      
+      277 -| Claude plugin ↔ moai-cli hook endpoint | HTTP POST @ 127.0.0
+          -.1:`<port>`/hooks/`<event>` | `X-Auth-Token` header (same toke
+          -n) |                                                          
+      278 -| moai-cli ↔ moai-adk Go CLI | subprocess (`moai worktree add 
+          -...`) | (CLI 인증) |                                          
+      279 -| moai-cli ↔ git | libgit2 (in-process) | — |                 
+      279 +| MoAI Studio ↔ Claude subprocess | stdin/stdout stream-json |
+          + (subprocess 격리) |                                          
+      280 +| Claude ↔ MoAI Studio IDE MCP server | WebSocket / HTTP @ 127
+          +.0.0.1:`<port>` | Bearer token (lockfile) |                   
+      281 +| Claude plugin ↔ MoAI Studio hook endpoint | HTTP POST @ 127.
+          +0.0.1:`<port>`/hooks/`<event>` | `X-Auth-Token` header (same t
+          +oken) |                                                       
+      282 +| MoAI Studio ↔ moai-adk Go CLI | subprocess (`moai worktree a
+          +dd ...`) | (CLI 인증) |                                       
+      283 +| MoAI Studio ↔ git | libgit2 (in-process) | — |              
+      284  | Swift ↔ Rust | swift-bridge FFI (in-process) | — |
+      285  
+      286  **중요**: 모든 네트워크 바인딩은 `127.0.0.1` 만. 외부 네트워크
+            접근 0.
+     ...
+      293  |---|---|---|
+      294  | `GhosttyKit.xcframework` | `app/Frameworks/GhosttyKit.xcfram
+           ework` | `zig build -Demit-xcframework=true` |
+      295  | `MoaiCore.xcframework` | `app/Frameworks/MoaiCore.xcframewor
+           k` | `cargo xtask build-xcframework` |
+      292 -| `moai-cli.app` | `~/Library/Developer/Xcode/DerivedData/.../
+          -Build/Products/` | Xcode |                                    
+      293 -| `moai-cli.dmg` (배포) | `release/` | `notarize.sh` + `create
+          --dmg` |                                                       
+      296 +| `MoAI Studio.app` | `~/Library/Developer/Xcode/DerivedData/.
+          +../Build/Products/` | Xcode |                                 
+      297 +| `MoAI-Studio.dmg` (배포) | `release/` | `notarize.sh` + `cre
+          +ate-dmg` |                                                    
+      298  
+      299  ---
+      300  
+
+⏺ Write(.moai/project/tech.md)
+  ⎿  Added 28 lines, removed 25 lines
+      1 -# tech.md — moai-cli                                            
+      1 +# tech.md — MoAI Studio                                         
+      2  
+      3  > **출처**: DESIGN.v4.md §0, §4, §7, §11
+      4  > **상태**: Stack 확정. 일부 항목은 Pre-M0 spike 검증 후 fix.
+      5 +> **브랜드**: MoAI Studio (확정)                                
+      6 +> **패키지 식별자**: `moai-studio`                              
+      7  > **작성일**: 2026-04-11
+      8  
+      9  ---
+     ...
+      24  | **OS 지원** | **macOS 14+ 영구 단독** | B5 리서치 결과: WSL 
+          미지원, 9P 9배 느림, libghostty/VTE 이중화 복잡도 |
+      25  | **개발 방법론** | **TDD** (RED-GREEN-REFACTOR) | 신규 프로젝
+          트 자동 감지 (quality.yaml `development_mode: tdd`) |
+      26  | **라이선스** | **MIT** | — |
+      27 +| **브랜드** | **MoAI Studio** | DESIGN.v4 §14 O6 RESOLVED |   
+      28  
+      29  ---
+      30  
+     ...
+       97  ├── moai-store/            # rusqlite store + migrations
+       98  ├── moai-git/              # git2 wrapper
+       99  ├── moai-fs/               # notify wrapper
+       97 -├── moai-plugin-installer/ # ~/.claude/plugins/moai-cli@local/
+          - 자동 drop                                                    
+      100 +├── moai-plugin-installer/ # ~/.claude/plugins/moai-studio@loc
+          +al/ 자동 drop                                                 
+      101  └── moai-ffi/              # swift-bridge #[bridge] 정의 (유일
+           한 FFI 경계)
+      102  ```
+      103  
+     ...
+      105  
+      106  ## 4. Claude Code 통합 — 명령행 (확정)
+      107  
+      105 -DESIGN.v4 §4.1. moai-cli 가 spawn 하는 정확한 형태:           
+      108 +DESIGN.v4 §4.1. MoAI Studio 가 spawn 하는 정확한 형태:        
+      109  
+      110  ```bash
+      111  claude --bare -p "" \
+     ...
+      114    --verbose \
+      115    --permission-mode acceptEdits \
+      116    --settings <ws.settings_path> \
+      114 -  --mcp-config <moai_cli_mcp_config_path> \                   
+      115 -  --plugin-dir <moai_cli_plugin_dir> \                        
+      117 +  --mcp-config <moai_studio_mcp_config_path> \                
+      118 +  --plugin-dir <moai_studio_plugin_dir> \                     
+      119    --allowedTools "Read,Edit,Write,Bash,Glob,Grep,mcp__moai__*,
+           mcp__ide__*"
+      120  ```
+      121  
+     ...
+      130  - CLAUDE.md 자동 로드 → `--append-system-prompt-file`
+      131  - Keychain / OAuth → `ANTHROPIC_API_KEY` 환경 변수
+      132  
+      130 -→ moai-cli 가 **결정론적 실행 환경** 보장.                    
+      133 +→ MoAI Studio 가 **결정론적 실행 환경** 보장.                 
+      134  
+      135  ---
+      136  
+     ...
+      144  3. ~/.claude/ide/<port>.lock 작성 (0600, 디렉토리 0700)
+      145     {
+      146       "workspaceFolders": [...],
+      144 -     "pid": <moai-cli pid>,                                   
+      145 -     "ideName": "MoAI",                                       
+      147 +     "pid": <MoAI Studio pid>,                                
+      148 +     "ideName": "MoAI Studio",                                
+      149       "transport": "ws",
+      150       "runningInWindows": false,
+      151       "authToken": "<hex>"
+     ...
+      253  }
+      254  ```
+      255  
+      253 -**Claude Code 가 LSP 서버를 spawn + 관리.** moai-cli Code View
+          -er 는 `mcp__ide__getDiagnostics` tool 호출로 진단을 받음. **자
+          -체 LSP 클라이언트 구현 불필요** — 이것이 v4 의 큰 단순화.     
+      256 +**Claude Code 가 LSP 서버를 spawn + 관리.** MoAI Studio Code V
+          +iewer 는 `mcp__ide__getDiagnostics` tool 호출로 진단을 받음. *
+          +*자체 LSP 클라이언트 구현 불필요** — 이것이 v4 의 큰 단순화.  
+      257  
+      258  ---
+      259  
+     ...
+      283  
+      284  ---
+      285  
+      283 -## 9. moai-cli-plugin 구조                                    
+      286 +## 9. moai-studio-plugin 구조                                 
+      287  
+      285 -DESIGN.v4 §7.4. `plugin/` 디렉토리에 위치, `~/.claude/plugins/
+          -moai-cli@local/` 로 자동 install.                             
+      288 +DESIGN.v4 §7.4. `plugin/` 디렉토리에 위치, `~/.claude/plugins/
+          +moai-studio@local/` 로 자동 install.                          
+      289  
+      290  ```
+      291  plugin/
+      289 -├── .claude-plugin/plugin.json    # manifest                  
+      292 +├── .claude-plugin/plugin.json    # manifest (name: "moai-stud
+          +io")                                                          
+      293  ├── hooks.json                    # 18~20 이벤트 http type
+      291 -├── mcp-config.json               # moai-cli IDE server 연결  
+      294 +├── mcp-config.json               # MoAI Studio IDE server 연 
+          +결                                                            
+      295  ├── lsp.json                      # 6개 언어 LSP
+      296  ├── commands/
+      294 -│   ├── kanban.md                 # /moai-cli:kanban          
+      295 -│   ├── memory.md                 # /moai-cli:memory          
+      296 -│   ├── connect.md                # /moai-cli:connect         
+      297 -│   └── surface.md                # /moai-cli:surface         
+      297 +│   ├── kanban.md                 # /moai-studio:kanban       
+      298 +│   ├── memory.md                 # /moai-studio:memory       
+      299 +│   ├── connect.md                # /moai-studio:connect      
+      300 +│   └── surface.md                # /moai-studio:surface      
+      301  ├── skills/
+      299 -│   ├── moai-cli-open-workspace/SKILL.md                      
+      300 -│   └── moai-cli-focus-agent/SKILL.md                         
+      302 +│   ├── moai-studio-open-workspace/SKILL.md                   
+      303 +│   └── moai-studio-focus-agent/SKILL.md                      
+      304  ├── output-styles/
+      302 -│   └── moai-cli.md               # forceForPlugin: true      
+      305 +│   └── moai-studio.md            # forceForPlugin: true      
+      306  └── agents/                       # moai-adk 26 에이전트 참조
+      307  ```
+      308  
+     ...
+      397  | `.references/moai-adk-go` | `/Users/goos/MoAI/moai-adk-go` |
+            Hook 통합, plugin 자동 설치, 27 이벤트 wiring 검증 |
+      398  | `.references/claude-code-map` | `/Users/goos/moai/claude-cod
+           e-map` | stream-json 프로토콜, SDKMessage, hook 스키마, MCP 통
+           합 검증 |
+      399  
+      397 -**원칙**: `.references/` 안의 파일은 **읽기 전용**. moai-cli  
+          -코드는 항상 저장소 루트에만 작성. CI 에서는 `.references/` 없 
+          -이도 빌드 성공해야 함.                                        
+      400 +**원칙**: `.references/` 안의 파일은 **읽기 전용**. MoAI Studi
+          +o 코드는 항상 저장소 루트에만 작성. CI 에서는 `.references/`  
+          +없이도 빌드 성공해야 함.                                      
+      401  
+      402  ---
+      403  
+     ...
+      405  
+      406  DESIGN.v4 §14.
+      407  
+      405 -| # | 결정 | 권장 | 기한 |                                    
+      408 +| # | 결정 | 권장/결정 | 기한 |                               
+      409  |---|---|---|---|
+      410  | O1 | MCP 서버 Rust 라이브러리 (`rmcp` vs `axum+jsonrpsee`) |
+            Pre-M0 D2 검증 후 | M0 D5 |
+      411  | O2 | swift-bridge vs uniffi-rs vs cbindgen | **swift-bridge*
+           * | M0 D1 |
+      412  | O3 | 미문서화 hook 필드 (`updatedPermissions`, `watchPaths`)
+            | feature flag wrap | M1 |
+      413  | O4 | Plugin 자동 설치 동의 UX | onboarding 명시 체크박스 | M
+           4 |
+      414  | O5 | `claude` 바이너리 버전 pinning | `>= 2.2.0` 최소만 | M4
+            |
+      412 -| O6 | 브랜딩 최종 (`moai-cli` vs `moai-ide` vs `moai-shell` v
+          -s `MoAI Studio`) | 미정 | M4 완료 전 |                        
+      415 +| O6 | ~~브랜딩 최종~~ | **RESOLVED → MoAI Studio** (2026-04-1
+          +1) | — |                                                      
+      416  
+      417  ---
+      418  
+     ...
+      421  | 변수 | 용도 |
+      422  |---|---|
+      423  | `ANTHROPIC_API_KEY` | Claude API 인증 (또는 Bedrock/Vertex/F
+           oundry 환경 변수) |
+      421 -| `MOAI_CLI_DEV` | 개발 모드 플래그 (verbose 로깅, mock Claude
+          -) |                                                           
+      422 -| `MOAI_CLI_IDE_PORT` | IDE MCP server port override (테스트용
+          -) |                                                           
+      424 +| `MOAI_STUDIO_DEV` | 개발 모드 플래그 (verbose 로깅, mock Cla
+          +ude) |                                                        
+      425 +| `MOAI_STUDIO_IDE_PORT` | IDE MCP server port override (테스 
+          +트용) |                                                       
+      426  
+      427  **금지**: claude.ai OAuth 구현. Anthropic 공식 브랜딩 가이드라
+           인.
+      428  
+
+⏺ Write(.moai/project/codemaps/overview.md)
+  ⎿  Added 7 lines, removed 6 lines
+       1 -# codemaps/overview.md — moai-cli                              
+       1 +# codemaps/overview.md — MoAI Studio                           
+       2  
+       3  > **Status**: Pre-implementation placeholder.
+       4  > 코드가 아직 작성되지 않았으므로 본 codemap 은 **목표 아키텍처
+           스냅샷** 만 담는다.
+       5  > M0 완료 후 실제 코드 분석 결과로 교체될 예정.
+       6  >
+       7  > **Source of truth**: DESIGN.v4.md
+       8 +> **브랜드**: MoAI Studio (확정)                               
+       9  > **작성일**: 2026-04-11
+      10  
+      11  ---
+     ...
+      14  
+      15  ```
+      16  ┌─────────────────────────────────────────────────────────┐
+      16 -│                  moai-cli.app (macOS)                   │    
+      17 +│                 MoAI Studio.app (macOS)                 │    
+      18  │                                                         │
+      19  │   Swift UI Layer  ◄──── swift-bridge FFI ────►  Rust Core  │
+      20  │                                                         │
+     ...
+      61  | `moai-store` | rusqlite WAL store + migrations | rusqlite, r2
+          d2, refinery |
+      62  | `moai-git` | git2 wrapper | git2 (libgit2) |
+      63  | `moai-fs` | notify wrapper | notify |
+      63 -| `moai-plugin-installer` | `~/.claude/plugins/moai-cli@local/`
+         - 자동 drop | std::fs |                                         
+      64 +| `moai-plugin-installer` | `~/.claude/plugins/moai-studio@loca
+         +l/` 자동 drop | std::fs |                                      
+      65  | `moai-ffi` | swift-bridge `#[bridge]` 정의 | swift-bridge |
+      66  
+      67  ---
+     ...
+      89  
+      90  ---
+      91  
+      91 -## 4. 데이터 흐름 — Plugin Hook → moai-cli                     
+      92 +## 4. 데이터 흐름 — Plugin Hook → MoAI Studio                  
+      93  
+      94  ```
+      95  1. Claude 가 Bash 도구 호출 시도
+     ...
+      121  
+      122  | 종류 | 위치 | 용도 |
+      123  |---|---|---|
+      123 -| macOS app | `app/Sources/App/MoaiCliApp.swift` | `@main` Swi
+          -ftUI app |                                                    
+      124 +| macOS app | `app/Sources/App/MoaiStudioApp.swift` | `@main` 
+          +SwiftUI app |                                                 
+      125  | Rust facade | `core/crates/moai-core/src/lib.rs` | Swift 가 
+           호출하는 공개 API |
+      126  | Rust FFI 정의 | `core/crates/moai-ffi/src/lib.rs` | swift-br
+           idge `#[bridge]` mod |
+      127  | IDE MCP server | `core/crates/moai-ide-server/src/lib.rs::st
+           art_ide_server` | 127.0.0.1 bind + lockfile drop |
+      128  | Hook HTTP server | `core/crates/moai-hook-http/src/lib.rs` |
+            axum router `/hooks/:event` |
+      129  | 빌드 진입 | `scripts/build-ghostty-xcframework.sh`, `cargo x
+           task build-xcframework` | xcframework 산출 |
+      129 -| 헤드리스 CLI (미래) | `core/crates/moai-cli-headless` | Swif
+          -t UI 없이 Rust core 만으로 동작 |                             
+      130 +| 헤드리스 CLI (미래) | `core/crates/moai-studio-headless` | S
+          +wift UI 없이 Rust core 만으로 동작 |                          
+      131  
+      132  ---
+      133  
+
+⏺ 이제 DESIGN.v4 (54 occurrences) 와 NEXT-STEPS (20 occurrences) 를 처리합니다.
+  Edit 개별 호출로 하면 30+ 회 필요하고, 오류 가능성 높으므로 이 대규모 재명명
+  한 건에 한해 sed 를 예외적으로 사용합니다. 경로(~/moai/moai-cli) 는
+  placeholder 로 보호한 후 복원합니다.
+
+  Ran 2 bash commands (ctrl+o to expand)
+
+⏺ sed 치환 완료. 남은 moai-cli 출현과 이상 패턴을 검증합니다.
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ 잔존 moai-cli 는 모두 의도적으로 유지한 경로/히스토리 — OK. 이제 sed 로 인해
+  생긴 이상 패턴과 "Moai Studio" vs "MoAI Studio" 일관성, §14 O6 RESOLVED 반영을
+   확인합니다.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+⏺ 문서 상태 확인 완료. DESIGN.v4 §14 O6 을 RESOLVED 로 변경하고, NEXT-STEPS 의
+  O6 table row 도 함께 업데이트합니다.
+
+⏺ Update(DESIGN.v4.md)
+  ⎿  Added 24 lines, removed 8 lines
+      1309  - Breaking change 감지 시 `claude >= 2.2.0 < 2.3.0` 형태로 상
+            한 추가
+      1310  - MoAI Studio 가 `claude --version` 을 M0 초기에 확인, 미설치
+             시 설치 가이드
+      1311  
+      1312 -### O6. 브랜딩 최종 확정                                     
+      1312 +### O6. 브랜딩 최종 확정 — **RESOLVED (2026-04-11)**         
+      1313  
+      1314 -**현 가제**: `MoAI Studio`                                   
+      1315 -**후보**:                                                    
+      1316 -- MoAI Studio (현)                                           
+      1317 -- moai-ide                                                   
+      1318 -- moai-shell                                                 
+      1319 -- Moai Studio                                                
+      1314 +**결정**: **MoAI Studio** 로 확정.                           
+      1315  
+      1321 -**M4 완료 전까지 결정.** 제약: "Claude Code" 명칭 금지.      
+      1316 +| 항목 | 값 |                                                
+      1317 +|---|---|                                                    
+      1318 +| 브랜드 | **MoAI Studio** |                                 
+      1319 +| 패키지/바이너리 식별자 | `moai-studio` |                   
+      1320 +| 앱 번들 | `MoAI Studio.app` |                              
+      1321 +| 배포 DMG | `MoAI-Studio.dmg` |                             
+      1322 +| Plugin 디렉토리 | `~/.claude/plugins/moai-studio@local/` | 
+      1323 +| GitHub (장래) | `modu-ai/moai-studio` (현재 `modu-ai/moai-c
+           +li`, rename 예정) |                                          
+      1324 +| 저장소 디스크 경로 (장래) | `~/moai/moai-studio` (현재 `~/m
+           +oai/moai-cli`, rename 예정) |                                
+      1325  
+      1326 +**선택 근거:**                                               
+      1327 +                                                             
+      1328 +1. **업계 계보 연결**: Visual Studio / Android Studio / RStud
+           +io 와 동일한 "Studio" 접미사가 "이것은 CLI 가 아니라 종합 작 
+           +업 환경이다" 를 0.1 초 만에 전달. "에이전틱 코딩 종합 툴" 이 
+           +라는 포지셔닝과 정면 정렬                                    
+      1329 +2. **"cli" 철거**: 실제로는 10개 surface 를 가진 macOS GUI 앱
+           +이므로 `moai-cli` 의 `cli` 접미사는 사실과 정면 충돌, 사용자 
+           +혼란 유발                                                    
+      1330 +3. **"shell" 철거**: Terminal surface 는 전체의 10% 에 불과, 
+           +"moai-shell" 은 과소 대표                                    
+      1331 +4. **MoAI 패밀리 역할 분리**: `moai-adk` (Go CLI, 엔진) ↔ **M
+           +oAI Studio** (macOS GUI, 플래그십) — 이름만으로 사용자 진입점
+           +이 명확                                                      
+      1332 +5. **Anthropic 브랜딩 제약 준수**: "Claude Code" 명칭과 0 충 
+           +돌, "Powered by Claude" 서브라인 자연스러움                  
+      1333 +6. **도메인/식별자 확보 가능성**: `moai.studio`, `moaistudio.
+           +app`, `moai-studio` npm/cargo 네이밍 경쟁 낮음               
+      1334 +                                                             
+      1335 +**폐기 후보**: ~~`moai-cli`~~ (GUI 인데 CLI 표기), ~~`moai-id
+           +e`~~ (기술 서술어, 브랜드 아님), ~~`moai-shell`~~ (10개 surfa
+           +ce 중 1개만 대표), ~~`Moai Studio`~~ (대소문자 미통일, `MoAI`
+           + 로 확정)                                                    
+      1336 +                                                             
+      1337 +**일괄 치환 수행**: 2026-04-11, 본 결정에 따라 README/DESIGN.
+           +v4/NEXT-STEPS/REFERENCES/.moai/project/\*.md 전체에 `moai-cli
+           +` → `MoAI Studio` (브랜드) 및 `moai-studio` (식별자) 치환 완 
+           +료. 저장소 디스크 rename 과 GitHub URL rename 은 별도 작업으 
+           +로 보류.                                                     
+      1338 +                                                             
+      1339  ---
+      1340  
+      1341  ## 15. 다음 액션
+
+⏺ Update(NEXT-STEPS.md)
+  ⎿  Error editing file
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+⏺ Update(NEXT-STEPS.md)
+  ⎿  Added 1 line, removed 1 line
+      435  | O3 | 미문서화 hook 필드 (`updatedPermissions`, `watchPaths`)
+            사용 정책 | 단계 1.3 결과 | M1 |
+      436  | O4 | Plugin 자동 설치 동의 UX | 없음 | M4 |
+      437  | O5 | `claude` 바이너리 버전 pinning 정책 | 없음 | M4 |
+      438 -| O6 | 브랜딩 최종 확정 (MoAI Studio vs moai-ide vs moai-shell
+          - vs MoAI Studio) | 없음 | M4 완료 전 |                        
+      438 +| ~~O6~~ | ~~브랜딩 최종 확정~~ | **RESOLVED → MoAI Studio** (
+          +2026-04-11, DESIGN.v4 §14 O6) | — |                           
+      439  
+      440  ### 진행 방식
+      441  
+
+⏺ Update(NEXT-STEPS.md)
+  ⎿  Added 1 line, removed 1 line
+      531  
+      532  **Questions to answer before starting:**
+      533  - [ ] O2 (swift-bridge vs uniffi-rs) — M0 D1 전에 결정 필요 (
+           권장: swift-bridge)
+      534 -- [ ] O6 (브랜딩) — 지금은 "MoAI Studio" 로 유지, M4 전에 최종
+          - 확정                                                         
+      534 +- [x] O6 (브랜딩) — **RESOLVED → MoAI Studio** (2026-04-11)   
+      535  
+      536  ---
+      537  
+
+  Searched for 2 patterns (ctrl+o to expand)
+
+⏺ 🤖 MoAI ★ 브랜드 일괄 치환 완료 ──────────
+  ✅ moai-cli → MoAI Studio (확정)
+  ────────────────────────────────────────
+
+  📊 치환 결과 (140 → 0 이상 출현)
+
+  ┌────────────────────────────────────┬─────────────────┬──────────────────┐
+  │                파일                │    처리 방식    │       결과       │
+  ├────────────────────────────────────┼─────────────────┼──────────────────┤
+  │                                    │                 │ ✅ 브랜드 적용 + │
+  │ README.md                          │ Write 재작성    │  리네임 안내     │
+  │                                    │                 │ 추가             │
+  ├────────────────────────────────────┼─────────────────┼──────────────────┤
+  │ REFERENCES.md                      │ Write 재작성    │ ✅ 브랜드 적용 + │
+  │                                    │                 │  경로 유지       │
+  ├────────────────────────────────────┼─────────────────┼──────────────────┤
+  │ .moai/project/product.md           │ Write 재작성    │ ✅ 선택 근거     │
+  │                                    │                 │ 섹션 추가        │
+  ├────────────────────────────────────┼─────────────────┼──────────────────┤
+  │ .moai/project/structure.md         │ Write 재작성    │ ✅ 현재/목표     │
+  │                                    │                 │ 트리 분리 표기   │
+  ├────────────────────────────────────┼─────────────────┼──────────────────┤
+  │ .moai/project/tech.md              │ Write 재작성    │ ✅ 핵심 결정     │
+  │                                    │                 │ 표에 브랜드 추가 │
+  ├────────────────────────────────────┼─────────────────┼──────────────────┤
+  │                                    │                 │ ✅ 헤드리스      │
+  │ .moai/project/codemaps/overview.md │ Write 재작성    │ crate 경로       │
+  │                                    │                 │ 업데이트         │
+  ├────────────────────────────────────┼─────────────────┼──────────────────┤
+  │ DESIGN.v4.md (1395줄, 54건)        │ sed + Edit      │ ✅ §14 O6        │
+  │                                    │                 │ RESOLVED 전환    │
+  ├────────────────────────────────────┼─────────────────┼──────────────────┤
+  │                                    │ sed (경로       │ ✅ O6            │
+  │ NEXT-STEPS.md (540줄, 20건)        │ placeholder) +  │ 표/체크리스트    │
+  │                                    │ Edit            │ RESOLVED         │
+  ├────────────────────────────────────┼─────────────────┼──────────────────┤
+  │ DESIGN.md (v2) · DESIGN.v3.md (v3) │ 건드리지 않음   │ ⭕ Evolution     │
+  │                                    │                 │ 기록 보존        │
+  └────────────────────────────────────┴─────────────────┴──────────────────┘
+
+  🎯 치환 규칙 (컨텍스트별)
+
+  ┌───────────────┬───────────────────────────┬─────────────────────────────┐
+  │     범주      │          Before           │            After            │
+  ├───────────────┼───────────────────────────┼─────────────────────────────┤
+  │ 브랜드 산문   │ moai-cli 는               │ MoAI Studio 는              │
+  │ 표기          │                           │                             │
+  ├───────────────┼───────────────────────────┼─────────────────────────────┤
+  │ 앱 번들       │ moai-cli.app              │ MoAI Studio.app             │
+  ├───────────────┼───────────────────────────┼─────────────────────────────┤
+  │ Xcode         │ moai-cli.xcodeproj        │ MoAI Studio.xcodeproj       │
+  │ 프로젝트      │                           │                             │
+  ├───────────────┼───────────────────────────┼─────────────────────────────┤
+  │ DMG 배포      │ moai-cli.dmg              │ MoAI-Studio.dmg             │
+  ├───────────────┼───────────────────────────┼─────────────────────────────┤
+  │ 패키지 식별자 │ moai-cli-plugin           │ moai-studio-plugin          │
+  ├───────────────┼───────────────────────────┼─────────────────────────────┤
+  │ Plugin 설치   │ ~/.claude/plugins/moai-cl │ ~/.claude/plugins/moai-stud │
+  │ 경로          │ i@local/                  │ io@local/                   │
+  ├───────────────┼───────────────────────────┼─────────────────────────────┤
+  │ Plugin        │ "name": "moai-cli"        │ "name": "moai-studio"       │
+  │ manifest name │                           │                             │
+  ├───────────────┼───────────────────────────┼─────────────────────────────┤
+  │ 슬래시 커맨드 │ /moai-cli:kanban          │ /moai-studio:kanban         │
+  ├───────────────┼───────────────────────────┼─────────────────────────────┤
+  │ Skill         │ moai-cli-open-workspace   │ moai-studio-open-workspace  │
+  │ 디렉토리      │                           │                             │
+  ├───────────────┼───────────────────────────┼─────────────────────────────┤
+  │ CI 워크플로우 │ ci-moai-cli-rust.yml      │ ci-moai-studio-rust.yml     │
+  ├───────────────┼───────────────────────────┼─────────────────────────────┤
+  │ 미래 Linux/WS │ moai-cli-linux 등         │ moai-studio-linux 등        │
+  │ L/Windows     │                           │                             │
+  ├───────────────┼───────────────────────────┼─────────────────────────────┤
+  │ 헤드리스      │ moai-cli-headless         │ moai-studio-headless        │
+  │ crate         │                           │                             │
+  ├───────────────┼───────────────────────────┼─────────────────────────────┤
+  │ 앱 지원 폴더  │ ~/Library/Application     │ ~/Library/Application       │
+  │               │ Support/moai-cli/         │ Support/MoAI Studio/        │
+  ├───────────────┼───────────────────────────┼─────────────────────────────┤
+  │ GitHub URL    │ modu-ai/moai-cli          │ modu-ai/moai-studio (rename │
+  │               │                           │  예정)                      │
+  ├───────────────┼───────────────────────────┼─────────────────────────────┤
+  │ 모노레포 트리 │ moai-cli/ (목표 구조)     │ moai-studio/                │
+  └───────────────┴───────────────────────────┴─────────────────────────────┘
+
+  🛡 의도적으로 유지한 moai-cli (22건)
+
+  모두 실제 디스크 상태 또는 역사/결정 기록:
+
+  1. 현재 디스크 경로 ~/moai/moai-cli — NEXT-STEPS setup 명령 (9건), REFERENCES
+  경로 안내 (3건) → sed placeholder 로 보호
+  2. 저장소 리네임 안내 문구 — README, structure.md (4건) → 사용자에게 장래 mv
+  계획 알림
+  3. DESIGN.v4 §14 O6 RESOLVED 본문 — 선택 근거 / 폐기 후보 기록 (5건)
+  4. product.md O6 후보 목록 — "4개 후보 중 MoAI Studio 확정" 역사 기록 (1건)
+
+  📝 DESIGN.v4 §14 O6 RESOLVED 본문
+
+  다음 정보를 공식 기록:
+  - 결정 일자: 2026-04-11
+  - 브랜드: MoAI Studio
+  - 식별자: moai-studio
+  - 앱 번들: MoAI Studio.app
+  - DMG: MoAI-Studio.dmg
+  - Plugin: ~/.claude/plugins/moai-studio@local/
+  - GitHub (장래): modu-ai/moai-studio
+  - 선택 근거 6개 항목
+  - 폐기 후보 4개 (moai-cli, moai-ide, moai-shell, Moai Studio[대소문자 미통일])
+
+  ⏭ 남은 후속 작업 (사용자 결정 필요)
+
+  별도 작업으로 보류:
+
+  1. 저장소 디스크 rename: mv ~/moai/moai-cli ~/moai/moai-studio — 실행 시
+  .references/ 심볼릭 링크, Xcode 프로젝트 등 부가 영향 있음. cd 한 상태로 실행
+  금지
+  2. GitHub repo rename: modu-ai/moai-cli → modu-ai/moai-studio — GitHub 자동
+  redirect 지원, 단 local remote URL 업데이트 필요 (git remote set-url origin 
+  ...)
+  3. NEXT-STEPS 및 REFERENCES 의 cd ~/moai/moai-cli: 위 1번 완료 시 cd 
+  ~/moai/moai-studio 로 일괄 업데이트 가능 (또 다른 sed 한 번)
+
+  두 작업 모두 디스크 실제 상태를 바꾸는 작업이라 사용자 확인 후 별도로 실행하는
+   것을 권장합니다. 지금 진행하시겠습니까?
+
+  DONE
+
+❯ /export                                                                         ⎿  Conversation copied to clipboard
