@@ -1,8 +1,8 @@
 # product.md — MoAI Studio
 
 > **출처**: README.md, DESIGN.v4.md (현 기준), NEXT-STEPS.md, REFERENCES.md
-> **상태**: Design Phase (v4 draft, 코드 미작성)
-> **버전**: 0.1.0 (pre-implementation)
+> **상태**: M1 Complete (Conditional GO) — Working Shell 구현 완료
+> **버전**: 0.2.0 (M1 Working Shell)
 > **브랜드**: MoAI Studio (확정 — DESIGN.v4 §14 O6 RESOLVED, 2026-04-11)
 > **패키지 식별자**: `moai-studio`
 > **작성일**: 2026-04-11

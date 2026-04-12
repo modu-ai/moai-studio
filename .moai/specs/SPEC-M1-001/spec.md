@@ -2,10 +2,10 @@
 
 ---
 id: SPEC-M1-001
-version: 1.0.0
-status: draft
+version: 1.1.0
+status: completed
 created: 2026-04-11
-updated: 2026-04-11
+updated: 2026-04-13
 author: MoAI (manager-spec)
 priority: High
 issue_number: null
@@ -16,6 +16,7 @@ issue_number: null
 | 버전 | 날짜 | 변경 내용 |
 |------|------|-----------|
 | 1.0.0 | 2026-04-11 | 초안 작성. M0 conditional GO 기반, M0 carry-over 항목 포함 |
+| 1.1.0 | 2026-04-13 | 구현 완료. 조건부 GO. 30 tasks, 186 tests, 7 commits. |
 
 ---
 

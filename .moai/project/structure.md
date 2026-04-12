@@ -1,7 +1,7 @@
 # structure.md — MoAI Studio
 
 > **출처**: README.md, DESIGN.v4.md §3, §8, REFERENCES.md
-> **상태**: 현재 트리(설계 단계) + 목표 트리(M0 이후) 모두 명시
+> **상태**: M1 Complete — 12 Rust crates + SwiftUI app + GhosttyKit + 186 tests
 > **브랜드**: MoAI Studio (확정)
 > **패키지 식별자**: `moai-studio`
 > **작성일**: 2026-04-11
