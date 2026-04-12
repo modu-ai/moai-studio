@@ -14,3 +14,9 @@
 - Phase 1.7 decision: stub creation deferred to teammates inside worktrees (avoids 90+ file churn in main repo)
 - Sprint strategy: execute by milestone (MS-1 → MS-6), not all 30 tasks at once
 - Sprint 1 (MS-1 Carry-over): T-001..T-004 (backend-dev FFI) ∥ T-019 (frontend-dev Ghostty verify)
+- Sprint MS-6 (T-028~T-030) completed 2026-04-13:
+  - T-028: e2e_working_shell.rs (3 tests) + E2EWorkingShellTests.swift (3 smoke)
+  - T-029: nfr_stress.rs (7 tests), NFR 9/12 PASS, 3 DEFERRED to M2
+  - T-030: TRUST5 audit, 34 AC (27 PASS, 7 DEFERRED, 0 FAIL), @MX census (45 tags)
+  - 전체: 186 tests pass, 0 clippy warnings, fmt clean
+  - 판정: **조건부 GO** — Xcode UITest 서명 + Claude CLI 실전 검증 시 정식 GO

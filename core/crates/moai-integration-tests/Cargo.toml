@@ -17,9 +17,12 @@ moai-claude-host = { path = "../moai-claude-host" }
 moai-ide-server = { path = "../moai-ide-server" }
 moai-hook-http = { path = "../moai-hook-http" }
 moai-core = { path = "../moai-core" }
+moai-store = { path = "../moai-store" }
+moai-supervisor = { path = "../moai-supervisor" }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "process", "io-util", "time"] }
 tokio-util = "0.7"
 reqwest = { version = "0.12", features = ["json"] }
 serde_json = { workspace = true }
 futures = "0.3"
 bytes = "1"
+tempfile = "3"
