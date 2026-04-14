@@ -20,6 +20,7 @@
 // @MX:NOTE: [AUTO] FFI 표면은 반드시 이 bridge 블록을 통해서만 노출된다.
 
 mod events;
+mod filetree;
 mod pane;
 mod surface;
 mod workspace;
@@ -184,6 +185,25 @@ impl RustCore {
         let store = self.workspaces.store_handle();
         surface::list_surfaces_json(&store, pane_id)
     }
+
+    // ── FileTree FFI (MS-4) ──────────────────────────────────────────────────
+    // @MX:NOTE: [AUTO] 폴링 기반 갱신 채택 (500ms). MS-7+ 에서 notify-push 로 업그레이드 예정.
+
+    /// 디렉토리 바로 아래 항목을 JSON 배열로 반환한다.
+    ///
+    /// `subpath` 가 빈 문자열이면 `workspace_path` 루트를 리스팅한다.
+    /// `.git`, `target`, `node_modules`, `.build`, `build`, `.DS_Store` 는 제외된다.
+    pub fn list_directory_json(&self, workspace_path: String, subpath: String) -> String {
+        filetree::list_directory_json(workspace_path, subpath)
+    }
+
+    /// 워크스페이스 루트의 git status 맵을 JSON 객체로 반환한다.
+    ///
+    /// `{"src/main.rs": "modified", "new_file.txt": "untracked"}` 형식.
+    /// git 저장소가 아니면 `{}` 반환.
+    pub fn git_status_map_json(&self, workspace_path: String) -> String {
+        filetree::git_status_map_json(workspace_path)
+    }
 }
 
 impl Default for RustCore {
@@ -260,5 +280,9 @@ mod ffi {
         // JSON 반환 메서드 — swift-bridge Vectorizable 한계 우회
         fn list_panes_json(&self, workspace_id: i64) -> String;
         fn list_surfaces_json(&self, pane_id: i64) -> String;
+
+        // FileTree FFI (MS-4)
+        fn list_directory_json(&self, workspace_path: String, subpath: String) -> String;
+        fn git_status_map_json(&self, workspace_path: String) -> String;
     }
 }

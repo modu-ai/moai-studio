@@ -135,6 +135,18 @@ final class MockRustCoreBridge: RustCoreBridging {
         workspaceDbIds[workspaceUuid] ?? 0
     }
 
+    // ── FileTree FFI (MS-4) ─────────────────────────────────────────────────
+    var stubbedDirectoryJson: String = "[]"
+    var stubbedStatusJson: String = "{}"
+
+    func listDirectoryJson(workspacePath: String, subpath: String) -> String {
+        stubbedDirectoryJson
+    }
+
+    func gitStatusMapJson(workspacePath: String) -> String {
+        stubbedStatusJson
+    }
+
     // Test helpers
     func enqueue(workspaceId: String, event: String) {
         eventQueues[workspaceId, default: []].append(event)

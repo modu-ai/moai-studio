@@ -79,13 +79,28 @@ public final class TabBarViewModel {
     /// 새 탭을 생성하고 추가된 surface id 를 반환한다.
     ///
     /// FFI 를 통해 DB 에 즉시 영속한다. 실패 시 nil 반환.
+    ///
+    /// - Parameters:
+    ///   - kind: surface 종류 (기본값: terminal)
+    ///   - statePath: 파일 경로 기반 surface 상태 (FileTree → 파일 오픈 시 사용). nil 이면 빈 상태.
+    // @MX:NOTE: [AUTO] T-054: FileTree 파일 클릭 → 확장자 기반 surface 오픈.
+    //            statePath 는 JSON 직렬화되어 surface state_json 에 저장된다.
     @discardableResult
-    public func newTab(kind: SurfaceKind = .terminal) -> Int64? {
+    public func newTab(kind: SurfaceKind = .terminal, statePath: String? = nil) -> Int64? {
         let nextOrder = (tabs.map { $0.tabOrder }.max() ?? -1) + 1
+        let stateJson: String
+        if let path = statePath {
+            // 경로에 큰따옴표가 포함될 수 있으므로 JSON 직렬화 사용
+            let escaped = path.replacingOccurrences(of: "\\", with: "\\\\")
+                              .replacingOccurrences(of: "\"", with: "\\\"")
+            stateJson = "{\"path\":\"\(escaped)\"}"
+        } else {
+            stateJson = ""
+        }
         let newId = bridge.createSurface(
             paneId: paneId,
             kind: kind.rawValue,
-            stateJson: "",
+            stateJson: stateJson,
             tabOrder: nextOrder
         )
         guard newId > 0 else { return nil }

@@ -73,6 +73,12 @@ public protocol RustCoreBridging: AnyObject {
 
     // ── Workspace → DB id 변환 ───────────────────────────────────────────────
     func getWorkspaceDbId(workspaceUuid: String) -> Int64
+
+    // ── FileTree FFI (MS-4) ─────────────────────────────────────────────────
+    // @MX:ANCHOR: [AUTO] FileTree 디렉토리 리스팅 + git status FFI 프로토콜 (fan_in>=3)
+    // @MX:REASON: [AUTO] FileTreeViewModel, MockRustCoreBridge, RustCoreBridge 세 경로에서 참조
+    func listDirectoryJson(workspacePath: String, subpath: String) -> String
+    func gitStatusMapJson(workspacePath: String) -> String
 }
 
 // @MX:WARN: [AUTO] swift-bridge 0.1 struct_repr 의 Vectorizable 미생성 우회 — stub 구현.
@@ -217,6 +223,16 @@ public final class RustCoreBridge: RustCoreBridging {
 
     public func getWorkspaceDbId(workspaceUuid: String) -> Int64 {
         core.get_workspace_db_id(workspaceUuid)
+    }
+
+    // ── FileTree FFI (MS-4) ─────────────────────────────────────────────────
+
+    public func listDirectoryJson(workspacePath: String, subpath: String) -> String {
+        core.list_directory_json(workspacePath, subpath).toString()
+    }
+
+    public func gitStatusMapJson(workspacePath: String) -> String {
+        core.git_status_map_json(workspacePath).toString()
     }
 }
 #endif

@@ -40,6 +40,8 @@
 		DD44EE55FF6600AABB22CC33 /* TabBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD44EE55FF6600AABB22CC44 /* TabBarView.swift */; };
 		EE55FF6600AABB22CC33DD44 /* TabBarViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE55FF6600AABB22CC33DD55 /* TabBarViewModel.swift */; };
 		FF6600AABB22CC33DD44EE55 /* TabBarViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF6600AABB22CC33DD44EE66 /* TabBarViewModelTests.swift */; };
+		MS4FTSURF01 /* FileTreeSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = MS4FTSURF00 /* FileTreeSurface.swift */; };
+		MS4FTTEST01 /* FileTreeViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MS4FTTEST00 /* FileTreeViewModelTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -98,6 +100,8 @@
 		DD44EE55FF6600AABB22CC44 /* TabBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabBarView.swift; sourceTree = "<group>"; };
 		EE55FF6600AABB22CC33DD55 /* TabBarViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabBarViewModel.swift; sourceTree = "<group>"; };
 		FF6600AABB22CC33DD44EE66 /* TabBarViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabBarViewModelTests.swift; sourceTree = "<group>"; };
+		MS4FTSURF00 /* FileTreeSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTreeSurface.swift; sourceTree = "<group>"; };
+		MS4FTTEST00 /* FileTreeViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTreeViewModelTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -202,8 +206,17 @@
 			children = (
 				AA11BB22CC33DD44EE55FF00 /* SurfaceProtocol.swift */,
 				MS3TERM001 /* Terminal */,
+				MS4FTGRP01 /* FileTree */,
 			);
 			path = Surfaces;
+			sourceTree = "<group>";
+		};
+		MS4FTGRP01 /* FileTree */ = {
+			isa = PBXGroup;
+			children = (
+				MS4FTSURF00 /* FileTreeSurface.swift */,
+			);
+			path = FileTree;
 			sourceTree = "<group>";
 		};
 		MS3TERM001 /* Terminal */ = {
@@ -248,6 +261,7 @@
 				256FBC43583C48AF13D4AEB7 /* WorkspaceViewModelTests.swift */,
 				2E6B1EA21D2C4E4DABEF46D3 /* PaneTreeModelTests.swift */,
 				FF6600AABB22CC33DD44EE66 /* TabBarViewModelTests.swift */,
+				MS4FTTEST00 /* FileTreeViewModelTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -435,6 +449,7 @@
 				52D29407A824690BF7D08534 /* WorkspaceViewModelTests.swift in Sources */,
 				FC9ED302A56C44B98DCE76DB /* PaneTreeModelTests.swift in Sources */,
 				FF6600AABB22CC33DD44EE55 /* TabBarViewModelTests.swift in Sources */,
+				MS4FTTEST01 /* FileTreeViewModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -466,6 +481,7 @@
 				CC33DD44EE55FF6600AABB22 /* TerminalFallback_new.swift in Sources */,
 				DD44EE55FF6600AABB22CC33 /* TabBarView.swift in Sources */,
 				EE55FF6600AABB22CC33DD44 /* TabBarViewModel.swift in Sources */,
+				MS4FTSURF01 /* FileTreeSurface.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

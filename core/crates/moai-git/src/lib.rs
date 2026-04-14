@@ -70,6 +70,45 @@ impl GitRepo {
         Ok(dirty)
     }
 
+    /// 워킹 트리의 파일별 상태 맵을 반환한다.
+    ///
+    /// 키: 저장소 루트 기준 상대 경로 (예: "src/main.rs")
+    /// 값: "clean" | "modified" | "added" | "untracked" | "deleted"
+    ///
+    /// git 저장소가 아니거나 오류 시 빈 HashMap 반환.
+    pub fn status_map(&self) -> Result<std::collections::HashMap<String, String>, GitError> {
+        let statuses = self.inner.statuses(None)?;
+        let mut map = std::collections::HashMap::new();
+
+        for entry in statuses.iter() {
+            let Some(path) = entry.path() else { continue };
+            let s = entry.status();
+            if s.is_ignored() {
+                continue;
+            }
+
+            let status_str = if s.contains(git2::Status::INDEX_NEW) {
+                "added"
+            } else if s.contains(git2::Status::WT_NEW) {
+                "untracked"
+            } else if s.contains(git2::Status::INDEX_DELETED)
+                || s.contains(git2::Status::WT_DELETED)
+            {
+                "deleted"
+            } else if s.contains(git2::Status::INDEX_MODIFIED)
+                || s.contains(git2::Status::WT_MODIFIED)
+            {
+                "modified"
+            } else {
+                continue; // clean 파일은 맵에 포함하지 않음
+            };
+
+            map.insert(path.to_string(), status_str.to_string());
+        }
+
+        Ok(map)
+    }
+
     /// 변경된/추가된/삭제된 파일 수를 집계하여 반환한다.
     pub fn status_summary(&self) -> Result<GitStatus, GitError> {
         let statuses = self.inner.statuses(None)?;

@@ -5,6 +5,7 @@
 // @MX:ANCHOR: FsWatcher 공개 API 진입점 — 모든 파일 감시 기능의 루트
 // @MX:REASON: 외부 크레이트에서 직접 사용하는 공개 인터페이스
 
+pub mod tree_watcher;
 pub mod watcher;
 pub use watcher::{FsEventBus, WorkspaceEvent, WorkspaceKey};
 

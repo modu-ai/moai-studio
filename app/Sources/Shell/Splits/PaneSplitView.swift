@@ -173,13 +173,12 @@ private final class MoAISplitView: NSSplitView {
     }
 }
 
-// MARK: - LeafPaneView (MS-3)
+// MARK: - LeafPaneView (MS-3 / MS-4)
 
-/// leaf pane 에 TabBarView + SurfaceRouter 를 렌더링하는 뷰 (T-048).
+/// leaf pane 에 TabBarView + SurfaceRouter 를 렌더링하는 뷰 (T-048, T-054).
 ///
-/// LeafPlaceholderView 를 대체한다.
-// @MX:NOTE: [AUTO] MS-3: TabBarViewModel 을 비동기 로드하여 TabBarView + SurfaceRouter 를 구성.
-//            MS-4+ 에서 WorkspaceSnapshot 을 @Environment 로 주입하여 TerminalSurface 실제 연결 예정.
+// @MX:NOTE: [AUTO] MS-4: FileTree onFileOpen 콜백이 TabBarViewModel.newTab 을 통해 새 탭을 연다.
+//            MS-5+ 에서 WorkspaceSnapshot 을 @Environment 로 주입하여 TerminalSurface 실제 연결 예정.
 struct LeafPaneView: View {
     let paneId: Int64
     let bridge: RustCoreBridging
@@ -206,10 +205,18 @@ struct LeafPaneView: View {
                 )
                 Divider()
                 // Surface 콘텐츠
-                SurfaceRouter(activeKind: model.activeTabKind(), paneId: paneId)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .contentShape(Rectangle())
-                    .onTapGesture { activePaneId = paneId }
+                SurfaceRouter(
+                    activeKind: model.activeTabKind(),
+                    paneId: paneId,
+                    bridge: bridge,
+                    onFileOpen: { path in
+                        let kind = SurfaceRouter.kindForExtension(path)
+                        _ = model.newTab(kind: kind, statePath: path)
+                    }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .onTapGesture { activePaneId = paneId }
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -234,21 +241,53 @@ struct LeafPaneView: View {
 
 /// 활성 탭의 SurfaceKind 에 따라 해당 Surface 뷰를 선택하는 라우터.
 ///
-/// MS-3: terminal 과 미구현 surface 를 처리한다.
-/// MS-4+: FileTree, Markdown, Image, Browser 각각의 실제 뷰로 교체한다.
-// @MX:NOTE: [AUTO] MS-4+ 에서 WorkspaceSnapshot 을 @Environment 로 주입 후
-//            TerminalSurface(workspace:) 로 교체한다. MS-3 에서는 placeholder 표시.
+/// MS-4: filetree case 가 실제 FileTreeSurface 로 연결된다.
+// @MX:NOTE: [AUTO] resolveWorkspacePath() 는 MS-5+ 에서 @Environment WorkspaceSnapshot 주입 후
+//            실제 워크스페이스 경로로 교체 예정. MS-4 에서는 홈 디렉토리 폴백.
+// @MX:NOTE: [AUTO] T-054: 파일 확장자 → SurfaceKind 매핑.
+//            .md/.markdown → .markdown, image 확장자 → .image (placeholder), 나머지 → .terminal
 struct SurfaceRouter: View {
     let activeKind: SurfaceKind?
     let paneId: Int64
+    let bridge: RustCoreBridging
+    let onFileOpen: (String) -> Void
+
+    // MS-4 에서는 홈 디렉토리 폴백 — MS-5+ 에서 @Environment 워크스페이스로 교체
+    private func resolveWorkspacePath() -> String {
+        FileManager.default.homeDirectoryForCurrentUser.path
+    }
 
     var body: some View {
         switch activeKind {
         case .terminal, .none:
             TerminalSurfacePlaceholder(paneId: paneId)
+        case .filetree:
+            FileTreeSurface(
+                workspacePath: resolveWorkspacePath(),
+                bridge: bridge,
+                onFileOpen: onFileOpen
+            )
         case .code, .markdown, .image, .browser,
-             .filetree, .agentRun, .kanban, .memory, .instructionsGraph:
+             .agentRun, .kanban, .memory, .instructionsGraph:
             NotYetImplementedSurface(kind: activeKind!)
+        }
+    }
+
+    /// 파일 확장자로부터 적합한 SurfaceKind 를 결정한다.
+    ///
+    // @MX:NOTE: [AUTO] T-054: 확장자 → SurfaceKind 매핑.
+    //            .md/.markdown → .markdown
+    //            이미지 확장자 → .image (MS-5 에서 실제 ImageSurface 구현 예정)
+    //            나머지 → .terminal (기본값)
+    static func kindForExtension(_ path: String) -> SurfaceKind {
+        let ext = (path as NSString).pathExtension.lowercased()
+        switch ext {
+        case "md", "markdown":
+            return .markdown
+        case "png", "jpg", "jpeg", "gif", "webp", "svg":
+            return .image
+        default:
+            return .terminal
         }
     }
 }

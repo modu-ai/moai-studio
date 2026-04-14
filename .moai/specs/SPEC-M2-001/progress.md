@@ -189,7 +189,7 @@ MS-1 완료 시 테스트: 208개
 
 ---
 
-## 중간 체크포인트 (2026-04-14)
+## 중간 체크포인트 (2026-04-14) — MS-3 완료
 
 **Status**: MS-1~MS-3 완료, MS-4~MS-7 잔여
 
@@ -204,6 +204,104 @@ MS-1 완료 시 테스트: 208개
 - MS-5 (Image + Browser, 10 tasks)
 - MS-6 (Command Palette, 7 tasks)
 - MS-7 (CI/CD + carry-over + E2E, 14 tasks)
+
+---
+
+## MS-4 완료 현황
+
+| Task | 상태 | RED | GREEN | REFACTOR |
+|------|------|-----|-------|----------|
+| T-050 | 완료 | filetree_ffi.rs 5개 테스트 RED | filetree.rs + moai-git status_map() GREEN | clippy/fmt clean |
+| T-051 | 완료 | 스켈레톤 | tree_watcher.rs 폴링 방식 채택 문서화 | - |
+| T-052 | 완료 | FileTreeViewModelTests RED | FileTreeSurface.swift + FileTreeViewModel GREEN | accentColor 수정 |
+| T-053 | 완료 | GitStatus.color 포함 T-052 에서 처리 | - | - |
+| T-054 | 완료 | - | TabBarViewModel.newTab(kind:statePath:) + SurfaceRouter.kindForExtension | - |
+| T-055 | 완료 | - | FileTreeSurface.startRefreshTimer() (500ms) | - |
+| T-056 | 완료 | 5개 Rust + 7개 Swift 테스트 | 전체 통과 | - |
+
+---
+
+## 테스트 결과 (MS-4 완료 후)
+
+- Rust: 218개 (기존 213 + filetree_ffi 5개 신규)
+- Swift: 48개 (기존 41 + FileTreeViewModelTests 7개 신규)
+
+---
+
+## 파일 변경 목록 (MS-4 신규/수정)
+
+### Rust 신규
+- `core/crates/moai-ffi/src/filetree.rs` — list_directory_json + git_status_map_json
+- `core/crates/moai-fs/src/tree_watcher.rs` — 폴링 방식 스켈레톤 (MS-7+ push 업그레이드 예정)
+- `core/crates/moai-ffi/tests/filetree_ffi.rs` — 5개 테스트
+
+### Rust 수정
+- `core/crates/moai-ffi/src/lib.rs` — filetree 모듈 등록 + RustCore 메서드 + bridge 블록 FFI 노출
+- `core/crates/moai-ffi/Cargo.toml` — moai-git 의존성 + dev-dependencies tempfile/git2
+- `core/crates/moai-git/src/lib.rs` — status_map() 추가
+- `core/crates/moai-fs/src/lib.rs` — tree_watcher 모듈 등록
+
+### Swift 신규
+- `app/Sources/Surfaces/FileTree/FileTreeSurface.swift` — FileTreeViewModel + FileTreeSurface + GitStatus + FileTreeEntry
+- `app/Tests/FileTreeViewModelTests.swift` — 7개 테스트
+
+### Swift 수정
+- `app/Sources/Bridge/RustCore+Generated.swift` — listDirectoryJson + gitStatusMapJson 프로토콜 + RustCoreBridge 구현
+- `app/Sources/Shell/Tabs/TabBarViewModel.swift` — newTab(kind:statePath:) 시그니처 확장
+- `app/Sources/Shell/Splits/PaneSplitView.swift` — SurfaceRouter .filetree case + kindForExtension + LeafPaneView onFileOpen 콜백
+- `app/Tests/MockRustCoreBridge.swift` — stubbedDirectoryJson + stubbedStatusJson + listDirectoryJson + gitStatusMapJson
+- `app/MoAIStudio.xcodeproj/project.pbxproj` — FileTreeSurface.swift + FileTreeViewModelTests.swift 등록
+
+---
+
+## 품질 게이트 (MS-4)
+
+- [x] `cargo check --workspace`: 0 errors, 0 warnings
+- [x] `cargo clippy --workspace -- -D warnings`: clean
+- [x] `cargo fmt --all -- --check`: clean
+- [x] `cargo test --workspace`: 218/218 통과 (기존 213 + filetree_ffi 5개)
+- [x] Xcode build-for-testing: ** TEST BUILD SUCCEEDED **
+- [x] Swift 단위 테스트 (MoAIStudioTests): 48/48 통과 (기존 41 + FileTreeViewModelTests 7개)
+
+## @MX 태그 추가 목록 (MS-4)
+
+| 파일 | 태그 | 설명 |
+|------|------|------|
+| `filetree.rs` | ANCHOR | list_directory_json — 디렉토리 데이터 유일 소스 (fan_in>=3) |
+| `FileTreeSurface.swift` | ANCHOR × 2 | FileTreeViewModel, FileTreeSurface 렌더링 진입점 |
+| `FileTreeSurface.swift` | NOTE × 3 | 폴링 기반, git status 색상, 500ms 타이머 |
+| `RustCore+Generated.swift` | ANCHOR | FileTree FFI 프로토콜 (fan_in>=3) |
+| `TabBarViewModel.swift` | NOTE | statePath 직렬화 방식 |
+| `PaneSplitView.swift` | NOTE × 2 | resolveWorkspacePath 폴백, T-054 kindForExtension 매핑 |
+| `tree_watcher.rs` | NOTE | 폴링 채택, MS-7 push 업그레이드 예정 |
+
+## 반복 로그 (MS-4 추가)
+
+| 반복 | 완료 AC | 에러 수 |
+|------|---------|---------|
+| 5 (MS-4 Rust RED) | 0 (메서드 없음) | 8 (컴파일 오류) |
+| 6 (MS-4 Rust GREEN) | 5 (T-050 Rust tests) | 0 |
+| 7 (MS-4 Swift RED) | 0 (모듈 없음) | 1 (빌드 오류) |
+| 8 (MS-4 Swift GREEN) | 7 (T-051~T-056) | 0 |
+
+---
+
+## 알려진 제한 사항 (MS-4)
+
+- FileTree 폴링 타이머가 View disappear 시 자동 취소되지 않음. SwiftUI .task {} 내부 Task 취소에 의존. MS-7+ 에서 notify-push 로 교체 예정.
+- resolveWorkspacePath() 가 홈 디렉토리 폴백 — MS-5+ 에서 @Environment WorkspaceSnapshot.projectPath 로 교체 예정.
+- FileTree는 루트 한 레벨만 리스팅 (expand 시 하위 디렉토리 재로딩 미구현). MS-5+ 에서 toggle(path:) 시 subpath 기반 재귀 리스팅 구현 예정.
+- SurfaceRouter onFileOpen 콜백이 LeafPaneView 외부에서 호출 불가. MS-5+ 에서 @Environment 패턴으로 개선.
+
+## 중간 체크포인트 (2026-04-14) — MS-4 완료
+
+**Status**: MS-1~MS-4 완료, MS-5~MS-7 잔여
+
+**테스트 통과**: 218 Rust + 48 Swift = 266/266 PASS
+
+**@MX 태그**: 28개 (MS-1~MS-3) + 10개 (MS-4) = 38개 누적
+
+**Scope 준수**: 26/26 task (100%, expansion 없음)
 
 ## 알려진 제한 사항
 
