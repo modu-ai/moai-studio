@@ -3,7 +3,7 @@
 > **moai-adk 의 공식 macOS 네이티브 Agent IDE.**
 > Claude Code 를 subprocess 로 호스트하여 27개 hook 이벤트 + 26 전문 에이전트 + TRUST 5 품질 게이트 + @MX 태그 시스템 + Kanban/SPEC 워크플로우를 한 화면에서 시각화 · 조작한다.
 
-**Status**: Design phase (v4 draft). Implementation not started.
+**Status**: M2 Complete (Conditional GO v1.2.0). 339 tests passing (Rust 233 + Swift 106).
 **Platform**: macOS only (macOS 14+, Apple Silicon + Intel).
 **License**: MIT
 **Language**: Swift (UI) + Rust (Core)
@@ -16,7 +16,16 @@
 
 ## 현재 상태
 
-이 저장소는 **설계 단계**입니다. 아직 코드 없음. 4개의 설계 문서가 순차 진화해왔습니다:
+이 저장소는 **M2 Viewers 마일스톤 완료** 상태입니다 (v1.2.0 — Conditional GO 안정화). 12개 Rust crates + SwiftUI 앱 + 5개 Viewer surfaces (Terminal/FileTree/Markdown/Image/Browser) + Command Palette + NSSplitView binary tree pane 분할 + TabUI 완성.
+
+| 마일스톤 | 상태 | 스프린트 수 | 산출물 | 테스트 |
+|---------|------|----------|--------|--------|
+| **M0** | ✅ 완료 | 2 (Pre-M0 검증, M0 킥오프) | Rust core skeleton + Swift UI shell | 50+ |
+| **M1** | ✅ 완료 (Conditional GO) | 1 (T-020~T-030) | Working Shell (Sidebar, Workspace, Pane, Surface DAO) | 106 |
+| **M2** | ✅ 완료 (Conditional GO v1.2.0) | 7 (MS-1~MS-7, T-031~T-087) | 5 Viewers, NSSplitView, TabUI, Command Palette, CI/CD | 339 |
+| **M3+** | 📅 다음 | — | Code Viewer, GhosttyKit tuning, Agent Run UI | — |
+
+4개의 설계 문서가 순차 진화:
 
 | 파일 | 버전 | 상태 | 요약 |
 |---|---|---|---|
@@ -129,11 +138,11 @@ ln -sf /path/to/claude-code-map .references/claude-code-map
 
 → **[NEXT-STEPS.md](./NEXT-STEPS.md)** 를 보십시오.
 
-4 단계 작업 계획:
-1. **Pre-M0 검증 스파이크** (3-4일) — Claude CLI 공식 경로, IDE MCP, plugin http hook, GhosttyKit xcframework 검증
-2. **M0 킥오프** (2주) — Rust core skeleton + Swift UI shell + 첫 hook 왕복
-3. **열린 결정 (O1-O5)** — swift-bridge, rmcp, 미문서화 field 정책 등 (O6 브랜딩은 RESOLVED)
-4. **커뮤니티 시작 신호** — README 로드맵, HN 예고, cmux 팀 outreach
+**M2 완료 후 로드맵:**
+1. **M3 Code Viewer** (3주) — SwiftTreeSitter + LSP + @MX 거터 + tri-pane diff
+2. **M4 Claude 통합 심화** (3주) — Plugin 자동 설치, Native permission dialog, LSP 6 언어
+3. **M5 Agent Run + Kanban + Memory** (3주) — Agent Run Viewer, Kanban board, Memory surface, Instructions Graph
+4. **M6 안정화 + 배포** (2주) — Sparkle auto-update, notarize, 16-agent stress, DMG 배포
 
 ---
 

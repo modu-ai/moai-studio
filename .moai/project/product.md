@@ -188,34 +188,47 @@ DESIGN.v4 §2.5 기준.
 
 ### 현재 상태
 
-**Design Phase v4 draft.** 코드 0줄. 4개 설계 문서가 순차 진화:
+**M2 Complete (Conditional GO v1.2.0).** 12 Rust crates (233 tests) + SwiftUI app (106 tests) = 339 tests PASS.
+
+산출물 현황:
+
+| 마일스톤 | 상태 | 스프린트 | 산출물 | 품질 |
+|---------|------|--------|--------|------|
+| **M0** | ✅ 완료 | Pre-M0 + D1~D2 | Rust core skeleton + Swift shell | 50 tests |
+| **M1 (Conditional GO)** | ✅ 완료 | T-020~T-030 | Working Shell: Sidebar + Workspace + Pane + Surface DAO | 106 tests |
+| **M2 (Conditional GO v1.2.0)** | ✅ 완료 | MS-1~MS-7 (T-031~T-087) | 5 Viewers + NSSplitView + TabUI + Command Palette + CI/CD | **339 tests** |
+| M3 | 📅 예정 | — | Code Viewer (SwiftTreeSitter + LSP + @MX) | — |
+
+4개 설계 문서:
 
 | 파일 | 버전 | 상태 |
 |---|---|---|
 | DESIGN.md | v2 | 참고용 (Bridge / hooks.yaml 가정 오류) |
 | DESIGN.v3.md | v3 | 참고용 ("SDK 임베드" 가정, Pure Swift 제안) |
 | **DESIGN.v4.md** | **v4** | **★ 현 기준** (subprocess + IDE MCP + Rust core) |
-| NEXT-STEPS.md | v1 | 4 단계 작업 계획 |
+| NEXT-STEPS.md | v1 | 현 M2 단계부터 시작 |
 
-### 로드맵 (총 20주)
+### 로드맵 (M2 완료 후)
 
-| 단계 | 기간 | 산출물 |
-|---|---|---|
-| Pre-M0 spike | 3-4일 | Claude CLI / IDE MCP / http hook / GhosttyKit 검증 |
-| M0 킥오프 | 2주 | Rust core skeleton + Swift UI shell + 첫 hook 왕복 |
-| M1 Core Sessions | 3주 | Workspace/Pane/Surface, NSSplitView, store v1, 18 이벤트 wired |
-| M2 Viewers 1 | 3주 | FileTree, Markdown, Image, Browser |
-| M3 Code Viewer | 3주 | SwiftTreeSitter, LSP, @MX 거터, tri-pane diff, time-travel |
-| M4 Claude 통합 심화 | 3주 | plugin 자동 설치, Native permission dialog, LSP 6 언어 |
-| M5 Agent Run + Kanban + Memory | 3주 | Agent Run Viewer, Kanban, Memory, Instructions Graph |
-| M6 안정화 + 배포 | 2주 | Sparkle, notarize, 16-agent stress, DMG |
+| 단계 | 기간 | 산출물 | 상태 |
+|---|---|---|---|
+| ~~Pre-M0 spike~~ | ~~3-4일~~ | ~~Claude CLI / IDE MCP / http hook / GhosttyKit 검증~~ | ✅ |
+| ~~M0 킥오프~~ | ~~2주~~ | ~~Rust core skeleton + Swift UI shell + 첫 hook 왕복~~ | ✅ |
+| ~~M1 Core Sessions~~ | ~~3주~~ | ~~Workspace/Pane/Surface, NSSplitView, store v1, 18 이벤트~~ | ✅ |
+| ~~M2 Viewers~~ | ~~3주~~ | ~~FileTree, Markdown, Image, Browser~~ | ✅ |
+| **M3 Code Viewer** | **3주** | **SwiftTreeSitter, LSP, @MX 거터, tri-pane diff** | **📅 다음** |
+| M4 Claude 통합 심화 | 3주 | Plugin 자동 설치, Native permission dialog, LSP 6 언어 | 📅 |
+| M5 Agent Run + Kanban + Memory | 3주 | Agent Run Viewer, Kanban, Memory, Instructions Graph | 📅 |
+| M6 안정화 + 배포 | 2주 | Sparkle, notarize, 16-agent stress, DMG | 📅 |
 
-### 즉시 다음 액션 (NEXT-STEPS.md 단계 1)
+### M2 완료 상태 요약
 
-1. `claude --bare -p --output-format stream-json` 공식 경로 수동 검증
-2. IDE MCP Server Pattern 복제 (Python prototype)
-3. Plugin `http` hook type + `updatedInput` 검증
-4. GhosttyKit.xcframework 빌드
+- **구현 코드**: Rust 1,070 LOC + Swift 3,300 LOC = 4,370 LOC
+- **테스트**: Rust 233/233 + Swift 106/106 = **339/339 PASS**
+- **@MX 태그**: 28개 (ANCHOR 11, WARN 3, NOTE 14)
+- **Carry-over**: 8건 (4 완료, 2 부분, 2 opt-in)
+- **GitHub Actions**: ci-rust.yml + ci-swift.yml 구성
+- **CI/CD**: Rust + Swift 병렬 빌드, 모든 tool 자동 검사
 
 ---
 

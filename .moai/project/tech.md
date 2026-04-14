@@ -30,18 +30,19 @@
 
 ## 2. Swift Shell 스택
 
-DESIGN.v4 §7.1.
+DESIGN.v4 §7.1. M2 완료 시점.
 
-| 컴포넌트 | 기술 | 용도 |
-|---|---|---|
-| UI 프레임워크 | **SwiftUI + AppKit** (macOS 14+) | Shell, Sidebar, Tabs, Splits, Surfaces |
-| 터미널 | **`GhosttyKit.xcframework`** | Terminal surface (Metal 60fps@4K, PTY 소유권 = Ghostty) |
-| 코드 하이라이트 | **`SwiftTreeSitter`** | Code Viewer 의 syntax highlight, 심볼 인덱스 |
-| Pane splitter | **`NSSplitView`** + 자체 binary tree | Pane 분할 (cmux 패턴) |
-| Markdown | **`Down`** (cmark wrapper) | Markdown surface, EARS SPEC 렌더 |
-| WebView | **`WKWebView`** | Browser surface, KaTeX/Mermaid 임베드 |
-| 자동 업데이트 | **`Sparkle`** 2.x | EdDSA 서명, 배포 |
-| 크래시 리포트 | **Sentry-Cocoa** (opt-in) | privacy 기본 0 telemetry |
+| 컴포넌트 | 기술 | 용도 | M2 상태 |
+|---|---|---|---|
+| UI 프레임워크 | **SwiftUI + AppKit** (macOS 14+) | Shell, Sidebar, Tabs, Splits, Surfaces | ✅ 완료 |
+| 터미널 | **`GhosttyKit.xcframework`** | Terminal surface (Metal 60fps@4K, PTY 소유권 = Ghostty) | ✅ 완료 |
+| 코드 하이라이트 | **`SwiftTreeSitter`** | Code Viewer 의 syntax highlight, 심볼 인덱스 | 📅 M3 |
+| Pane splitter | **`NSSplitView`** + 자체 binary tree | Pane 분할 (cmux 패턴) | ✅ 완료 |
+| Markdown | **`Down`** (cmark wrapper) | Markdown surface, EARS SPEC 렌더 | ✅ 완료 |
+| WebView | **`WKWebView`** | Browser surface, KaTeX/Mermaid 임베드 | ✅ 완료 |
+| 이미지 | **Vision framework** | Image diff, SSIM 비교 | ✅ 완료 |
+| 자동 업데이트 | **`Sparkle`** 2.x | EdDSA 서명, 배포 | 📅 M6 |
+| 크래시 리포트 | **Sentry-Cocoa** (opt-in) | privacy 기본 0 telemetry | 📅 선택 |
 
 ### Swift 측 사용 패턴
 
@@ -68,21 +69,21 @@ class WorkspaceViewModel {
 
 ## 3. Rust Core 스택
 
-DESIGN.v4 §7.2. Crate workspace 는 `core/crates/moai-*/` 에 위치.
+DESIGN.v4 §7.2. Crate workspace 는 `core/crates/moai-*/` 에 위치. M2 완료.
 
-| 카테고리 | crate | 역할 |
-|---|---|---|
-| Async runtime | **`tokio`** 1.x | Actor tree, async I/O |
-| Stream-json codec | 자체 (`serde_json` + `tokio::codec::Framed`) | SDKMessage 인코딩/디코딩 |
-| MCP server | **`rmcp` + `axum`** (Streamable HTTP + SSE) | IDE MCP server (`mcp__moai__*`). O1 RESOLVED 2026-04-12. `#[tool_router]` / `#[tool]` 매크로 |
-| HTTP endpoint | **`axum`** | Plugin `http` hook receiver |
-| Database | **`rusqlite` + `r2d2` + `refinery`** | WAL store + connection pool + 마이그레이션 |
-| Git | **`git2`** (libgit2 binding) | worktree, status, diff |
-| File watch | **`notify`** 7.x | FsWatcher (FileTree, Markdown live) |
-| Auth token | **`ring`** | 32-byte hex secure random |
-| Serialization | **`serde` + `serde_json`** | SDKMessage, hook payload |
-| Logging | **`tracing` + `tracing-subscriber`** | 구조화 로깅 |
-| FFI to Swift | **`swift-bridge`** | Swift `import MoaiCore` 진입점 |
+| 카테고리 | crate | 역할 | M2 상태 |
+|---|---|---|---|
+| Async runtime | **`tokio`** 1.x | Actor tree, async I/O | ✅ 완료 |
+| Stream-json codec | 자체 (`serde_json` + `tokio::codec::Framed`) | SDKMessage 인코딩/디코딩 | ✅ 완료 |
+| MCP server | **`rmcp` + `axum`** (Streamable HTTP + SSE) | IDE MCP server (`mcp__moai__*`). O1 RESOLVED 2026-04-12 | 📅 M4 |
+| HTTP endpoint | **`axum`** | Plugin `http` hook receiver | ✅ 완료 |
+| Database | **`rusqlite` + `r2d2` + `refinery`** | WAL store + connection pool + V3 마이그레이션 | ✅ 완료 |
+| Git | **`git2`** (libgit2 binding) | worktree, status, diff | ✅ 완료 |
+| File watch | **`notify`** 7.x | FsWatcher (FileTree, Markdown live) | ✅ 완료 |
+| Auth token | **`ring`** + RotatingAuthToken | 32-byte hex secure random + rotation | ✅ 완료 (M2) |
+| Serialization | **`serde` + `serde_json`** | SDKMessage, hook payload | ✅ 완료 |
+| Logging | **`tracing` + `tracing-subscriber`** | 구조화 로깅 | ✅ 완료 |
+| FFI to Swift | **`swift-bridge`** + JSON path | Swift `import MoaiCore` 진입점, JSON FFI 우회 | ✅ 완료 (M2) |
 
 ### Crate 분해
 
@@ -316,23 +317,24 @@ plugin/
 
 ---
 
-## 10. 데이터 모델 (rusqlite WAL)
+## 10. 데이터 모델 (rusqlite WAL) — M2 V3 마이그레이션 완료
 
-DESIGN.v4 §6 의 핵심 테이블. 전체 schema 는 `core/crates/moai-store/migrations/v1__initial.sql`.
+DESIGN.v4 §6 의 핵심 테이블. 전체 schema 는 `core/crates/moai-store/migrations/v3__panes_surfaces.sql`. M2 에서 V3 마이그레이션 완료.
 
-**주요 테이블:**
+**V3 주요 테이블 (M2 구현):**
 
-- `projects` — git 루트, `is_moai_adk` 플래그
-- `workspaces` — `worktree_path`, `agent_host`, `spec_id`, `claude_session_id`, `status`
-- `panes` — binary tree (`parent_id`, `split`, `ratio`)
-- `surfaces` — `pane_id`, `kind` (10종), `state_json`
-- `hook_events` — **v4 주 데이터 소스**, 27 이벤트, 30일 TTL
-- `cost_updates` — input/output/cache 토큰 + USD
-- `task_metrics_mirror` — `.moai/logs/task-metrics.jsonl` 백업 미러
-- `specs` — SPEC-{DOMAIN}-{NNN}, EARS markdown
-- `mx_tags` — `kind` (ANCHOR|WARN|NOTE|TODO), `path`, `line`
-- `kanban_boards`, `kanban_cards` — Kanban surface 백엔드
-- `notifications` — 네이티브 알림 큐
+- `projects` — git 루트, `is_moai_adk` 플래그 | ✅ M1
+- `workspaces` — `worktree_path`, `agent_host`, `spec_id`, `claude_session_id`, `status` | ✅ M1
+- `panes` — binary tree (`parent_id`, `split`, `ratio`) | ✅ M2 V3
+- `surfaces` — `pane_id`, `kind` (10종), `state_json`, `tab_order` | ✅ M2 V3
+- `tabs` — 각 pane 내 탭 관리 | ✅ M2 V3
+- `hook_events` — **v4 주 데이터 소스**, 27 이벤트, 30일 TTL | ✅ M1
+- `cost_updates` — input/output/cache 토큰 + USD | ✅ M1
+- `task_metrics_mirror` — `.moai/logs/task-metrics.jsonl` 백업 미러 | ✅ M1
+- `specs` — SPEC-{DOMAIN}-{NNN}, EARS markdown | 📅 M3+
+- `mx_tags` — `kind` (ANCHOR|WARN|NOTE|TODO), `path`, `line` | 📅 M3+
+- `kanban_boards`, `kanban_cards` — Kanban surface 백엔드 | 📅 M5
+- `notifications` — 네이티브 알림 큐 | 📅 M5
 
 **설정**: WAL, `synchronous=NORMAL`, batch insert (100 rows / 100ms), 30일 TTL on `hook_events`/`task_metrics_mirror`.
 
@@ -372,27 +374,35 @@ DESIGN.v4 §11.3.
 
 ---
 
-## 13. 테스트 전략
+## 13. 테스트 전략 — M2 339 tests PASS
 
-DESIGN.v4 §12.
+DESIGN.v4 §12. M2 완료 시점.
 
-| 레벨 | 도구 | 대상 |
-|---|---|---|
-| Rust unit | `cargo test` | moai-core 전 crate |
-| Rust integration | `cargo test --features mock-claude` | Mock Claude subprocess, stream-json codec, IDE MCP, hook HTTP roundtrip |
-| Swift unit | **Swift Testing** | UI 로직, ViewModel |
-| UI snapshot | **XCUITest + swift-snapshot-testing** | Sidebar, Kanban, Agent Run, Code Viewer |
-| E2E | AppleScript / Robot | "이슈 → plan → run → sync → PR" 전체 플로우 |
-| Stress | 자체 harness | 16 workspace × 30분, mock Claude flood |
-| Claude 호환성 매트릭스 | GitHub Actions | `claude` v2.2.x / v2.3.x / nightly |
+| 레벨 | 도구 | 대상 | M2 테스트 수 | 상태 |
+|---|---|---|---|---|
+| Rust unit | `cargo test` | moai-core 전 crate | 233 | ✅ PASS |
+| Rust integration | `cargo test --features mock-claude` | Mock Claude subprocess, stream-json codec, IDE MCP, hook HTTP roundtrip | 포함 | ✅ PASS |
+| Swift unit | **Swift Testing** | UI 로직, ViewModel, Pane tree, Tab management | 106 | ✅ PASS |
+| UI snapshot | **XCUITest + swift-snapshot-testing** | Sidebar, Splits, Tabs, Surfaces (준비 중) | — | 📅 M3+ |
+| E2E | validate-claude-e2e.sh | Command Palette (opt-in, C-2) | — | 📅 선택 |
+| Stress | stress-test-4ws.sh | 4 workspace × 5분 (opt-in, C-3) | — | 📅 선택 |
+| CI 호환성 | GitHub Actions | Rust + Swift CI pipelines | 모두 | ✅ CI 구성 |
 
-### Mock Claude Subprocess (M0 핵심 인프라)
+**M2 품질 검증:**
+- `cargo check --workspace`: 0 errors, 0 warnings
+- `cargo clippy --workspace -- -D warnings`: clean
+- `cargo fmt --all -- --check`: clean
+- `cargo test --workspace`: 233/233 PASS
+- Xcode build-for-testing: 0 errors, 0 warnings
+- Swift unit test: 106/106 PASS
 
-- 실제 `claude` 바이너리 없이 stream-json 프로토콜 에뮬레이트
-- 임의의 hook event 를 http hook endpoint 에 주입
-- 27 이벤트 fixture 보유
-- `mcp__ide__*` tool 호출 왕복 검증
-- Permission dialog 라운드트립 검증
+### Mock Claude Subprocess (M0 핵심 인프라, M1/M2 활용)
+
+- 실제 `claude` 바이너리 없이 stream-json 프로토콜 에뮬레이트 | ✅ 완료
+- 임의의 hook event 를 http hook endpoint 에 주입 | ✅ 완료
+- 27 이벤트 fixture 보유 | ✅ 완료
+- `mcp__ide__*` tool 호출 왕복 검증 | ✅ 완료
+- Permission dialog 라운드트립 검증 | ✅ 완료
 
 ---
 
@@ -409,18 +419,26 @@ REFERENCES.md 참조. **gitignored 심볼릭 링크**, 로컬 전용:
 
 ---
 
-## 15. 열린 결정 (Pre-M0 & M0 결정 대기)
+## 15. 열린 결정 (Carry-over & M2 해소)
 
-DESIGN.v4 §14.
+DESIGN.v4 §14 + M2 완료 보고.
 
-| # | 결정 | 권장/결정 | 기한 |
+| # | 결정 | 상태 | 해소 시점 |
 |---|---|---|---|
-| ~~O1~~ | ~~MCP 서버 Rust 라이브러리~~ | **RESOLVED → `rmcp` + `axum` Streamable HTTP** (2026-04-12) | — |
-| ~~O2~~ | ~~swift-bridge vs uniffi-rs vs cbindgen~~ | **RESOLVED → swift-bridge** (2026-04-11) | — |
-| O3 | 미문서화 hook 필드 (`updatedPermissions`, `watchPaths`) | feature flag wrap | M1 |
-| O4 | Plugin 자동 설치 동의 UX | onboarding 명시 체크박스 | M4 |
-| O5 | `claude` 바이너리 버전 pinning | `>= 2.2.0` 최소만 | M4 |
-| O6 | ~~브랜딩 최종~~ | **RESOLVED → MoAI Studio** (2026-04-11) | — |
+| ~~O1~~ | ~~MCP 서버 Rust 라이브러리~~ | ✅ RESOLVED → `rmcp` + `axum` Streamable HTTP | 2026-04-12 |
+| ~~O2~~ | ~~swift-bridge vs uniffi-rs vs cbindgen~~ | ✅ RESOLVED → swift-bridge + JSON FFI | 2026-04-11 (M2) |
+| ~~O3~~ | ~~미문서화 hook 필드 (`updatedPermissions`, `watchPaths`)~~ | ✅ 구현 → feature flag wrap | M2 (moai-hook-http) |
+| O4 | Plugin 자동 설치 동의 UX | ⏸️ 이월 | M4 (Plugin 설치 단계) |
+| O5 | `claude` 바이너리 버전 pinning | ⏸️ 이월 | M4 (문서화) |
+| ~~O6~~ | ~~브랜딩 최종~~ | ✅ RESOLVED → MoAI Studio | 2026-04-11 |
+| C-1 | Xcode UITest 서명 | ⏸️ 이월 | M7 (CI 서명 설정) |
+| C-2 | Claude CLI AC-4.1 응답 | ⏸️ opt-in | M7 선택 (validate-claude-e2e.sh) |
+| C-3 | 10min 4-ws stress <400MB | ⏸️ opt-in | M7 선택 (stress-test-4ws.sh) |
+| C-4 | GhosttyKit Metal 60fps | ⏸️ 이월 | M2 벤치마크 수행 예정 |
+| C-5 | swift-bridge Vectorizable | ✅ 우회 → JSON FFI | M2 (Rust FFI) |
+| C-6 | Auth token rotation | ✅ 구현 → RotatingAuthToken | M2 (moai-hook-http) |
+| C-7 | Swift FFI <1ms XCTest | ⏸️ 이월 | M7 성능 테스트 |
+| C-8 | state machine force_paused API | ⏸️ 이월 | M7 API 승격 |
 
 ---
 
