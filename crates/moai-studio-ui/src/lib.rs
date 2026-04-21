@@ -216,7 +216,7 @@ fn sidebar_section(label: &'static str, items: Vec<(&'static str, u32)>) -> impl
     section
 }
 
-/// 컨텐츠 영역 — Empty State (Phase 1.3 에서 본격 CTA 확장).
+/// 컨텐츠 영역 — Phase 1.3 Empty State CTA (Create First / Start Sample / Open Recent).
 fn content_area() -> impl IntoElement {
     div()
         .flex()
@@ -227,6 +227,20 @@ fn content_area() -> impl IntoElement {
         .justify_center()
         .items_center()
         .gap_4()
+        .px_12()
+        .child(empty_state_hero())
+        .child(empty_state_primary_cta())
+        .child(empty_state_secondary_cta_row())
+        .child(empty_state_tip())
+}
+
+/// Hero: 큰 환영 제목 + 서브타이틀.
+fn empty_state_hero() -> impl IntoElement {
+    div()
+        .flex()
+        .flex_col()
+        .items_center()
+        .gap_2()
         .child(
             div()
                 .text_3xl()
@@ -239,23 +253,68 @@ fn content_area() -> impl IntoElement {
                 .text_color(rgb(tokens::FG_MUTED))
                 .child("SPEC-first native shell for Claude Code agents"),
         )
+}
+
+/// Primary CTA — `+ Create First Workspace` (MoAI 오렌지).
+fn empty_state_primary_cta() -> impl IntoElement {
+    div()
+        .flex()
+        .flex_row()
+        .items_center()
+        .gap_2()
+        .mt_4()
+        .px_6()
+        .py_3()
+        .rounded_lg()
+        .bg(rgb(tokens::ACCENT_MOAI))
+        .text_color(rgb(0xffffff))
+        .text_sm()
+        .child("+ Create First Workspace")
+}
+
+/// Secondary CTA 2 개 — Start Sample + Open Recent (가로 배치).
+fn empty_state_secondary_cta_row() -> impl IntoElement {
+    div()
+        .flex()
+        .flex_row()
+        .gap_3()
+        .mt_2()
+        .child(secondary_btn("Start Sample", "Guided tour"))
+        .child(secondary_btn("Open Recent", "Last used workspace"))
+}
+
+fn secondary_btn(label: &'static str, subtitle: &'static str) -> impl IntoElement {
+    div()
+        .flex()
+        .flex_col()
+        .gap_1()
+        .px_5()
+        .py_3()
+        .rounded_lg()
+        .bg(rgb(tokens::BG_SURFACE))
+        .border_1()
+        .border_color(rgb(tokens::BORDER_SUBTLE))
         .child(
             div()
-                .mt_4()
-                .px_6()
-                .py_2()
-                .rounded_md()
-                .bg(rgb(tokens::ACCENT_MOAI))
-                .text_color(rgb(0xffffff))
-                .child("Create First Workspace"),
+                .text_sm()
+                .text_color(rgb(tokens::FG_PRIMARY))
+                .child(label),
         )
         .child(
             div()
-                .mt_4()
                 .text_xs()
                 .text_color(rgb(tokens::FG_MUTED))
-                .child("Tip: ⌘K opens Command Palette anytime"),
+                .child(subtitle),
         )
+}
+
+/// Bottom tip — Command Palette 발견성 힌트.
+fn empty_state_tip() -> impl IntoElement {
+    div()
+        .mt_8()
+        .text_xs()
+        .text_color(rgb(tokens::FG_MUTED))
+        .child("Tip: ⌘K opens Command Palette anytime")
 }
 
 // ============================================================
