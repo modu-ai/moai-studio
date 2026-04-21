@@ -256,6 +256,17 @@ Implementation guard: [HARD] During Phase 1 (Analysis and Planning), the manager
 
 ### Decision Point 1: Plan Approval
 
+<!-- moai:evolvable-start id="gate-run-1" -->
+### HUMAN GATE: Plan Approval
+
+**Previous phase output:** Analysis and implementation plan with task decomposition
+**Approval question:** Is the implementation plan correct and complete?
+**Cannot proceed until:**
+- [ ] Plan covers all SPEC acceptance criteria
+- [ ] Task decomposition respects Multi-File Decomposition rule (>3 files = split)
+- [ ] User has approved the approach
+<!-- moai:evolvable-end -->
+
 Tool: AskUserQuestion (at orchestrator level)
 
 Before presenting options, verify the plan against these criteria:
@@ -431,6 +442,31 @@ Mode-specific deployment:
 - CG mode: Leader performs contract negotiation inline
 
 **Output**: `.moai/specs/SPEC-{ID}/contract.md`
+
+### Delta Marker Detection (Brownfield Pre-Check)
+
+Before routing to Phase 2A or 2B, scan the loaded SPEC for `[DELTA]` section markers:
+
+1. Check spec.md (or spec-compact.md) for any line matching `[EXISTING]`, `[MODIFY]`, `[NEW]`, or `[REMOVE]`
+2. If NO delta markers found: skip this section, proceed to Phase 2A/2B normally (greenfield path)
+3. If delta markers found: activate delta-aware routing as follows
+
+**Delta-aware routing rules (applied within DDD or TDD mode):**
+
+| Marker | Treatment | Action |
+|--------|-----------|--------|
+| `[EXISTING]` | Context only — do not modify | Generate characterization tests to document current behavior; no code changes |
+| `[MODIFY]` | Modify with safety net | Generate characterization tests FIRST, verify they pass, THEN apply modifications |
+| `[NEW]` | Full implementation | Apply complete DDD ANALYZE-PRESERVE-IMPROVE or TDD RED-GREEN-REFACTOR cycle |
+| `[REMOVE]` | Safe deletion | Check all callers and dependents; confirm no active references; then remove |
+
+**Delta processing order** (prevents regression):
+1. Process all `[EXISTING]` items — characterization tests only
+2. Process all `[MODIFY]` items — characterization tests → modification → verify tests still pass
+3. Process all `[NEW]` items — full implementation cycle
+4. Process all `[REMOVE]` items — dependency analysis → safe deletion
+
+If no delta markers are present in the SPEC, delta processing is silently skipped and the standard implementation flow proceeds unchanged (backward compatible with greenfield SPECs).
 
 ### Phase 2: Implementation (Mode-Dependent)
 
@@ -622,6 +658,18 @@ Mode-specific deployment:
 
 Output: evaluation_report with per-dimension PASS/FAIL/UNVERIFIED verdicts and findings list.
 
+<!-- moai:evolvable-start id="gate-run-2" -->
+### HUMAN GATE: Implementation Complete
+
+**Previous phase output:** Implementation with TRUST 5 validation passed
+**Approval question:** Is the implementation ready for git operations?
+**Cannot proceed until:**
+- [ ] All tests pass (show evidence)
+- [ ] TRUST 5 validation complete
+- [ ] @MX tags updated if needed
+- [ ] User has reviewed post-implementation issues list
+<!-- moai:evolvable-end -->
+
 ### Phase 2.8b: TRUST 5 Static Verification (manager-quality) [MANDATORY]
 
 Purpose: Multi-dimensional review iteration for high-quality output. This phase is ALWAYS executed to ensure consistent code quality.
@@ -646,9 +694,16 @@ Iteration behavior:
 
 Output: review_findings per dimension, iterations_completed count, final review status.
 
-### Phase 2.9: MX Tag Update
+### Phase 2.9: MX Tag Update [HARD]
 
 Purpose: Update @MX code annotations for modified files. See .claude/rules/moai/workflow/mx-tag-protocol.md for tag rules.
+
+[HARD] This phase is MANDATORY. MoAI MUST scan all files modified during Phase 2 and verify @MX tag coverage before proceeding to Phase 2.10. If implementation agents did not add required tags during their work, MoAI adds them here.
+
+**Validation criteria (blocking):**
+- P1: Every new exported function with fan_in >= 3 MUST have `@MX:ANCHOR`
+- P2: Every new goroutine/async pattern MUST have `@MX:WARN`
+- P1/P2 violations block Phase 2.10 until resolved
 
 **TDD Mode:**
 - Remove `@MX:TODO` tags for tests that now pass

@@ -1,13 +1,87 @@
 # ============================================
-# MoAI Studio .gitignore
+# MoAI-ADK Package Distribution .gitignore
 # ============================================
-# Project: Swift (UI) + Rust (Core) macOS App
-# Updated: 2026-04-12
+# Version: 0.33.0
+# Updated: 2026-01-10
+# Purpose: Essential patterns for user projects
 # ============================================
+
+# ===========================================
+# Go Build Artifacts
+# ===========================================
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+cover.out
+cover.html
+cpu.prof
+mem.prof
+
+# ===========================================
+# Build Artifacts & Distribution
+# ===========================================
+build/
+dist/
+*.egg-info/
+*.egg
+
+# ===========================================
+# Python Cache & Bytecode
+# ===========================================
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.pyd
+.mypy_cache/
+.ruff_cache/
+*.db
+*.sqlite
+*.sqlite3
+*.rdb
+*.dbm
+
+# ===========================================
+# Virtual Environments
+# ===========================================
+venv/
+.venv/
+env/
+.env/
+.uv_cache/
+.uv-cache/
+
+# ===========================================
+# Test Coverage
+# ===========================================
+.coverage
+coverage.json
+htmlcov/
+
+# ===========================================
+# IDE & Editors
+# ===========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sw?
+*~
+.cursor/
+*.sublime-project
+*.sublime-workspace
+*.njsproj
+*.sln
+*.suo
+.#*
 
 # ===========================================
 # OS Files
 # ===========================================
+# Mac
 .DS_Store
 .AppleDouble
 .LSOverride
@@ -17,53 +91,14 @@
 .TemporaryItems
 .Trashes
 .VolumeIcon.icns
+
+# Windows
 [Dd]esktop.ini
 Thumbs.db
+ehthumbs.db
+
+# Linux
 .directory
-
-# ===========================================
-# IDE & Editors
-# ===========================================
-.vscode/
-.idea/
-.cursor/
-*.swp
-*.swo
-*.sw?
-*~
-.#*
-
-# ===========================================
-# Swift / Xcode
-# ===========================================
-DerivedData/
-*.xcuserdata
-xcuserdata/
-*.xcodeproj/project.xcworkspace/xcuserdata/
-*.xcodeproj/xcuserdata/
-*.dSYM/
-*.o
-*.a
-
-# xcframework 빌드 산출물 (app/Frameworks/ 는 .gitkeep 으로만 추적)
-app/Frameworks/*.xcframework
-app/Frameworks/*/
-!app/Frameworks/.gitkeep
-
-# ===========================================
-# Rust
-# ===========================================
-target/
-Cargo.lock
-.cargo/
-*.profraw
-*.profdata
-
-# ===========================================
-# Build Artifacts
-# ===========================================
-build/
-dist/
 
 # ===========================================
 # Logs & Temporary Files
@@ -73,25 +108,52 @@ logs/
 *.tmp
 *.temp
 *.bak
+*.backup
 
 # ===========================================
-# Secrets and Credentials
+# Backups
 # ===========================================
+.moai-backups/
+*.backup/
+*-backup/
+*_backup_*/
+
+# ===========================================
+# Secrets and Credentials (CRITICAL)
+# ===========================================
+# Environment files
 .env
 .env.*
 !.env.example
+
+# Certificate files
 *.pem
 *.p12
 *.pfx
-private-key*
-*-api-key.*
+*.jks
+
+# Private keys (specific patterns to avoid false positives)
+# FIXED: Issue #237 - Replaced overly broad *key* and *secret* patterns
+*-key.*
+*_key.*
+*.key.*
 *-secret-key.*
+*-api-key.*
+api-key-*
 secret-key-*
+private-key*
+*-secret.*
+*_secret.*
+*.secret.*
+secret-*.*
+
+# Credential patterns in environment files
+*_secret=*
+*_token=*
+
+# Cloud provider credentials
 .aws/config
 .aws/credentials
-
-# Local signing overrides (setup-signing-local.sh 생성, 커밋 금지)
-app/Config/Signing.local.xcconfig
 
 # ===========================================
 # Claude Code Configuration
@@ -103,65 +165,86 @@ app/Config/Signing.local.xcconfig
 .claude/plans/
 .claude/agent-memory/
 .claude/worktrees/
+
+# Skill-specific credentials
 .claude/skills/*/.env*
 .claude/skills/*/secrets/
+.claude/skills/*/*/*secret*
+.claude/skills/*/*/*key*
+.claude/skills/*/*/*token*
+# Re-include legitimate skill module files containing "token" in their name
+!.claude/skills/*/modules/*token*.md
 
 # ===========================================
-# MoAI Local State (never commit)
+# Local-Only Files (never sync via git pull)
 # ===========================================
 .moai/status_line.sh
 .moai/memory/
 .moai/worktrees/
+
+# ===========================================
+# Evolution Telemetry (local-only usage data)
+# Learnings and new-skills are git-tracked for team sharing.
+# ===========================================
+.moai/evolution/telemetry/*.jsonl
+!.moai/evolution/telemetry/.gitkeep
+
+# ===========================================
+# Node.js (for docs/Nextra)
+# ===========================================
+node_modules/
+*.tsbuildinfo
+.tscache/
+.next/
+out/
+
+# ===========================================
+# Build Tools & Frameworks
+# ===========================================
+.turbo/
+.nuxt/
+dist-ssr/
+
+# ===========================================
+# Deployment & CI/CD
+# ===========================================
+.vercel/
+.netlify/
+.firebase/
+
+# User Custom Patterns (preserved by moai update)
+DerivedData/
+*.xcuserdata
+xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.dSYM/
+*.o
+*.a
+app/Frameworks/*.xcframework
+app/Frameworks/*/
+!app/Frameworks/.gitkeep
+target/
+Cargo.lock
+.cargo/
+*.profraw
+*.profdata
+app/Config/Signing.local.xcconfig
 .moai/cache/
 .moai/logs/
 .moai/state/
 .moai/reports/
 .moai/manifest.json
-.moai-backups/
-
-# ===========================================
-# Reference Symlinks (local dev only)
-# ===========================================
 .references/
-
-# ===========================================
-# Test Coverage
-# ===========================================
 coverage/
-htmlcov/
-.coverage
-coverage.json
-
-# ===========================================
-# Node.js (docs/Nextra only)
-# ===========================================
-node_modules/
-.next/
-out/
 app/.build/
-
-# swift-bridge 생성 파일 (빌드 시 재생성)
 core/crates/moai-ffi/generated/
-
-# ============================================
-# v3 (GPUI + libghostty-vt) 관련 ignore
-# ============================================
-# Rust workspace
 target/
 Cargo.lock
-
-# Swift legacy archive 빌드 산출물 (reference only, never built)
 archive/swift-legacy/.build/
 archive/swift-legacy/Frameworks/ghostty-vt.xcframework/
 archive/swift-legacy/target/
-
-# swift-bridge 자동 생성 (v3 에서 미사용)
 crates/moai-ffi/generated/
-
-# macOS
-.DS_Store
-
-# pencil 렌더링 (참조만, git 미관리)
 pencil/*.png
 pencil/*.pdf
 pencil/*.tiff
