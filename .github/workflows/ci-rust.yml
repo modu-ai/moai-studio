@@ -50,6 +50,18 @@ jobs:
           toolchain: ${{ matrix.rust }}
           components: clippy, rustfmt
 
+      # GPUI 는 Linux 에서 xcb / xkbcommon / wayland / fontconfig / openssl dev 헤더 필요.
+      # macOS 는 Metal 프레임워크 내장이라 추가 설치 불필요.
+      - name: Install Linux system deps (GPUI runtime)
+        if: matrix.platform.runner == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libwayland-dev libfontconfig1-dev \
+            libssl-dev pkg-config
+
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
