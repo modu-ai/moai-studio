@@ -18,6 +18,7 @@ rescope_from: SPEC-V3-001 RG-V3-3
 | 버전 | 날짜 | 변경 |
 |------|------|------|
 | 1.0.0 | 2026-04-21 | SPEC-V3-001 RG-V3-3 rescope 이후 처음 작성. research.md 의 12개 결정점을 EARS 요구사항 6개 그룹으로 정식화. 이전 stub/draft 파일을 전량 폐기하고 신규 버전으로 대체. |
+| 1.0.0-approved | 2026-04-21 | Annotation Cycle iter 1 PASS. 오케스트레이터 AskUserQuestion 으로 4건 공식 승인: (1) libghostty-rs SHA dfac6f3e pin + 월 1회 bump + AC-T-11 CI gate, (2) workspace MSRV 1.85 → 1.93 상향은 Phase 2 Run 첫 cargo check 실증, (3) OSC 52 는 Phase 3 이관, (4) Windows ConPTY 는 compile_error! + trybuild 단일 enforcement. Plan Phase 종결, Run Phase 진입 가능. |
 
 ---
 
