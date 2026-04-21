@@ -10,5 +10,7 @@ description = "MoAI Studio v3 — GPUI 컴포넌트 라이브러리 (Sidebar, To
 tracing = { workspace = true }
 thiserror = { workspace = true }
 
-# TODO Phase 1 (SPEC-V3-001 RG-V3-2): GPUI 의존성
-# gpui = { git = "https://github.com/zed-industries/zed", branch = "main" }
+# Phase 1.1 (SPEC-V3-001 RG-V3-2): GPUI 의존성 추가
+# crates.io 0.2.2 는 2025 년 배포. git main 은 core-foundation exact pin 충돌 발생.
+# 안정 경로: 0.2.2 로 시작 → Phase 7+ 에서 Zed GPUI 최신으로 마이그레이션.
+gpui = "0.2"

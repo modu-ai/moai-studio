@@ -1,10 +1,11 @@
 //! MoAI Studio v3 — 메인 바이너리 엔트리.
 //!
-//! Phase 0.4 스캐폴드 단계. GPUI 통합은 Phase 1 (SPEC-V3-001 RG-V3-2) 에서 수행.
+//! Phase 1.1 (SPEC-V3-001 RG-V3-2): GPUI 윈도우 오픈.
 //!
 //! 빌드:
 //! ```bash
-//! cargo run --bin moai-studio
+//! cargo run --bin moai-studio             # GPUI 윈도우 (기본)
+//! cargo run --bin moai-studio -- --scaffold  # 스캐폴드 로그만 (GPUI 없이)
 //! ```
 
 use tracing::info;
@@ -18,14 +19,17 @@ fn main() {
         )
         .init();
 
-    info!("MoAI Studio v3 scaffold starting…");
     info!(
-        "Build: {} / Rust edition 2024 / Target: {}",
+        "MoAI Studio v3 — Build {} / Target: {}",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS
     );
 
-    // Phase 0: 스캐폴드 — 각 내부 crate 의 hello() 로 연결 확인
+    // CLI 인자 처리 — `--scaffold` 시 GPUI 없이 스캐폴드 로그만 출력 (CI smoke 용)
+    let args: Vec<String> = std::env::args().collect();
+    let scaffold_only = args.iter().any(|a| a == "--scaffold");
+
+    // 플러그인 초기화 (번들 플러그인은 컴파일 타임 feature flag)
     moai_studio_ui::hello();
     moai_studio_terminal::hello();
     moai_studio_workspace::hello();
@@ -40,5 +44,11 @@ fn main() {
     #[cfg(not(feature = "moai-adk"))]
     info!("moai-adk plugin: disabled (feature=no-moai-adk)");
 
-    info!("Scaffold OK. Phase 1 (GPUI integration) pending — see SPEC-V3-001.");
+    if scaffold_only {
+        info!("Scaffold OK — GPUI 윈도우 건너뜀 (--scaffold 모드)");
+        return;
+    }
+
+    // GPUI 윈도우 오픈 (blocks until app 종료)
+    moai_studio_ui::run_app();
 }
