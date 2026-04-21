@@ -12,11 +12,12 @@
 //! - Empty state CTA 는 workspaces 가 비었을 때만 body 에 표시
 
 use gpui::{
-    App, Application, Context, IntoElement, ParentElement, Render, Styled, Window, WindowOptions,
-    div, prelude::*, px, rgb, size,
+    App, Application, Context, IntoElement, MouseButton, ParentElement, Render, Styled, Window,
+    WindowOptions, div, prelude::*, px, rgb, size,
 };
-use moai_studio_workspace::Workspace;
-use tracing::info;
+use moai_studio_workspace::{Workspace, WorkspacesStore};
+use std::path::PathBuf;
+use tracing::{error, info};
 
 // ============================================================
 // Design tokens — `system.md` §4 dark primary.
@@ -59,14 +60,15 @@ pub mod tokens {
 // Root view — 4 영역 레이아웃 컨테이너
 // ============================================================
 
-/// 앱 전역 상태 — Phase 1.6 에서는 최소한의 workspace 리스트 + active id.
+/// 앱 전역 상태 — Phase 1.7: workspace 리스트 + active id + storage path (버튼 클릭 시 재로드).
 pub struct RootView {
     pub workspaces: Vec<Workspace>,
     pub active_id: Option<String>,
+    pub storage_path: PathBuf,
 }
 
 impl RootView {
-    pub fn new(workspaces: Vec<Workspace>) -> Self {
+    pub fn new(workspaces: Vec<Workspace>, storage_path: PathBuf) -> Self {
         // 가장 최근 활성 워크스페이스를 자동 선택 (last_active 최댓값).
         let active_id = workspaces
             .iter()
@@ -75,6 +77,7 @@ impl RootView {
         Self {
             workspaces,
             active_id,
+            storage_path,
         }
     }
 
@@ -90,19 +93,74 @@ impl RootView {
             .map(|w| w.name.as_str())
             .unwrap_or("no workspace")
     }
+
+    /// 새 워크스페이스가 저장소에 추가된 이후 로컬 상태를 갱신.
+    /// GPUI 이벤트 핸들러와 독립적으로 테스트 가능.
+    pub fn apply_added_workspace(&mut self, added: &Workspace, all: Vec<Workspace>) {
+        self.workspaces = all;
+        self.active_id = Some(added.id.clone());
+    }
+
+    /// + New Workspace 버튼 클릭 처리 — store 재로드, 네이티브 picker, 상태 갱신.
+    ///   사용자가 취소하거나 로드/저장이 실패하면 상태 유지.
+    fn handle_add_workspace(&mut self, cx: &mut Context<Self>) {
+        let mut store = match WorkspacesStore::load(&self.storage_path) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("WorkspacesStore::load 실패: {e}");
+                return;
+            }
+        };
+        match moai_studio_workspace::pick_and_save(&mut store) {
+            Ok(Some(ws)) => {
+                let all = store.list().to_vec();
+                self.apply_added_workspace(&ws, all);
+                cx.notify();
+            }
+            Ok(None) => info!("pick_and_save: 사용자 취소"),
+            Err(e) => error!("pick_and_save 실패: {e}"),
+        }
+    }
 }
 
 impl Render for RootView {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let new_ws_btn = new_workspace_button().on_mouse_down(
+            MouseButton::Left,
+            cx.listener(|this, _ev, _window, cx| this.handle_add_workspace(cx)),
+        );
         div()
             .flex()
             .flex_col()
             .size_full()
             .bg(rgb(tokens::BG_BASE))
             .child(title_bar(self.title_label()))
-            .child(main_body(&self.workspaces, self.active_id.as_deref()))
+            .child(main_body(
+                &self.workspaces,
+                self.active_id.as_deref(),
+                new_ws_btn,
+            ))
             .child(status_bar())
     }
+}
+
+/// 인터랙션 가능한 "+ New Workspace" 버튼 (id 필수 — StatefulInteractiveElement).
+fn new_workspace_button() -> gpui::Stateful<gpui::Div> {
+    div()
+        .id("new-workspace-btn")
+        .flex()
+        .flex_row()
+        .items_center()
+        .gap_2()
+        .px_2()
+        .py_2()
+        .rounded_md()
+        .bg(rgb(tokens::BG_SURFACE_2))
+        .text_color(rgb(tokens::FG_SECONDARY))
+        .text_sm()
+        .hover(|s| s.bg(rgb(tokens::BG_SURFACE_3)))
+        .cursor_pointer()
+        .child("+ New Workspace")
 }
 
 // ============================================================
@@ -176,18 +234,26 @@ fn traffic_lights() -> impl IntoElement {
 // 2) Main Body — Sidebar 260pt + 컨텐츠 영역
 // ============================================================
 
-fn main_body(workspaces: &[Workspace], active_id: Option<&str>) -> impl IntoElement {
+fn main_body(
+    workspaces: &[Workspace],
+    active_id: Option<&str>,
+    new_ws_btn: impl IntoElement,
+) -> impl IntoElement {
     div()
         .flex()
         .flex_row()
         .flex_grow()
         .w_full()
-        .child(sidebar(workspaces, active_id))
+        .child(sidebar(workspaces, active_id, new_ws_btn))
         .child(content_area(workspaces.is_empty()))
 }
 
-/// Sidebar 260pt — WORKSPACE + GIT WORKTREES + SPECs 섹션.
-fn sidebar(workspaces: &[Workspace], active_id: Option<&str>) -> impl IntoElement {
+/// Sidebar 260pt — WORKSPACE + GIT WORKTREES + SPECs 섹션 + 하단 인터랙티브 "+ New Workspace".
+fn sidebar(
+    workspaces: &[Workspace],
+    active_id: Option<&str>,
+    new_ws_btn: impl IntoElement,
+) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
@@ -205,22 +271,8 @@ fn sidebar(workspaces: &[Workspace], active_id: Option<&str>) -> impl IntoElemen
             vec![("—", tokens::FG_DIM)],
         ))
         .child(sidebar_section("SPECS", vec![("—", tokens::FG_DIM)]))
-        // 하단 "+" New Workspace 버튼 (Phase 1.4 에서 실동작)
-        .child(div().flex_grow()) // 채움
-        .child(
-            div()
-                .flex()
-                .flex_row()
-                .items_center()
-                .gap_2()
-                .px_2()
-                .py_2()
-                .rounded_md()
-                .bg(rgb(tokens::BG_SURFACE_2))
-                .text_color(rgb(tokens::FG_SECONDARY))
-                .text_sm()
-                .child("+ New Workspace"),
-        )
+        .child(div().flex_grow())
+        .child(new_ws_btn)
 }
 
 /// Sidebar 내부 섹션 (ALL-CAPS 라벨 + 항목 리스트).
@@ -451,10 +503,11 @@ fn status_bar() -> impl IntoElement {
 // 앱 엔트리
 // ============================================================
 
-pub fn run_app(workspaces: Vec<Workspace>) {
+pub fn run_app(workspaces: Vec<Workspace>, storage_path: PathBuf) {
     info!(
-        "moai-studio-ui: GPUI Application 시작 (Phase 1.6 — workspaces={})",
-        workspaces.len()
+        "moai-studio-ui: GPUI Application 시작 (Phase 1.7 — workspaces={}, store={})",
+        workspaces.len(),
+        storage_path.display()
     );
 
     Application::new().run(move |cx: &mut App| {
@@ -470,11 +523,14 @@ pub fn run_app(workspaces: Vec<Workspace>) {
         };
 
         let ws = workspaces.clone();
-        cx.open_window(options, move |_window, cx| cx.new(|_cx| RootView::new(ws)))
-            .expect("GPUI 윈도우 생성 실패");
+        let path = storage_path.clone();
+        cx.open_window(options, move |_window, cx| {
+            cx.new(|_cx| RootView::new(ws, path))
+        })
+        .expect("GPUI 윈도우 생성 실패");
 
         cx.activate(true);
-        info!("moai-studio-ui: RootView 렌더 등록 완료 (TitleBar/Sidebar/Body/StatusBar)");
+        info!("moai-studio-ui: RootView 렌더 등록 완료 (+ New Workspace 버튼 배선)");
     });
 }
 
@@ -503,9 +559,13 @@ mod tests {
         }
     }
 
+    fn dummy_path() -> PathBuf {
+        PathBuf::from("/tmp/moai-studio-ui-tests-workspaces.json")
+    }
+
     #[test]
     fn root_view_empty_workspaces_has_no_active_and_placeholder_label() {
-        let view = RootView::new(vec![]);
+        let view = RootView::new(vec![], dummy_path());
         assert!(view.active_id.is_none());
         assert!(view.active().is_none());
         assert_eq!(view.title_label(), "no workspace");
@@ -515,7 +575,7 @@ mod tests {
     fn root_view_picks_most_recently_active_workspace_as_active() {
         let older = make_ws("alpha", "1", 1_000);
         let newer = make_ws("beta", "2", 9_000);
-        let view = RootView::new(vec![older, newer.clone()]);
+        let view = RootView::new(vec![older, newer.clone()], dummy_path());
         assert_eq!(view.active_id.as_deref(), Some(newer.id.as_str()));
         assert_eq!(view.title_label(), "beta");
         assert_eq!(view.active().map(|w| w.name.as_str()), Some("beta"));
@@ -523,9 +583,33 @@ mod tests {
 
     #[test]
     fn root_view_active_returns_none_when_active_id_missing() {
-        let mut view = RootView::new(vec![make_ws("alpha", "1", 1_000)]);
+        let mut view = RootView::new(vec![make_ws("alpha", "1", 1_000)], dummy_path());
         view.active_id = Some("ws-does-not-exist".to_string());
         assert!(view.active().is_none());
         assert_eq!(view.title_label(), "no workspace");
+    }
+
+    #[test]
+    fn apply_added_workspace_from_empty_sets_active_to_new() {
+        let mut view = RootView::new(vec![], dummy_path());
+        let added = make_ws("new-proj", "new1", 5_000);
+        view.apply_added_workspace(&added, vec![added.clone()]);
+        assert_eq!(view.workspaces.len(), 1);
+        assert_eq!(view.active_id.as_deref(), Some(added.id.as_str()));
+        assert_eq!(view.title_label(), "new-proj");
+    }
+
+    #[test]
+    fn apply_added_workspace_switches_active_even_if_others_newer() {
+        // last_active 가 더 오래된 항목을 추가해도 "방금 추가한 것" 을 active 로 강제.
+        let existing = make_ws("alpha", "1", 9_999);
+        let added = make_ws("new-proj", "new1", 1_000);
+        let mut view = RootView::new(vec![existing.clone()], dummy_path());
+        assert_eq!(view.active_id.as_deref(), Some(existing.id.as_str()));
+
+        view.apply_added_workspace(&added, vec![existing, added.clone()]);
+        assert_eq!(view.workspaces.len(), 2);
+        assert_eq!(view.active_id.as_deref(), Some(added.id.as_str()));
+        assert_eq!(view.title_label(), "new-proj");
     }
 }

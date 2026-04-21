@@ -49,22 +49,24 @@ fn main() {
         return;
     }
 
-    // Phase 1.6: 저장된 workspace 리스트 로드 (실패 시 빈 리스트로 fallback).
-    let workspaces = match moai_studio_workspace::WorkspacesStore::load_default() {
+    // Phase 1.7: 저장된 workspace 리스트 로드 + storage_path 전달 (버튼 클릭 시 재로드용).
+    let (workspaces, storage_path) = match moai_studio_workspace::WorkspacesStore::load_default() {
         Ok(store) => {
             info!(
                 "workspaces loaded: {} items from {}",
                 store.list().len(),
                 store.path().display()
             );
-            store.list().to_vec()
+            (store.list().to_vec(), store.path().to_path_buf())
         }
         Err(e) => {
             tracing::warn!("workspace store load 실패, 빈 리스트로 fallback: {e}");
-            Vec::new()
+            let fallback = moai_studio_workspace::default_storage_path()
+                .unwrap_or_else(|_| std::path::PathBuf::from("workspaces.json"));
+            (Vec::new(), fallback)
         }
     };
 
     // GPUI 윈도우 오픈 (blocks until app 종료)
-    moai_studio_ui::run_app(workspaces);
+    moai_studio_ui::run_app(workspaces, storage_path);
 }
