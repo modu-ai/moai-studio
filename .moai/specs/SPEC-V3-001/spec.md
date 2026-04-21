@@ -16,6 +16,7 @@ issue_number: 0
 | 버전 | 날짜 | 변경 내용 |
 |------|------|-----------|
 | 1.0.0 | 2026-04-21 | 초안 작성. v3 아키텍처 대폭 pivot 반영 (GPUI + libghostty-vt, Tauri/Swift 폐기). Phase 0 + Phase 1 범위. 9 핵심 결정 (master-plan.md §Executive) 에 근거. |
+| 1.1.0 | 2026-04-21 | Phase 1 체크포인트 sync. RG-V3-1/2/5 완료 (Phase 0.2~1.8, 8 커밋), 248 tests 통과 regression 0. RG-V3-3 (libghostty) 는 Metal Toolchain 블로킹, RG-V3-4 (CI matrix) 미시작. 상세: `.moai/specs/SPEC-V3-001/progress.md`. |
 
 ---
 

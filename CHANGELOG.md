@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **SPEC-V3-001 Phase 1 (RG-V3-2)**: Rust + GPUI 기반 v3 스캐폴드
+  - `moai-studio-ui` crate — GPUI 0.2.2 기반 4영역 레이아웃 (TitleBar 44pt / Sidebar 260pt / Body / StatusBar 28pt), 디자인 토큰 13개 (BG / FG / BORDER / ACCENT / TRAFFIC), Empty State CTA (Create First / Start Sample / Open Recent)
+  - `moai-studio-workspace` crate — `Workspace` 구조체 + `WorkspacesFile` JSON 스키마 v1 + `WorkspacesStore` (load/save/add/remove/touch) + `pick_project_folder` (rfd 0.15 네이티브 다이얼로그)
+  - `RootView` 상태 관리 — `workspaces` + `active_id` + `storage_path`, `last_active` 기반 자동 active 선택
+  - 인터랙션: "+ New Workspace" 버튼 실동작 (store 재로드 → pick_and_save → 상태 갱신 → notify), workspace row 클릭 → active 전환 + `store.touch()` 로 last_active 갱신
+  - 저장 경로: `~/.moai/studio/workspaces.json` (macOS/Linux), `%APPDATA%\moai\studio\workspaces.json` (Windows)
+  - 테스트 증분 +15 (baseline 232 → 248), 0 regression
+  - 상세 이력: `.moai/specs/SPEC-V3-001/progress.md`
+
+### Changed
+
+- Swift AppKit 스택 → Rust + GPUI 스택 전환 (SPEC-V3-001 RG-V3-1/5): `app/` → `archive/swift-legacy/` `git mv`, Cargo workspace 를 프로젝트 루트로 재구성, `crates/moai-core` 289 tests 유지 (회귀 0)
+
 ## [0.2.5] — 2026-04-17
 
 ### Added
