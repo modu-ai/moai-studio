@@ -97,9 +97,24 @@ status: DONE (4/5 RG 실증 완료 + 1 RG rescope)
 - moai-adk 플러그인
 - 자동 업데이트
 
-### AC-4.2 GitHub branch protection rule
+### AC-4.2 GitHub branch protection rule — 플랫폼 제약 확인
 
-Workflow 는 `Rust CI / macOS`, `Rust CI / Linux`, `Rust CI / Smoke (macOS)`, `Rust CI / Smoke (Linux)` status check 를 제공한다. 이들을 required check 로 지정하려면 GitHub Settings → Branches → Add rule (main) → Require status checks 설정 필요. repo 관리자 작업 대상이므로 본 SPEC 범위 외.
+**시도 결과**: `gh api` 로 `PUT /branches/main/protection` 및 신규 `POST /rulesets` 모두 HTTP 403:
+
+> "Upgrade to GitHub Pro or make this repository public to enable this feature."
+
+**원인**: GitHub Free plan 은 public repo 에만 branch protection / rulesets 제공. Private repo 에서 활성화하려면 다음 중 하나 필요:
+- GitHub Pro 유료 업그레이드 ($4/월)
+- Repo 를 public 으로 전환
+
+**현재 상태**: Workflow 는 정상 작동하여 `Rust CI / macOS`, `Rust CI / Linux`, `Smoke (macOS)`, `Smoke (Linux)` 4 status check 를 PR UI 에 표시. 강제 차단 없이 리뷰어가 수동 확인. AC-4.2 "machine-enforced 차단" 은 플랫폼 제약으로 deferred.
+
+**액션 아이템** (사용자 결정 대상):
+- Option A: GitHub Pro 업그레이드 후 `gh api PUT branches/main/protection` 재실행
+- Option B: repo public 전환 후 위와 동일
+- Option C: Deferred, 리뷰어 수동 확인 수용
+
+본 SPEC 범위에서는 workflow 를 구축하는 것까지 완료 처리. enforcement 자체는 out-of-scope.
 
 ---
 
