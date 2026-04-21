@@ -1,0 +1,19 @@
+[package]
+name = "moai-studio-terminal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "MoAI Studio v3 — libghostty-vt 기반 터미널 렌더 레이어"
+
+[dependencies]
+tracing = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["process", "io-util", "sync"] }
+
+# TODO Phase 2 (SPEC-V3-002 Terminal Core):
+# libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs", rev = "PINNED_COMMIT" }
+# portable-pty = "0.9"
+#
+# 전제: Zig 0.15.x 설치 필수 (libghostty 빌드용)
+# CI: ubuntu 22.04 + macOS 14 runner 에 zig install 스크립트 필요

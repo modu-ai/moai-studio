@@ -1,0 +1,35 @@
+[package]
+name = "moai-studio-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "MoAI Studio v3 — cross-platform native terminal multiplexer (binary entry point)"
+
+[[bin]]
+name = "moai-studio"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = { workspace = true }
+
+# v3 내부 crate (스캐폴드 단계, 추후 확장)
+moai-studio-ui = { path = "../moai-studio-ui" }
+moai-studio-terminal = { path = "../moai-studio-terminal" }
+moai-studio-workspace = { path = "../moai-studio-workspace" }
+moai-studio-plugin-api = { path = "../moai-studio-plugin-api" }
+
+# TODO Phase 1 (SPEC-V3-001 RG-V3-2): GPUI 의존성 추가
+# gpui = { git = "https://github.com/zed-industries/zed", branch = "main" }
+
+[features]
+default = ["moai-adk"]
+# moai-adk 번들 플러그인 (cargo feature 기반 인프로세스 정적 플러그인)
+moai-adk = ["dep:moai-studio-plugin-moai-adk"]
+
+[dependencies.moai-studio-plugin-moai-adk]
+path = "../moai-studio-plugin-moai-adk"
+optional = true

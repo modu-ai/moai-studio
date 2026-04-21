@@ -1,0 +1,14 @@
+[package]
+name = "moai-studio-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "MoAI Studio v3 — GPUI 컴포넌트 라이브러리 (Sidebar, Toolbar, StatusBar, Panes)"
+
+[dependencies]
+tracing = { workspace = true }
+thiserror = { workspace = true }
+
+# TODO Phase 1 (SPEC-V3-001 RG-V3-2): GPUI 의존성
+# gpui = { git = "https://github.com/zed-industries/zed", branch = "main" }

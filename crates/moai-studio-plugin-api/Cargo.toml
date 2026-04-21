@@ -1,0 +1,12 @@
+[package]
+name = "moai-studio-plugin-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "MoAI Studio v3 — Plugin trait 정의 (인프로세스 Rust 정적 플러그인)"
+
+[dependencies]
+tracing = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }

@@ -1,0 +1,17 @@
+[package]
+name = "moai-studio-workspace"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "MoAI Studio v3 — Multi-project workspace state (VS Code multi-root 스타일)"
+
+[dependencies]
+tracing = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["fs", "sync"] }
+
+# 기존 moai-core 재사용 (SQLite persistence)
+moai-store = { path = "../moai-store" }
