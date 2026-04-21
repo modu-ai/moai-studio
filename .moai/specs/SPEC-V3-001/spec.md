@@ -17,6 +17,7 @@ issue_number: 0
 |------|------|-----------|
 | 1.0.0 | 2026-04-21 | 초안 작성. v3 아키텍처 대폭 pivot 반영 (GPUI + libghostty-vt, Tauri/Swift 폐기). Phase 0 + Phase 1 범위. 9 핵심 결정 (master-plan.md §Executive) 에 근거. |
 | 1.1.0 | 2026-04-21 | Phase 1 체크포인트 sync. RG-V3-1/2/5 완료 (Phase 0.2~1.8, 8 커밋), 248 tests 통과 regression 0. RG-V3-3 (libghostty) 는 Metal Toolchain 블로킹, RG-V3-4 (CI matrix) 미시작. 상세: `.moai/specs/SPEC-V3-001/progress.md`. |
+| 1.2.0 | 2026-04-21 | RG-V3-4 CI matrix 실증 완료 (GoosLab/moai-studio repo 생성 + CI run 24708460052 ALL GREEN, macOS + Linux × rust+smoke 4 job). RG-V3-3 재진단 결과 "Metal blocker" 오해 확인 — Metal toolchain/Zig/Xcode 모두 정상, 실제로는 libghostty-rs 스파이크 작업 미시작 상태. RG-V3-3 을 **SPEC-V3-002 (Terminal Core)** 로 rescope. 본 SPEC 은 4/5 RG 실증 완료로 종결 처리. 상세: progress.md, SPEC-V3-002/spec.md (stub). |
 
 ---
 
@@ -65,13 +66,15 @@ MoAI Studio v3 아키텍처 전환의 **스캐폴드 스프린트**. 기존 Swif
 
 **[State-Driven]** 워크스페이스가 0개인 상태 (While initial state), 시스템은 컨텐츠 영역에 Welcome CTA (Create First Workspace / Start Sample / Open Recent) 를 **표시해야 한다** (shall display).
 
-### RG-V3-3: libghostty-vt 스파이크
+### RG-V3-3: libghostty-vt 스파이크 — **RESCOPED to SPEC-V3-002 (2026-04-21)**
 
-**[Ubiquitous]** `moai-studio-terminal` crate 는 libghostty-vt (pinned commit) 에 대한 Rust FFI 바인딩 (via libghostty-rs) 을 **포함해야 한다** (shall include).
+> **현 상태**: 본 RG 는 SPEC-V3-002 (Terminal Core) 로 이관됨. 재진단 결과 "Metal Toolchain blocker" 는 오해였으며 (Metal/Zig/Xcode 모두 정상), 실제로는 libghostty-rs 스파이크 작업이 시작조차 되지 않은 상태 + alpha 단계인 upstream 의 pinned commit 결정 + FFI 통합 전체가 독립 SPEC 가치라는 판단. 원 AC-3.1 / AC-3.2 는 SPEC-V3-002 의 AC-T-1 / AC-T-2 로 계승됨.
 
-**[Event-Driven]** 개발자가 스파이크 예제 바이너리를 실행하면 (When), 시스템은 `$SHELL` 을 spawn 하여 "Hello from libghostty" 에 해당하는 텍스트 출력을 GPUI 윈도우에 **렌더해야 한다** (shall render).
+~~**[Ubiquitous]** `moai-studio-terminal` crate 는 libghostty-vt (pinned commit) 에 대한 Rust FFI 바인딩 (via libghostty-rs) 을 **포함해야 한다** (shall include).~~
 
-**[Unwanted]** Zig 0.15.x 미설치 환경에서 시스템은 빌드를 **시작해서는 안 되며**, 명확한 에러 메시지 ("Zig 0.15.x required — install via mise/asdf/ziglang.org") 를 **출력해야 한다** (shall emit).
+~~**[Event-Driven]** 개발자가 스파이크 예제 바이너리를 실행하면 (When), 시스템은 `$SHELL` 을 spawn 하여 "Hello from libghostty" 에 해당하는 텍스트 출력을 GPUI 윈도우에 **렌더해야 한다** (shall render).~~
+
+~~**[Unwanted]** Zig 0.15.x 미설치 환경에서 시스템은 빌드를 **시작해서는 안 되며**, 명확한 에러 메시지 ("Zig 0.15.x required — install via mise/asdf/ziglang.org") 를 **출력해야 한다** (shall emit).~~
 
 ### RG-V3-4: CI Matrix + 품질 게이트
 
