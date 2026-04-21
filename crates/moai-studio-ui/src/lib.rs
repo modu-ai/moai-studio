@@ -101,6 +101,33 @@ impl RootView {
         self.active_id = Some(added.id.clone());
     }
 
+    /// 주어진 id 의 워크스페이스를 active 로 전환. 존재하지 않으면 false.
+    pub fn activate_workspace(&mut self, id: &str) -> bool {
+        if self.workspaces.iter().any(|w| w.id == id) {
+            self.active_id = Some(id.to_string());
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Row 클릭 처리 — active_id 전환 + store.touch() 로 last_active 갱신.
+    /// 저장 실패는 로깅만, UI 전환은 성공 처리.
+    fn handle_activate_workspace(&mut self, id: String, cx: &mut Context<Self>) {
+        if !self.activate_workspace(&id) {
+            return;
+        }
+        match WorkspacesStore::load(&self.storage_path) {
+            Ok(mut store) => {
+                if let Err(e) = store.touch(&id) {
+                    error!("store.touch({id}) 실패: {e}");
+                }
+            }
+            Err(e) => error!("WorkspacesStore::load (touch 시) 실패: {e}"),
+        }
+        cx.notify();
+    }
+
     /// + New Workspace 버튼 클릭 처리 — store 재로드, 네이티브 picker, 상태 갱신.
     ///   사용자가 취소하거나 로드/저장이 실패하면 상태 유지.
     fn handle_add_workspace(&mut self, cx: &mut Context<Self>) {
@@ -129,17 +156,28 @@ impl Render for RootView {
             MouseButton::Left,
             cx.listener(|this, _ev, _window, cx| this.handle_add_workspace(cx)),
         );
+        // Row 클릭 리스너를 각 workspace 에 attach.
+        let rows: Vec<gpui::Stateful<gpui::Div>> = self
+            .workspaces
+            .iter()
+            .map(|ws| {
+                let id = ws.id.clone();
+                let is_active = self.active_id.as_deref() == Some(ws.id.as_str());
+                workspace_row(ws, is_active).on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, _ev, _window, cx| {
+                        this.handle_activate_workspace(id.clone(), cx)
+                    }),
+                )
+            })
+            .collect();
         div()
             .flex()
             .flex_col()
             .size_full()
             .bg(rgb(tokens::BG_BASE))
             .child(title_bar(self.title_label()))
-            .child(main_body(
-                &self.workspaces,
-                self.active_id.as_deref(),
-                new_ws_btn,
-            ))
+            .child(main_body(&self.workspaces, rows, new_ws_btn))
             .child(status_bar())
     }
 }
@@ -236,22 +274,23 @@ fn traffic_lights() -> impl IntoElement {
 
 fn main_body(
     workspaces: &[Workspace],
-    active_id: Option<&str>,
+    rows: Vec<gpui::Stateful<gpui::Div>>,
     new_ws_btn: impl IntoElement,
 ) -> impl IntoElement {
+    let is_empty = workspaces.is_empty();
     div()
         .flex()
         .flex_row()
         .flex_grow()
         .w_full()
-        .child(sidebar(workspaces, active_id, new_ws_btn))
-        .child(content_area(workspaces.is_empty()))
+        .child(sidebar(is_empty, rows, new_ws_btn))
+        .child(content_area(is_empty))
 }
 
 /// Sidebar 260pt — WORKSPACE + GIT WORKTREES + SPECs 섹션 + 하단 인터랙티브 "+ New Workspace".
 fn sidebar(
-    workspaces: &[Workspace],
-    active_id: Option<&str>,
+    is_empty: bool,
+    rows: Vec<gpui::Stateful<gpui::Div>>,
     new_ws_btn: impl IntoElement,
 ) -> impl IntoElement {
     div()
@@ -265,7 +304,7 @@ fn sidebar(
         .px_3()
         .py_4()
         .gap_4()
-        .child(workspace_section(workspaces, active_id))
+        .child(workspace_section(is_empty, rows))
         .child(sidebar_section(
             "GIT WORKTREES",
             vec![("—", tokens::FG_DIM)],
@@ -296,8 +335,8 @@ fn sidebar_section(label: &'static str, items: Vec<(&'static str, u32)>) -> impl
     section
 }
 
-/// WORKSPACE 섹션 — 비었으면 placeholder, 있으면 각 워크스페이스 row 렌더.
-fn workspace_section(workspaces: &[Workspace], active_id: Option<&str>) -> impl IntoElement {
+/// WORKSPACE 섹션 — 비었으면 placeholder, 있으면 render 에서 생성한 rows 렌더.
+fn workspace_section(is_empty: bool, rows: Vec<gpui::Stateful<gpui::Div>>) -> impl IntoElement {
     let mut section = div().flex().flex_col().gap_2().child(
         div()
             .text_xs()
@@ -305,7 +344,7 @@ fn workspace_section(workspaces: &[Workspace], active_id: Option<&str>) -> impl 
             .child("WORKSPACE"),
     );
 
-    if workspaces.is_empty() {
+    if is_empty {
         section = section.child(
             div()
                 .text_sm()
@@ -315,15 +354,15 @@ fn workspace_section(workspaces: &[Workspace], active_id: Option<&str>) -> impl 
                 .child("No workspace yet"),
         );
     } else {
-        for ws in workspaces {
-            section = section.child(workspace_row(ws, active_id == Some(ws.id.as_str())));
+        for row in rows {
+            section = section.child(row);
         }
     }
     section
 }
 
-/// 단일 워크스페이스 row — 컬러 dot + 이름. Active 시 하이라이트.
-fn workspace_row(ws: &Workspace, is_active: bool) -> impl IntoElement {
+/// 단일 워크스페이스 row — Stateful (id=ws.id). 컬러 dot + 이름. Active 시 하이라이트.
+fn workspace_row(ws: &Workspace, is_active: bool) -> gpui::Stateful<gpui::Div> {
     let bg = if is_active {
         tokens::BG_SURFACE_3
     } else {
@@ -335,6 +374,7 @@ fn workspace_row(ws: &Workspace, is_active: bool) -> impl IntoElement {
         tokens::FG_SECONDARY
     };
     div()
+        .id(gpui::SharedString::from(format!("ws-row-{}", ws.id)))
         .flex()
         .flex_row()
         .items_center()
@@ -343,6 +383,8 @@ fn workspace_row(ws: &Workspace, is_active: bool) -> impl IntoElement {
         .py_1()
         .rounded_md()
         .bg(rgb(bg))
+        .hover(|s| s.bg(rgb(tokens::BG_SURFACE_2)))
+        .cursor_pointer()
         .child(div().w(px(8.)).h(px(8.)).rounded_full().bg(rgb(ws.color)))
         .child(div().text_sm().text_color(rgb(fg)).child(ws.name.clone()))
 }
@@ -597,6 +639,27 @@ mod tests {
         assert_eq!(view.workspaces.len(), 1);
         assert_eq!(view.active_id.as_deref(), Some(added.id.as_str()));
         assert_eq!(view.title_label(), "new-proj");
+    }
+
+    #[test]
+    fn activate_workspace_switches_active_id_when_id_exists() {
+        let a = make_ws("alpha", "1", 5_000);
+        let b = make_ws("beta", "2", 1_000);
+        let mut view = RootView::new(vec![a.clone(), b.clone()], dummy_path());
+        assert_eq!(view.active_id.as_deref(), Some(a.id.as_str()));
+        let ok = view.activate_workspace(&b.id);
+        assert!(ok);
+        assert_eq!(view.active_id.as_deref(), Some(b.id.as_str()));
+        assert_eq!(view.title_label(), "beta");
+    }
+
+    #[test]
+    fn activate_workspace_returns_false_for_unknown_id_and_keeps_active() {
+        let a = make_ws("alpha", "1", 5_000);
+        let mut view = RootView::new(vec![a.clone()], dummy_path());
+        let ok = view.activate_workspace("ws-does-not-exist");
+        assert!(!ok);
+        assert_eq!(view.active_id.as_deref(), Some(a.id.as_str()));
     }
 
     #[test]
