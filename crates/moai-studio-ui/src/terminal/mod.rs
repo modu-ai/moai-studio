@@ -1,0 +1,463 @@
+//! TerminalSurface — GPUI Terminal 렌더 컴포넌트 (SPEC-V3-002 RG-V3-002-4, RG-V3-002-5).
+//!
+//! @MX:ANCHOR: terminal-surface-render
+//! @MX:REASON: GPUI 렌더 진입점 — TerminalSurface::render 는 moai-studio-ui 의 모든
+//!   터미널 출력 경로가 수렴하는 지점이다. fan_in ≥ 3:
+//!   content_area 분기 (lib.rs), PtyEvent handler (on_output), input.rs key dispatch (T5).
+
+pub mod clipboard;
+pub mod input;
+
+use gpui::{Context, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb};
+
+// ============================================================
+// 폰트 메트릭 — pixel_to_cell 계산 기준
+// ============================================================
+
+/// 폰트 메트릭 — pixel_to_cell 계산 기준 (SPEC-V3-002 RG-V3-002-5).
+///
+/// @MX:NOTE: font-metric-coord-mapping
+/// advance_width × col + line_height × row = pixel 기준점.
+/// 기본값은 8px × 16px (Menlo 모노스페이스 1x DPI 기준).
+/// 실제 값은 GPUI font system 에서 추출하여 set_font_metrics 로 갱신한다.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FontMetrics {
+    /// 글자 픽셀 폭 (monospace 기준 동일 폭, px)
+    pub advance_width: f32,
+    /// 행 픽셀 높이 (line-height, px)
+    pub line_height: f32,
+}
+
+impl Default for FontMetrics {
+    fn default() -> Self {
+        // Menlo 12pt @ 1x DPI 기준 경험값
+        Self {
+            advance_width: 8.0,
+            line_height: 16.0,
+        }
+    }
+}
+
+// ============================================================
+// Selection — 마우스 드래그 선택 영역
+// ============================================================
+
+/// 마우스 드래그 선택 영역 (SPEC-V3-002 RG-V3-002-5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Selection {
+    /// 드래그 시작 셀 (row, col) — 0-indexed
+    pub start: (u16, u16),
+    /// 드래그 현재 종료 셀 (row, col) — 0-indexed
+    pub end: (u16, u16),
+}
+
+impl Selection {
+    /// 선택 영역을 정규화 (top-left, bottom-right) 로 반환.
+    ///
+    /// 역방향 드래그(end < start)에서도 올바른 사각형 경계를 반환한다.
+    pub fn bounding_rect(&self) -> ((u16, u16), (u16, u16)) {
+        let (r1, c1) = self.start;
+        let (r2, c2) = self.end;
+        ((r1.min(r2), c1.min(c2)), (r1.max(r2), c1.max(c2)))
+    }
+
+    /// 단일 셀 (start == end) 선택인지 확인.
+    pub fn is_collapsed(&self) -> bool {
+        self.start == self.end
+    }
+}
+
+// ============================================================
+// TerminalState — T3 완료 후 RenderSnapshot 으로 교체 예정
+// ============================================================
+
+/// 터미널 렌더 상태 — T3 완료 후 `moai_studio_terminal::libghostty_ffi::RenderSnapshot` 으로 교체.
+///
+/// @MX:TODO: T3 완료 후 terminal crate 의 RenderSnapshot 으로 교체.
+///   교체 지점: TerminalSurface::snapshot 필드 타입 변경 + on_output 파라미터 변경.
+#[derive(Debug, Clone, Default)]
+pub struct TerminalState {
+    /// 커서 행 (0-indexed)
+    pub cursor_row: u16,
+    /// 커서 열 (0-indexed)
+    pub cursor_col: u16,
+    /// 첫 번째 행 텍스트 (디버그 표시용)
+    pub row0_text: String,
+    /// 총 출력 바이트 수 (AC-T-9 검증용)
+    pub total_bytes: usize,
+}
+
+// ============================================================
+// TerminalSurface — GPUI 컴포넌트
+// ============================================================
+
+/// GPUI TerminalSurface 컴포넌트.
+///
+/// PTY worker 가 emit 한 출력 바이트를 수신하여 TerminalState 를 갱신하고
+/// GPUI re-render 를 트리거한다 (cx.notify()).
+///
+/// T4 에서는 TerminalState 를 직접 관리하고, T3 완료 후 PtyEvent + RenderSnapshot
+/// 으로 전환한다.
+pub struct TerminalSurface {
+    /// 최신 터미널 상태 (T3 완료 후 RenderSnapshot 으로 교체)
+    pub state: TerminalState,
+    /// 폰트 메트릭 — pixel_to_cell 계산용
+    pub font: FontMetrics,
+    /// 마우스 드래그 선택 영역 (없으면 None)
+    pub selection: Option<Selection>,
+    /// 커서 blink 표시 여부
+    pub cursor_visible: bool,
+}
+
+impl TerminalSurface {
+    /// 기본 상태로 TerminalSurface 생성.
+    pub fn new() -> Self {
+        Self {
+            state: TerminalState::default(),
+            font: FontMetrics::default(),
+            selection: None,
+            cursor_visible: true,
+        }
+    }
+
+    /// 폰트 메트릭을 갱신한다 (GPUI font system 에서 호출).
+    pub fn set_font_metrics(&mut self, metrics: FontMetrics) {
+        self.font = metrics;
+    }
+
+    /// PTY stdout 출력 바이트를 처리한다 (T3 완료 후 PtyEvent::Output 으로 전환).
+    ///
+    /// AC-T-6: cx.notify() 호출로 content_area re-render 트리거.
+    pub fn on_output(&mut self, bytes: &[u8], cx: &mut Context<Self>) {
+        // TODO(T5): VtTerminal::feed(bytes) → render_state() → snapshot 갱신
+        self.state.total_bytes += bytes.len();
+        // 첫 번째 줄 텍스트 업데이트 (ASCII 안전 부분만 표시)
+        let ascii: String = bytes
+            .iter()
+            .filter(|b| b.is_ascii_graphic() || **b == b' ')
+            .map(|b| *b as char)
+            .collect();
+        if !ascii.is_empty() {
+            self.state.row0_text = ascii;
+        }
+        cx.notify();
+    }
+
+    /// shell 종료를 처리한다 (T3 완료 후 PtyEvent::ProcessExit 으로 전환).
+    pub fn on_process_exit(&mut self, exit_code: i32) {
+        tracing::info!(exit_code, "TerminalSurface: shell 종료");
+    }
+
+    /// 픽셀 좌표 → 셀 좌표 변환 (SPEC-V3-002 RG-V3-002-5).
+    ///
+    /// @MX:NOTE: font-metric-coord-mapping
+    /// 반환값: (row: u16, col: u16) — 0-indexed.
+    /// 음수 입력은 0 으로 처리된다.
+    pub fn pixel_to_cell(&self, x: f32, y: f32) -> (u16, u16) {
+        let col = if x <= 0.0 {
+            0
+        } else {
+            (x / self.font.advance_width).floor() as u16
+        };
+        let row = if y <= 0.0 {
+            0
+        } else {
+            (y / self.font.line_height).floor() as u16
+        };
+        (row, col)
+    }
+
+    /// 마우스 드래그 시작 — 선택 영역 초기화.
+    pub fn begin_selection(&mut self, x: f32, y: f32) {
+        let cell = self.pixel_to_cell(x, y);
+        self.selection = Some(Selection {
+            start: cell,
+            end: cell,
+        });
+    }
+
+    /// 마우스 드래그 업데이트 — 선택 종료 셀 갱신.
+    pub fn update_selection(&mut self, x: f32, y: f32) {
+        // pixel_to_cell 먼저 계산 후 &mut self.selection 획득 (borrow checker 충족)
+        let cell = self.pixel_to_cell(x, y);
+        if let Some(sel) = &mut self.selection {
+            sel.end = cell;
+        }
+        // begin_selection 없이 update 는 selection 을 생성하지 않는다.
+    }
+
+    /// 마우스 버튼 업 — 선택 확정.
+    pub fn end_selection(&mut self, x: f32, y: f32) {
+        self.update_selection(x, y);
+    }
+
+    /// 선택 영역 초기화.
+    pub fn clear_selection(&mut self) {
+        self.selection = None;
+    }
+
+    /// 현재 선택 영역의 텍스트를 반환한다 (클립보드 복사용).
+    ///
+    /// T5 에서: Grid<Cell> 을 순회하여 실제 텍스트를 추출한다.
+    pub fn selection_text(&self) -> Option<String> {
+        self.selection.as_ref().map(|_| {
+            // TODO(T5): Grid 기반 텍스트 추출
+            self.state.row0_text.clone()
+        })
+    }
+}
+
+impl Default for TerminalSurface {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ============================================================
+// GPUI Render 구현
+// ============================================================
+
+impl Render for TerminalSurface {
+    /// TerminalSurface 렌더 — T4 플레이스홀더.
+    ///
+    /// T5/T6 에서 실제 Grid<Cell> → Glyph 렌더로 교체한다.
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        let cursor_info = format!(
+            "cursor ({}, {}) | bytes={} | {}",
+            self.state.cursor_row,
+            self.state.cursor_col,
+            self.state.total_bytes,
+            self.state.row0_text,
+        );
+
+        let mut area = div()
+            .size_full()
+            .bg(rgb(0x1a1a1a)) // 터미널 배경색 (design token 은 T5 에서 연동)
+            .flex()
+            .flex_col()
+            .p_2();
+
+        // 선택 영역 하이라이트 표시 (T6 에서 paint_quad 기반 반투명 렌더로 교체)
+        if let Some(sel) = &self.selection {
+            let ((r1, c1), (r2, c2)) = sel.bounding_rect();
+            let sel_info = format!("sel ({r1},{c1})→({r2},{c2})");
+            area = area.child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(0x88ccff))
+                    .bg(rgb(0x2244aa))
+                    .child(sel_info),
+            );
+        }
+
+        // 커서 위치 + 첫 번째 행 텍스트 표시 (T5 에서 실제 셀 그리드로 교체)
+        area.child(div().text_sm().text_color(rgb(0xd4d4d4)).child(cursor_info))
+            .child(
+                // 커서 표시 (blink 는 T5 에서 GPUI timer 기반으로 구현)
+                div().w(px(8.)).h(px(16.)).bg(rgb(if self.cursor_visible {
+                    0xd4d4d4
+                } else {
+                    0x1a1a1a
+                })),
+            )
+    }
+}
+
+// ============================================================
+// 유닛 테스트 — TerminalSurface 상태 로직 (GPUI 렌더 제외)
+// ============================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- pixel_to_cell 테스트 (SPEC-V3-002 RG-V3-002-5, plan.md T5 §예상산출) ---
+
+    #[test]
+    fn pixel_to_cell_origin_maps_to_row0_col0() {
+        let surface = TerminalSurface::new();
+        assert_eq!(surface.pixel_to_cell(0.0, 0.0), (0, 0));
+    }
+
+    #[test]
+    fn pixel_to_cell_within_first_cell_stays_at_0_0() {
+        let surface = TerminalSurface::new();
+        // advance_width=8, line_height=16 — (7.9, 15.9) 는 여전히 (0, 0)
+        assert_eq!(surface.pixel_to_cell(7.9, 15.9), (0, 0));
+    }
+
+    #[test]
+    fn pixel_to_cell_at_column_boundary_advances_column() {
+        let surface = TerminalSurface::new();
+        // x=8.0 → col=1 (정확히 경계)
+        assert_eq!(surface.pixel_to_cell(8.0, 0.0), (0, 1));
+    }
+
+    #[test]
+    fn pixel_to_cell_at_row_boundary_advances_row() {
+        let surface = TerminalSurface::new();
+        // y=16.0 → row=1
+        assert_eq!(surface.pixel_to_cell(0.0, 16.0), (1, 0));
+    }
+
+    #[test]
+    fn pixel_to_cell_multi_cell_mapping() {
+        let surface = TerminalSurface::new();
+        // (80.0, 160.0) → col=10, row=10
+        assert_eq!(surface.pixel_to_cell(80.0, 160.0), (10, 10));
+    }
+
+    #[test]
+    fn pixel_to_cell_fractional_within_cell() {
+        let surface = TerminalSurface::new();
+        // (8.5, 16.5) → col=1, row=1 (소수점 버림)
+        assert_eq!(surface.pixel_to_cell(8.5, 16.5), (1, 1));
+    }
+
+    #[test]
+    fn pixel_to_cell_custom_font_metrics() {
+        let mut surface = TerminalSurface::new();
+        surface.font = FontMetrics {
+            advance_width: 10.0,
+            line_height: 20.0,
+        };
+        // (25.0, 45.0) → col=2 (25/10=2.5→2), row=2 (45/20=2.25→2)
+        assert_eq!(surface.pixel_to_cell(25.0, 45.0), (2, 2));
+    }
+
+    #[test]
+    fn pixel_to_cell_negative_x_clamps_to_0() {
+        let surface = TerminalSurface::new();
+        assert_eq!(surface.pixel_to_cell(-5.0, 0.0), (0, 0));
+    }
+
+    #[test]
+    fn pixel_to_cell_negative_y_clamps_to_0() {
+        let surface = TerminalSurface::new();
+        assert_eq!(surface.pixel_to_cell(0.0, -8.0), (0, 0));
+    }
+
+    // --- Selection 테스트 ---
+
+    #[test]
+    fn selection_bounding_rect_normal_direction() {
+        let sel = Selection {
+            start: (1, 2),
+            end: (3, 5),
+        };
+        assert_eq!(sel.bounding_rect(), ((1, 2), (3, 5)));
+    }
+
+    #[test]
+    fn selection_bounding_rect_reverse_direction() {
+        // 역방향 드래그 — 정규화 확인
+        let sel = Selection {
+            start: (3, 5),
+            end: (1, 2),
+        };
+        assert_eq!(sel.bounding_rect(), ((1, 2), (3, 5)));
+    }
+
+    #[test]
+    fn selection_bounding_rect_same_row_different_col() {
+        let sel = Selection {
+            start: (2, 5),
+            end: (2, 1),
+        };
+        assert_eq!(sel.bounding_rect(), ((2, 1), (2, 5)));
+    }
+
+    #[test]
+    fn selection_is_collapsed_when_start_equals_end() {
+        let sel = Selection {
+            start: (2, 4),
+            end: (2, 4),
+        };
+        assert!(sel.is_collapsed());
+        assert_eq!(sel.bounding_rect(), ((2, 4), (2, 4)));
+    }
+
+    #[test]
+    fn selection_not_collapsed_when_different() {
+        let sel = Selection {
+            start: (0, 0),
+            end: (1, 1),
+        };
+        assert!(!sel.is_collapsed());
+    }
+
+    // --- TerminalSurface 상태 전환 테스트 ---
+
+    #[test]
+    fn terminal_surface_initial_state_no_selection() {
+        let surface = TerminalSurface::new();
+        assert!(surface.selection.is_none());
+        assert!(surface.cursor_visible);
+        assert_eq!(surface.state.total_bytes, 0);
+    }
+
+    #[test]
+    fn terminal_surface_begin_selection_creates_collapsed_selection() {
+        let mut surface = TerminalSurface::new();
+        // (16.0, 32.0) → font 8×16 → col=2, row=2
+        surface.begin_selection(16.0, 32.0);
+        let sel = surface.selection.as_ref().unwrap();
+        assert_eq!(sel.start, (2, 2));
+        assert_eq!(sel.end, (2, 2));
+        assert!(sel.is_collapsed());
+    }
+
+    #[test]
+    fn terminal_surface_update_selection_extends_end_cell() {
+        let mut surface = TerminalSurface::new();
+        surface.begin_selection(0.0, 0.0); // (0, 0)
+        surface.update_selection(40.0, 16.0); // col=5, row=1
+        let sel = surface.selection.as_ref().unwrap();
+        assert_eq!(sel.start, (0, 0));
+        assert_eq!(sel.end, (1, 5));
+    }
+
+    #[test]
+    fn terminal_surface_clear_selection_removes_selection() {
+        let mut surface = TerminalSurface::new();
+        surface.begin_selection(0.0, 0.0);
+        surface.clear_selection();
+        assert!(surface.selection.is_none());
+    }
+
+    #[test]
+    fn terminal_surface_update_without_begin_is_noop() {
+        let mut surface = TerminalSurface::new();
+        // begin_selection 없이 update → selection 생성 금지
+        surface.update_selection(100.0, 100.0);
+        assert!(surface.selection.is_none());
+    }
+
+    #[test]
+    fn terminal_surface_end_selection_finalizes() {
+        let mut surface = TerminalSurface::new();
+        surface.begin_selection(0.0, 0.0);
+        surface.end_selection(24.0, 32.0); // col=3, row=2
+        let sel = surface.selection.as_ref().unwrap();
+        assert_eq!(sel.start, (0, 0));
+        assert_eq!(sel.end, (2, 3));
+    }
+
+    #[test]
+    fn terminal_surface_default_font_metrics_are_8x16() {
+        let surface = TerminalSurface::new();
+        assert_eq!(surface.font.advance_width, 8.0);
+        assert_eq!(surface.font.line_height, 16.0);
+    }
+
+    #[test]
+    fn terminal_surface_set_font_metrics_updates_pixel_mapping() {
+        let mut surface = TerminalSurface::new();
+        surface.set_font_metrics(FontMetrics {
+            advance_width: 12.0,
+            line_height: 24.0,
+        });
+        // (24.0, 48.0) → col=2, row=2
+        assert_eq!(surface.pixel_to_cell(24.0, 48.0), (2, 2));
+    }
+}

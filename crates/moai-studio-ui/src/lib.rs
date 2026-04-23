@@ -1,6 +1,7 @@
 //! MoAI Studio UI 컴포넌트 라이브러리.
 //!
 //! Phase 1.6 (SPEC-V3-001 RG-V3-2) — Sidebar workspace 리스트 + active 하이라이트.
+//! Phase 2 (SPEC-V3-002 T4) — TerminalSurface content_area 분기 추가.
 //!
 //! ## 설계
 //! - `run_app(workspaces)` 이 유일한 엔트리. `moai-studio-app` 바이너리가 호출.
@@ -10,10 +11,13 @@
 //!   - Sidebar 260pt (좌측, workspace 리스트) + Body (가변, 우측)
 //!   - StatusBar 28pt (하단)
 //! - Empty state CTA 는 workspaces 가 비었을 때만 body 에 표시
+//! - TerminalSurface 가 Some 이면 content_area 는 빈 상태 대신 터미널을 렌더한다.
+
+pub mod terminal;
 
 use gpui::{
-    App, Application, Context, IntoElement, MouseButton, ParentElement, Render, Styled, Window,
-    WindowOptions, div, prelude::*, px, rgb, size,
+    App, Application, Context, Entity, IntoElement, MouseButton, ParentElement, Render, Styled,
+    Window, WindowOptions, div, prelude::*, px, rgb, size,
 };
 use moai_studio_workspace::{Workspace, WorkspacesStore};
 use std::path::PathBuf;
@@ -61,10 +65,14 @@ pub mod tokens {
 // ============================================================
 
 /// 앱 전역 상태 — Phase 1.7: workspace 리스트 + active id + storage path (버튼 클릭 시 재로드).
+/// Phase 2 (SPEC-V3-002 T4): terminal 필드 추가 — content_area TerminalSurface 분기.
 pub struct RootView {
     pub workspaces: Vec<Workspace>,
     pub active_id: Option<String>,
     pub storage_path: PathBuf,
+    /// Phase 2 (SPEC-V3-002 T4): 활성 TerminalSurface — None 이면 empty/placeholder 렌더.
+    /// AC-T-6: 사용자가 TerminalSurface 생성 트리거 시 Some 으로 전환.
+    pub terminal: Option<Entity<terminal::TerminalSurface>>,
 }
 
 impl RootView {
@@ -78,6 +86,7 @@ impl RootView {
             workspaces,
             active_id,
             storage_path,
+            terminal: None,
         }
     }
 
@@ -171,13 +180,15 @@ impl Render for RootView {
                 )
             })
             .collect();
+        // Phase 2 (SPEC-V3-002 T4): TerminalSurface View 를 main_body 에 전달.
+        let terminal = self.terminal.clone();
         div()
             .flex()
             .flex_col()
             .size_full()
             .bg(rgb(tokens::BG_BASE))
             .child(title_bar(self.title_label()))
-            .child(main_body(&self.workspaces, rows, new_ws_btn))
+            .child(main_body(&self.workspaces, rows, new_ws_btn, terminal))
             .child(status_bar())
     }
 }
@@ -276,6 +287,7 @@ fn main_body(
     workspaces: &[Workspace],
     rows: Vec<gpui::Stateful<gpui::Div>>,
     new_ws_btn: impl IntoElement,
+    terminal: Option<Entity<terminal::TerminalSurface>>,
 ) -> impl IntoElement {
     let is_empty = workspaces.is_empty();
     div()
@@ -284,7 +296,7 @@ fn main_body(
         .flex_grow()
         .w_full()
         .child(sidebar(is_empty, rows, new_ws_btn))
-        .child(content_area(is_empty))
+        .child(content_area(is_empty, terminal))
 }
 
 /// Sidebar 260pt — WORKSPACE + GIT WORKTREES + SPECs 섹션 + 하단 인터랙티브 "+ New Workspace".
@@ -389,27 +401,39 @@ fn workspace_row(ws: &Workspace, is_active: bool) -> gpui::Stateful<gpui::Div> {
         .child(div().text_sm().text_color(rgb(fg)).child(ws.name.clone()))
 }
 
-/// 컨텐츠 영역 — workspace 가 비었을 때만 Empty State CTA 표시.
-fn content_area(show_empty_state: bool) -> impl IntoElement {
+/// 컨텐츠 영역 — SPEC-V3-002 T4 분기.
+///
+/// 우선순위 (SPEC-V3-002 RG-V3-002-4 AC-T-6):
+///   1. terminal 이 Some 이면 TerminalSurface 렌더 (첫 셀부터 시작)
+///   2. show_empty_state 이면 Empty State CTA 렌더
+///   3. 그 외 (workspace 선택 but terminal 없음) 플레이스홀더 렌더
+fn content_area(
+    show_empty_state: bool,
+    terminal: Option<Entity<terminal::TerminalSurface>>,
+) -> impl IntoElement {
     let mut area = div()
         .flex()
         .flex_col()
         .flex_grow()
         .h_full()
-        .bg(rgb(tokens::BG_BASE))
-        .justify_center()
-        .items_center()
-        .gap_4()
-        .px_12();
-    if show_empty_state {
+        .bg(rgb(tokens::BG_BASE));
+
+    if let Some(t) = terminal {
+        // AC-T-6: active workspace + TerminalSurface 존재 시 TerminalSurface 렌더.
+        area = area.child(t);
+    } else if show_empty_state {
         area = area
+            .justify_center()
+            .items_center()
+            .gap_4()
+            .px_12()
             .child(empty_state_hero())
             .child(empty_state_primary_cta())
             .child(empty_state_secondary_cta_row())
             .child(empty_state_tip());
     } else {
-        // 워크스페이스 선택된 상태의 플레이스홀더 — Phase 2+ 에서 터미널/에디터로 대체.
-        area = area.child(
+        // workspace 선택 but TerminalSurface 미생성 — Phase 2 전환 대기 상태.
+        area = area.justify_center().items_center().child(
             div()
                 .text_sm()
                 .text_color(rgb(tokens::FG_MUTED))
@@ -674,5 +698,22 @@ mod tests {
         assert_eq!(view.workspaces.len(), 2);
         assert_eq!(view.active_id.as_deref(), Some(added.id.as_str()));
         assert_eq!(view.title_label(), "new-proj");
+    }
+
+    // --- Phase 2 (SPEC-V3-002 T4) 추가 테스트 ---
+
+    #[test]
+    fn root_view_terminal_is_none_by_default() {
+        // AC-T-6: 초기 상태에서 terminal 은 None (empty state 렌더)
+        let view = RootView::new(vec![], dummy_path());
+        assert!(view.terminal.is_none());
+    }
+
+    #[test]
+    fn root_view_with_workspaces_terminal_still_none() {
+        // 워크스페이스 존재해도 terminal 은 명시 생성 전까지 None
+        let ws = make_ws("proj", "1", 1_000);
+        let view = RootView::new(vec![ws], dummy_path());
+        assert!(view.terminal.is_none());
     }
 }
