@@ -67,11 +67,19 @@ jobs:
         with:
           key: v3-${{ matrix.platform.name }}
 
-      # TODO Phase 2 (SPEC-V3-002): Zig 0.15.x 설치 (libghostty-vt 빌드)
-      # - name: Install Zig
-      #   uses: mlugg/setup-zig@v1
-      #   with:
-      #     version: 0.15.1
+      # SPEC-V3-002 RG-V3-002-1 / AC-T-1 / AC-T-7: Zig 0.15.x 필수 (libghostty-vt 빌드)
+      - name: Install Zig 0.15.2
+        uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: 0.15.2
+
+      - name: Cache Zig toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/zig
+            ~/Library/Caches/zig
+          key: zig-0.15.2-${{ runner.os }}-${{ runner.arch }}
 
       # ============================================================
       # 4 품질 게이트 (SPEC-V3-001 RG-V3-4 AC-4.1)
@@ -136,3 +144,95 @@ jobs:
           ./target/release/moai-studio --scaffold 2>&1 | tee smoke.log
           grep -q "Scaffold OK" smoke.log || { echo "smoke: missing 'Scaffold OK'"; exit 1; }
           grep -q "moai-adk plugin: bundled" smoke.log || { echo "smoke: missing 'moai-adk plugin: bundled'"; exit 1; }
+
+      # SPEC-V3-002 AC-T-7: ghostty-spike --headless 스모크 (Zig + libghostty-vt 통합)
+      - name: Install Zig 0.15.2 (for terminal spike)
+        uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: 0.15.2
+
+      - name: Cache Zig toolchain (smoke)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/zig
+            ~/Library/Caches/zig
+          key: zig-0.15.2-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Run terminal spike (headless)
+        # AC-T-7: PR 시 cargo run --example ghostty-spike -- --headless 스모크.
+        # Zig 캐시 hit 시 스모크 전체 wall-clock ≤ 5분 (AC-T-7 목표).
+        run: |
+          cargo run -p moai-studio-terminal --example ghostty-spike --quiet -- --headless 2>&1 | tee terminal-smoke.log
+          grep -q "Scaffold OK" terminal-smoke.log || { echo "terminal-smoke: missing 'Scaffold OK'"; exit 1; }
+
+  # ============================================================
+  # SPEC-V3-002 AC-T-11: pin-policy-guard
+  # - libghostty-rs rev 변경 시 characterization 재실행 + HISTORY SHA 검증 + wrapper scope 라벨링
+  # ============================================================
+  pin-policy-guard:
+    name: SPEC-V3-002 Pin Policy Guard
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect libghostty-rs rev change
+        id: detect
+        run: |
+          # PR base 에서 현재 HEAD 까지 Cargo.toml 의 rev 변경 여부 확인
+          if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q '^crates/moai-studio-terminal/Cargo.toml$'; then
+            if git diff origin/${{ github.base_ref }}...HEAD -- crates/moai-studio-terminal/Cargo.toml | grep -qE '^[+-].*rev\s*='; then
+              echo "rev_changed=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "rev_changed=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "rev_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Rust toolchain
+        if: steps.detect.outputs.rev_changed == 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Zig 0.15.2
+        if: steps.detect.outputs.rev_changed == 'true'
+        uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: 0.15.2
+
+      - name: Install Linux system deps
+        if: steps.detect.outputs.rev_changed == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libwayland-dev libfontconfig1-dev \
+            libssl-dev pkg-config
+
+      # AC-T-11 (i): libghostty_api_compat 재실행 (characterization)
+      - name: Run libghostty_api_compat characterization
+        if: steps.detect.outputs.rev_changed == 'true'
+        run: cargo test -p moai-studio-terminal --test libghostty_api_compat
+
+      # AC-T-11 (ii): spec.md HISTORY 에 old + new SHA 둘 다 포함 검증
+      - name: Check HISTORY SHA coverage
+        if: steps.detect.outputs.rev_changed == 'true'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: bash scripts/ci/check-history-sha.sh
+
+      # AC-T-11 (iii): wrapper 외 파일 변경 시 annotation-cycle-required 라벨 부착 (non-blocking)
+      - name: Check wrapper scope
+        if: steps.detect.outputs.rev_changed == 'true'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/ci/check-wrapper-scope.sh
