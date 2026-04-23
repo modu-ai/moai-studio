@@ -8,7 +8,7 @@
 pub mod clipboard;
 pub mod input;
 
-use gpui::{Context, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb};
+use gpui::{Context, IntoElement, Keystroke, ParentElement, Render, Styled, Window, div, px, rgb};
 
 // ============================================================
 // 폰트 메트릭 — pixel_to_cell 계산 기준
@@ -107,6 +107,11 @@ pub struct TerminalSurface {
     pub selection: Option<Selection>,
     /// 커서 blink 표시 여부
     pub cursor_visible: bool,
+    /// PTY stdin writer — T6(ghostty-spike) 에서 실제 PTY sender 로 교체.
+    ///
+    /// @MX:TODO: T6 에서 tokio::sync::mpsc::UnboundedSender<Vec<u8>> 로 교체.
+    ///   현재는 pending 바이트를 버퍼에 쌓고 inspector 가 drain 한다.
+    pub pending_input: Vec<u8>,
 }
 
 impl TerminalSurface {
@@ -117,6 +122,7 @@ impl TerminalSurface {
             font: FontMetrics::default(),
             selection: None,
             cursor_visible: true,
+            pending_input: Vec::new(),
         }
     }
 
@@ -204,6 +210,42 @@ impl TerminalSurface {
             // TODO(T5): Grid 기반 텍스트 추출
             self.state.row0_text.clone()
         })
+    }
+
+    /// GPUI key down 이벤트 처리 — ANSI 인코딩 → pending_input 에 버퍼링.
+    ///
+    /// 우선순위:
+    ///   1. 클립보드 복사 (Cmd+C / Ctrl+Shift+C) — arboard 복사 후 return
+    ///   2. SIGINT (Ctrl+C, 선택 없음) — 0x03 버퍼링
+    ///   3. 일반 키 — ANSI encoding → 버퍼링
+    ///
+    /// T6 에서: pending_input → PTY stdin writer 로 직접 전송.
+    pub fn handle_key_down(&mut self, keystroke: &Keystroke, cx: &mut Context<Self>) {
+        use crate::terminal::input::{is_clipboard_copy, keystroke_to_ansi_bytes};
+
+        // 1. 클립보드 복사 단축키 (Cmd+C / Ctrl+Shift+C)
+        if is_clipboard_copy(keystroke) {
+            if let Some(text) = self.selection_text() {
+                match clipboard::copy_to_clipboard(&text) {
+                    Ok(()) => tracing::debug!("클립보드 복사 완료: {} chars", text.len()),
+                    Err(e) => tracing::warn!("클립보드 복사 실패: {e}"),
+                }
+            }
+            return; // PTY stdin 전송하지 않음
+        }
+
+        // 2~3. ANSI encoding → pending_input 버퍼
+        if let Some(bytes) = keystroke_to_ansi_bytes(keystroke) {
+            self.pending_input.extend_from_slice(&bytes);
+            cx.notify();
+        }
+    }
+
+    /// pending_input 버퍼를 drain 하고 반환한다 (PTY 연결 후 호출).
+    ///
+    /// T6 에서 PTY stdin writer 연결 시 이 메서드로 버퍼 drain.
+    pub fn drain_pending_input(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.pending_input)
     }
 }
 
