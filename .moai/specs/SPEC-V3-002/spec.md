@@ -2,10 +2,10 @@
 
 ---
 id: SPEC-V3-002
-version: 1.0.0
-status: draft
+version: 1.1.0
+status: completed
 created: 2026-04-21
-updated: 2026-04-21
+updated: 2026-04-23
 author: MoAI (manager-spec, fresh rewrite per user directive)
 priority: High
 issue_number: 0
@@ -19,6 +19,7 @@ rescope_from: SPEC-V3-001 RG-V3-3
 |------|------|------|
 | 1.0.0 | 2026-04-21 | SPEC-V3-001 RG-V3-3 rescope 이후 처음 작성. research.md 의 12개 결정점을 EARS 요구사항 6개 그룹으로 정식화. 이전 stub/draft 파일을 전량 폐기하고 신규 버전으로 대체. |
 | 1.0.0-approved | 2026-04-21 | Annotation Cycle iter 1 PASS. 오케스트레이터 AskUserQuestion 으로 4건 공식 승인: (1) libghostty-rs SHA dfac6f3e pin + 월 1회 bump + AC-T-11 CI gate, (2) workspace MSRV 1.85 → 1.93 상향은 Phase 2 Run 첫 cargo check 실증, (3) OSC 52 는 Phase 3 이관, (4) Windows ConPTY 는 compile_error! + trybuild 단일 enforcement. Plan Phase 종결, Run Phase 진입 가능. |
+| 1.1.0 | 2026-04-23 | Run Phase 완료 + Sync. Team mode (terminal-core + terminal-ui + ci-engineer) 로 11 AC 중 9 완전 충족 + 2 부분 (AC-T-3 non-headless PTY 실연동, AC-T-9 1MB burst 실측은 후속 SPEC 이관). feat/v3-scaffold 에 5 commit 누적 (fa24281 T4, a602264 T5, 3962f95 T6, 34cb052 T1~T3/T7/T8, 3219361 T9). 품질: cargo test 74 passed (terminal 14 + ui 60), clippy 0, fmt clean, ghostty-spike --headless "Scaffold OK". MX 태그 17개 (ANCHOR/NOTE/WARN/TODO/REASON). Status: draft → completed. |
 
 ---
 
