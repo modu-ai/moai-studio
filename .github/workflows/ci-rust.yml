@@ -44,6 +44,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # SPEC-V3-002 AC-T-7: Linux runner 디스크 청소 (~14GB 확보).
+      # Zig 0.15.2 toolchain + libghostty-vt 빌드 산출물 + gpui + criterion + trybuild 가
+      # 누적되어 기본 14GB 공간으로 부족 (ld linking 시 "No space left on device").
+      # 불필요한 Android SDK / Haskell / dotnet / CodeQL 삭제.
+      - name: Free disk space (Linux)
+        if: matrix.platform.runner == 'ubuntu-22.04'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
+                      "$AGENT_TOOLSDIRECTORY/Ruby" "$AGENT_TOOLSDIRECTORY/Python" \
+                      /usr/local/.ghcup || true
+          sudo apt-get clean
+          df -h /
+
       - name: Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -118,6 +132,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # SPEC-V3-002 AC-T-7: Linux runner 디스크 청소 (rust job 과 동일 사유)
+      - name: Free disk space (Linux)
+        if: matrix.platform.runner == 'ubuntu-22.04'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
+                      "$AGENT_TOOLSDIRECTORY/Ruby" "$AGENT_TOOLSDIRECTORY/Python" \
+                      /usr/local/.ghcup || true
+          sudo apt-get clean
+          df -h /
+
       - uses: dtolnay/rust-toolchain@stable
 
       # GPUI 링크에 필요한 Linux system lib (rust job 과 동일).
