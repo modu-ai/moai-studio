@@ -1,0 +1,5 @@
+error[E0599]: no method named `spawn` found for struct `ConPtyStub` in the current scope
+  --> tests/compile_fail/conpty_spawn.rs:19:18
+   |
+19 |     let _ = stub.spawn(); // 의도적 compile error
+   |                  ^^^^^ method not found in `ConPtyStub`
