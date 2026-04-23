@@ -25,3 +25,7 @@ moai-studio-terminal = { path = "../moai-studio-terminal" }
 # Phase 2 (SPEC-V3-002 T4/T5): arboard 3.0 로컬 클립보드
 # (macOS NSPasteboard / Linux X11·Wayland, SPEC-V3-002 RG-V3-002-4).
 arboard = "3.0"
+
+[[example]]
+name = "ghostty-spike"
+path = "examples/ghostty_spike.rs"
