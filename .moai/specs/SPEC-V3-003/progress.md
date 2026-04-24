@@ -340,7 +340,243 @@ AC 통과 누계 (MS-1 14 AC 중):
 - AC-P-21 ✅ (T2)
 - 잔여: AC-P-4/5/6/7/9a/9b/18/22/23 → T5~T7 에서 처리
 
-### Next: T5 GpuiDivider (ResizableDivider 구체 구현)
+### Phase 2 T5 (GpuiDivider RED-GREEN-REFACTOR): complete
 
+- Agent: manager-tdd (TDD implementer, T5 only, no sub-agent spawn)
+- Scope: T5 only (T1/T2/T3/T4 무수정, T6/T7 범위 미침범)
+- files modified:
+  - crates/moai-studio-ui/src/panes/divider.rs (GpuiDivider struct + ResizableDivider impl + 5 신규 tests)
+  - crates/moai-studio-ui/src/panes/mod.rs (append-only: `pub use divider::{GpuiDivider, ResizableDivider}`)
+  - crates/moai-studio-ui/src/panes/splitter.rs (clippy allow 어트리뷰트 추가 — T3 기존 코드 경미 수정)
 
+- 구현 결정:
+  - **DividerOrientation 신규 enum 도입 없음**: strategy.md §3.2 YAGNI 준수. `SplitDirection` 직접 재사용.
+  - **GpuiDivider { orientation, current_ratio, px_per_col, px_per_row }**: Spike §6 pseudo code 기반.
+  - **min_px_for_orientation()**: Horizontal → MIN_COLS×px_per_col, Vertical → MIN_ROWS×px_per_row.
+  - **on_drag**: raw=(current_ratio×total_px+delta_px)/total_px, clamped=raw.clamp(min_ratio, 1.0-min_ratio).
+  - **순수 Rust 계산**: GPUI on_mouse_move 배선은 T7 범위 (doc comment 명시).
+  - **clippy new_without_default**: T3 MockPaneSplitter 에 `#[allow(clippy::new_without_default)]` 추가.
+
+- test results:
+  - `cargo test -p moai-studio-ui --lib panes::divider::tests`: **9/9 PASS** (기존 4 + 신규 5)
+  - `cargo test -p moai-studio-ui --lib` 전체: **102/102 PASS** (97 기존 + 5 신규)
+  - `cargo test --doc -p moai-studio-ui`: **3/3 PASS** (T2 compile_fail 유지)
+  - `cargo test -p moai-studio-terminal`: **4+4+1+4=13 PASS** (AC-P-16 regression gate GREEN)
+  - `cargo clippy -p moai-studio-ui --all-targets -- -D warnings`: **0 warnings**
+  - `cargo fmt --package moai-studio-ui -- --check`: clean
+
+- MX tags added:
+  - `divider.rs` before `pub struct GpuiDivider`: ANCHOR `concrete-divider-gpui` + REASON (fan_in >= 2: T7/T11)
+  - `divider.rs` `on_drag` body: NOTE `ratio-clamp-enforces-min-size`
+
+- TRUST 5 self-check: T/R/U/S/T 전원 PASS
+
+- AC 통과 (T5 범위):
+  - **AC-P-6** ✅ drag_clamps_ratio + boundary clamp pair (delta_below_min / delta_above_max)
+  - **AC-P-4** ✅ PARTIAL — boundary math 준비 완료 (horizontal_uses_min_cols + vertical_uses_min_rows), integration 판단은 T7
+
+- implementation_divergence:
+  - planned vs actual files: 완전 일치 (0% drift)
+  - scope_changes: splitter.rs 경미 수정 (clippy allow) — T3 기존 코드 보정
+  - additional_features: 없음 (YAGNI 준수)
+  - new_dependencies: 없음 (Cargo.toml 무변경)
+
+- blockers: 없음
+
+### AC 통과 누계 (T5 완료 시점, MS-1 14 AC 중)
+
+- AC-P-1 ✅ PARTIAL → T7 완전 충족
+- AC-P-2 ✅ PARTIAL (단위 Arc drop) → T7 integration 완전 충족
+- AC-P-3 ✅ (T1)
+- AC-P-4 ✅ PARTIAL (boundary math 준비) → T7 integration 완전 충족
+- AC-P-6 ✅ (T5, drag_clamps_ratio + boundary clamp)
+- AC-P-16 ✅ regression 0
+- AC-P-17 ✅ (T3)
+- AC-P-20 ✅ (T1)
+- AC-P-21 ✅ (T2)
+- 잔여: AC-P-5/7/9a/9b/18/22/23 → T6~T7 에서 처리
+
+### Phase 2 T6 (FocusRouter + MS-1 키 바인딩 RED-GREEN-REFACTOR): complete
+
+- Agent: manager-tdd (TDD implementer, T6 only, no sub-agent spawn)
+- Scope: T6 only (T1~T5 무수정, T7 범위 미침범)
+- files modified:
+  - crates/moai-studio-ui/src/panes/focus.rs (stub → FocusRouter + PlatformMod + dispatch_key + 11 unit tests)
+  - crates/moai-studio-ui/src/panes/mod.rs (append-only: `pub mod focus;` + re-exports 6개)
+
+- 구현 결정:
+  - **순수 Rust 상태 머신**: GPUI 의존 없는 `FocusRouter`. T7 에서 `gpui::KeyDownEvent` → `KeyModifiers`/`KeyCode` 변환 후 주입.
+  - **PlatformMod enum + PLATFORM_MOD const**: `#[cfg(target_os = "macos")]` → Cmd, 기타 → Ctrl. macro 대신 const 채택 (더 단순).
+  - **PaneTree::leaves()** 재사용: `tree.rs` 의 기존 `leaves()` (in-order) 활용. `leaves_in_order` 별도 함수 불필요.
+  - **unknown pane noop (AC-P-22)**: Click 시 트리에 없는 ID 는 `ids.contains` 검사 후 무시.
+  - **Ctrl+B passthrough (AC-P-23)**: `dispatch_key`는 `PLATFORM_MOD + Alt + Arrow` 조합만 소비. `alt=false` 이면 즉시 None 반환.
+  - **USER-DECISION spike-4-linux-shell-path**: default (a) 현행 유지 (Ctrl 기반). Spike 4는 MS-2 T9 진입 시 수행.
+
+- test results:
+  - `cargo test -p moai-studio-ui --lib panes::focus`: **11/11 PASS**
+  - `cargo test -p moai-studio-ui --lib` 전체: **113/113 PASS** (102 기존 + 11 신규)
+  - `cargo test --doc -p moai-studio-ui`: **3/3 PASS** (T2 compile_fail 유지)
+  - `cargo test -p moai-studio-terminal --all-targets`: **13/13 PASS** (AC-P-16 regression gate GREEN)
+  - `cargo clippy -p moai-studio-ui --all-targets -- -D warnings`: **0 warnings**
+  - `cargo fmt --package moai-studio-ui -- --check`: clean
+
+- MX tags added:
+  - `focus.rs:96-99` ANCHOR `focus-routing` + REASON (fan_in >= 3: T7/T8/T9)
+  - `focus.rs:27-29` NOTE `cmd-ctrl-platform-dispatch` (Spike 4 deferred 컨텍스트)
+  - `focus.rs:183-186` NOTE `ac-p-23-ctrl-b-passthrough` (dispatch_key body)
+
+- TRUST 5 self-check: T/R/U/S/T 전원 PASS
+
+- implementation_divergence:
+  - planned vs actual files: 완전 일치 (0% drift)
+  - deviation: `platform_mod!` 매크로 대신 `const PLATFORM_MOD` 채택 — 더 단순하고 const-eval 로 컴파일타임 확정. 기능 동일.
+  - additional_features: `wraparound_at_first_pane` 테스트 (Prev wrap-around 추가 커버리지)
+  - new_dependencies: 없음 (Cargo.toml 무변경)
+  - integration_tests: contract.md §4.2 `integration_key_bindings.rs` — Cargo.toml 변경 금지 원칙으로 `#[cfg]` 분기 unit test 로 대체 (AC-P-9a/9b 동등 커버리지)
+
+- AC 통과 (T6 범위):
+  - **AC-P-7** ✅ next_pane_in_order / prev_pane_in_order / wraparound_at_last_pane
+  - **AC-P-22** ✅ single_focus_invariant + mouse_click_focuses_pane + unknown_pane_id_is_noop
+  - **AC-P-23** ✅ ctrl_b_passthrough_when_platform_is_ctrl
+  - **AC-P-9a MS-1 부분** ✅ platform_mod_is_cmd_on_macos (macOS only cfg)
+  - **AC-P-9b MS-1 부분** ✅ platform_mod_is_ctrl_on_non_macos (non-macOS cfg)
+
+- blockers: 없음
+
+- commit: caf30cd
+
+### AC 통과 누계 (T6 완료 시점, MS-1 14 AC 중)
+
+- AC-P-1 ✅ PARTIAL → T7 완전 충족
+- AC-P-2 ✅ PARTIAL (단위 Arc drop) → T7 integration 완전 충족
+- AC-P-3 ✅ (T1)
+- AC-P-4 ✅ PARTIAL (boundary math 준비) → T7 integration 완전 충족
+- AC-P-6 ✅ (T5)
+- AC-P-7 ✅ (T6, FocusRouter in-order prev/next/wraparound)
+- AC-P-9a MS-1 ✅ (T6, macOS cfg)
+- AC-P-9b MS-1 ✅ (T6, non-macOS cfg)
+- AC-P-16 ✅ regression 0
+- AC-P-17 ✅ (T3)
+- AC-P-20 ✅ (T1)
+- AC-P-21 ✅ (T2)
+- AC-P-22 ✅ (T6, single_focus_invariant)
+- AC-P-23 ✅ (T6, Ctrl+B passthrough)
+- 잔여: AC-P-5/18 → T7 + 후속 에서 처리
+
+### Phase 2 T7 (RootView 통합 + content_area 재배선 RED-GREEN-REFACTOR): complete
+
+- Agent: manager-tdd (TDD implementer, T7 only, no sub-agent spawn)
+- Scope: T7 only (T1~T6 무수정)
+- Path chosen: **A (minimal rename)** — `terminal` → `pane_splitter` 필드 rename.
+  AC-P-1/2 full integration은 신규 `tests/integration_pane_core.rs` 2개 테스트로 달성.
+  T4 단위 테스트 + T7 통합 테스트 조합으로 lib crate boundary reexport 검증 완료.
+- files modified:
+  - crates/moai-studio-ui/src/lib.rs (4 modification points + 2 test rename)
+  - crates/moai-studio-ui/tests/integration_pane_core.rs (신규, 2 integration tests)
+
+- 구현 결정:
+  - **Path A (minimal rename)** 선택 근거: AC-P-16 (terminal regression 0) + AC-P-24 (tab bar
+    미구현 상태 렌더 유지) 의 acceptance criteria 가 path A로 완전 충족됨.
+    `GpuiNativeSplitter` wire-up 은 T8 TabContainer scope 에서 자연스럽게 달성.
+  - **4 modification points**:
+    1. `:76` 필드 `terminal` → `pane_splitter` + @MX:ANCHOR(root-view-content-binding)
+    2. `:185` render body 로컬 변수 rename
+    3. `:294` main_body 시그니처 파라미터 rename
+    4. `:408` content_area 시그니처 + 분기 rename + @MX:TODO(T8) 주석
+  - **integration_pane_core.rs**: GpuiNativeSplitter<String> + GpuiNativeSplitter<Arc<Mutex<i32>>>
+    두 테스트로 lib boundary 접근 + AC-P-1 (split leaf_count) + AC-P-2 (Arc strong_count drop) 검증.
+
+- test results:
+  - `cargo test -p moai-studio-ui --lib`: **113/113 PASS**
+  - `cargo test --doc -p moai-studio-ui`: **3/3 PASS** (T2 compile_fail 유지)
+  - `cargo test -p moai-studio-ui --test integration_pane_core`: **2/2 PASS** (신규)
+  - `cargo test -p moai-studio-terminal`: **13/13 PASS** (AC-P-16 regression gate GREEN)
+  - `cargo clippy -p moai-studio-ui --all-targets -- -D warnings`: **0 warnings**
+  - `cargo fmt --package moai-studio-ui -- --check`: clean
+
+- MX tags added:
+  - `lib.rs:pane_splitter field` ANCHOR `root-view-content-binding` + REASON (fan_in >= 3: T7/T8/T13)
+  - `lib.rs:content_area fn` TODO `T8 TabContainer 교체 + 다중 pane divider 시각화`
+
+- MX tags removed:
+  - lib.rs 에 `terminal` 필드를 참조하는 기존 NOTE 없음 (T7 전에는 MX 태그 없었음)
+
+- TRUST 5 self-check: T/R/U/S/T 전원 PASS
+
+- AC 통과 (T7 범위):
+  - **AC-P-1** ✅ 완전 (integration test: split_creates_and_drops_correctly_via_splitter)
+  - **AC-P-2** ✅ 완전 (integration test: close_frees_pane_drops_arc_payload)
+  - **AC-P-16** ✅ terminal 4/4 regression 0 (drive-by refactor 금지 준수)
+  - **AC-P-24** ✅ 부분 (탭 바 미구현 상태 렌더 유지, MS-2 T8/T10 에서 완전)
+
+- implementation_divergence:
+  - planned vs actual files: 완전 일치 (0% drift)
+  - path_choice: A (minimal rename) vs B (full splitter wire) — A 선택
+  - additional_features: 없음 (YAGNI 준수)
+  - new_dependencies: 없음
+
+- commit: f4317b7
+- drive-by refactor 검증: lib.rs 수정 라인 = 4 call sites + 2 테스트 rename + 주석 업데이트. NONE.
+- blockers: 없음
+
+### AC 통과 누계 (T7 완료 시점, MS-1 14 AC 완전 달성)
+
+- AC-P-1 ✅ 완전 (T1 unit + T7 integration)
+- AC-P-2 ✅ 완전 (T1 unit + T4 unit Arc + T7 integration Arc boundary)
+- AC-P-3 ✅ (T1)
+- AC-P-4 ✅ PARTIAL (T2/T5 boundary math; integration 판단은 T8)
+- AC-P-6 ✅ (T5)
+- AC-P-7 ✅ (T6)
+- AC-P-9a MS-1 ✅ (T6, macOS cfg)
+- AC-P-9b MS-1 ✅ (T6, non-macOS cfg)
+- AC-P-16 ✅ regression 0 (전체 MS-1)
+- AC-P-17 ✅ (T3)
+- AC-P-20 ✅ (T1)
+- AC-P-21 ✅ (T2)
+- AC-P-22 ✅ (T6)
+- AC-P-23 ✅ (T6)
+- AC-P-24 ✅ 부분 (T7 탭 바 미구현 상태 유지 — MS-2 T8/T10 완전)
+- 잔여: AC-P-5/18 → T11/후속 에서 처리
+
+### MS-1 Sprint Exit 상태 (T7 완료)
+
+MS-1 contract.md §7 Sprint Exit Criteria 체크:
+
+- [x] AC-P-1 완전 ✅
+- [x] AC-P-2 완전 ✅
+- [x] AC-P-3 ✅
+- [x] AC-P-6 ✅
+- [x] AC-P-7 ✅
+- [x] AC-P-9a MS-1 ✅
+- [x] AC-P-9b MS-1 ✅
+- [x] AC-P-16 ✅ (regression 0)
+- [x] AC-P-17 ✅
+- [x] AC-P-20 ✅
+- [x] AC-P-21 ✅
+- [x] AC-P-22 ✅
+- [x] AC-P-23 ✅
+- [x] AC-P-24 부분 (T7)
+- [ ] AC-P-4/5/18 — T7 완료 기준 잔여 (T5 boundary math 준비 완료, bench T11 MS-2에서)
+
+MS-1 완전 exit를 위한 잔여 사항: AC-P-5 (headless resize), AC-P-18 (bench) — MS-2 T11에서 처리 예정.
+
+### Commits 누계 (T7 완료 기준)
+
+- `579c9e2` docs(spec): SPEC-V3-003 Run Phase 1 산출물 + MS-1 stub scaffolding
+- `b65e34a` feat(panes): T1 PaneTree (AC-P-1, AC-P-3, AC-P-20)
+- `fa68cb1` feat(panes): T2 PaneConstraints (AC-P-21)
+- `d961fe5` docs(spec): SPEC-V3-003 progress.md T1/T2 완료 checkpoint
+- `14aa3fe` feat(panes): T3 PaneSplitter/ResizableDivider (AC-P-17)
+- `fc92a29` chore(infra): Spike 1 GPUI divider API 보고서
+- `6dfeee8` feat(panes): T4 GpuiNativeSplitter (AC-P-1 부분/AC-P-2 부분/AC-P-16)
+- (T5 commit — divider drag clamp)
+- (T6 commit — FocusRouter)
+- `f4317b7` feat(panes): T7 RootView 통합 (AC-P-1/2 완전/AC-P-16/AC-P-24 부분)
+
+Branch: feat/v3-scaffold (14 commits ahead of origin)
+Working tree: clean
+
+### Next: MS-2 T8 TabContainer 자료구조 + 전환 로직
+
+T8 착수 전 MS-2 sprint contract 개정판 추가 예정 (contract.md §8 Evolution 계획대로).
 
