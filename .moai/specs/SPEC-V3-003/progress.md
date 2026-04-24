@@ -627,24 +627,64 @@ contract.md v1.0.1 revision §10 에 MS-2 Sprint Contract 개정판 작성:
 Branch: feat/v3-scaffold (14~15 commits ahead of origin, push manual 유지 per git-strategy.manual)
 Working tree: 본 commit 후 clean
 
-### Next Session Resume Instructions — MS-2 진입
+### Phase 2 T8 (TabContainer RED-GREEN-REFACTOR): complete (2026-04-24)
 
-다음 session 에서 `/moai run SPEC-V3-003` 재호출 시:
+- Agent: 직접 구현 (이전 세션 잔재를 feature 브랜치로 이관 + TDD 검증)
+- Branch: feature/SPEC-V3-003-ms2-tabcontainer (develop 에서 분기, Enhanced GitHub Flow 준수)
+- Scope: T8 only (T9/T10/T11 범위 미침범)
+- files modified:
+  - crates/moai-studio-ui/src/tabs/mod.rs (pub mod container + re-exports)
+  - crates/moai-studio-ui/src/tabs/container.rs (553 LOC: Tab/TabContainer/TabId/TabError + 12 tests)
+  - crates/moai-studio-ui/src/lib.rs (pane_splitter → tab_container: Option<Entity<TabContainer<Entity<TerminalSurface>>>>, pub mod tabs)
 
-1. progress.md 읽고 "MS-1 Sprint Exit Gate — PASS" 섹션 확인
-2. contract.md §10 MS-2 Sprint Contract 로드
-3. T8 TabContainer 착수 (자료구조 + 전환 로직, last_focused_pane 복원)
-4. T9 진입 **직전**: AskUserQuestion [USER-DECISION-REQUIRED: spike-4-linux-shell-path] — default (a) 현행 Ctrl 유지
-5. T11 진입 **직전**: AskUserQuestion [USER-DECISION-REQUIRED: criterion-adoption] (+ 동시에 test-support-feature-adoption 통합 검토) → MS-1 carry-over AC-P-5/AC-P-18 해소 여부 결정
-6. MS-2 완료 시 contract.md v1.0.2 revision 추가 (MS-3 Sprint Contract) + progress.md MS-2 complete 섹션
+- 구현 결정:
+  - **TabId 생성**: `format!("tab-{:x}-{:x}", nanos, atomic_seq)` — Spike 3 패턴 차용 + 고속 연속 생성 충돌 방지 (AtomicU64)
+  - **Tab<L>**: id + title + GpuiNativeSplitter<L> + last_focused_pane: Option<PaneId>
+  - **TabContainer<L>**: Vec<Tab<L>> + active_tab_idx + new_tab/switch_tab/close_tab/get_active_splitter{,_mut}
+  - **TabError**: LastTabCloseNoop + IndexOutOfBounds (AC-P-10, AC-P-25 negative)
+  - **close 알고리즘**: 중간 탭 → 우측 neighbor 승격, 마지막 탭 → 좌측 neighbor 승격, 단일 탭 → no-op
+  - **lib.rs field rename**: pane_splitter → tab_container. ANCHOR `root-view-content-binding` fan_in 재기술.
 
-사전 준비물 (orchestrator 가 reload):
-- 본 progress.md (MS-1 exit 기록)
-- contract.md v1.0.1 (§9 exit record + §10 MS-2 contract)
-- strategy.md §5.1 T8-T11 상세, §6.2 MS-2 → MS-3 gate
-- spec.md §7.4 TabContainer, §6.3 접근성
-- tasks.md T8-T11 행
-- T7 산출물:
-  - `lib.rs` `pane_splitter: Option<Entity<TerminalSurface>>` 필드 (MS-2 T8 에서 `Entity<TabContainer>` 로 교체)
-  - `tests/integration_pane_core.rs` 2 AC-P-1/2 integration tests
+- test results (feature branch):
+  - `cargo test -p moai-studio-ui --lib`: **125/125 PASS** (113 기존 + 12 T8 신규)
+  - `cargo test --doc -p moai-studio-ui`: **3/3 PASS** (T2 compile_fail 유지)
+  - `cargo test -p moai-studio-ui --test integration_pane_core`: **2/2 PASS**
+  - `cargo test -p moai-studio-terminal --all-targets`: **13/13 PASS** (AC-P-16 regression 0)
+  - `cargo clippy -p moai-studio-ui --all-targets -- -D warnings`: **0 warnings**
+  - `cargo fmt --package moai-studio-ui -- --check`: clean
+
+- AC 통과 (MS-2 T8 범위):
+  - **AC-P-8** ✅ new_tab_creates_leaf_one_pane_tree
+  - **AC-P-10** ✅ close_last_tab_is_noop + close_active/middle/last_active 시프트 (4 tests)
+  - **AC-P-11** ✅ switch_tab_preserves_last_focused_pane
+  - **AC-P-25** ✅ new_tab_increments_active_idx + tab_index_monotonic_on_create_sequence + switch_tab_out_of_bounds_returns_error
+
+- MS-1 Carry-over 진전:
+  - **AC-P-4** integration 준비: get_active_splitter_mut 로 split 연계 가능. drag event wire 는 T10/T11.
+
+- commit: 89b1804 (feature/SPEC-V3-003-ms2-tabcontainer)
+- blockers: 없음
+
+### Enhanced GitHub Flow 전환 (2026-04-24)
+
+본 session 에서 repo 운영을 Enhanced GitHub Flow 로 전환:
+- main > release/* > develop > feature/* + hotfix/*
+- CLAUDE.local.md v1.0.0 (§1-§9), .github/labels.yml (3축 25개), .github/release-drafter.yml + workflow
+- d58e235 (feat/v3-scaffold) → e0ed220 (develop merge commit)
+- feat/v3-scaffold 는 legacy 유지, MS-2 T8 은 feature/SPEC-V3-003-ms2-tabcontainer 에서 진행
+
+### Next Session Resume Instructions — MS-2 T9 진입
+
+다음 session 에서 feature/SPEC-V3-003-ms2-tabcontainer 체크아웃 후:
+
+1. progress.md "Phase 2 T8 complete" 확인
+2. T9 MS-2 키 바인딩 + tmux 중첩 착수 **직전** AskUserQuestion:
+   - [USER-DECISION-REQUIRED: spike-4-linux-shell-path] — default (a) 현행 Ctrl 유지
+3. T10 탭 바 UI 착수 **직전**:
+   - [USER-DECISION-REQUIRED: design-token-color-value] — default (a) BG_SURFACE_3 계열
+4. T11 bench 착수 **직전**:
+   - [USER-DECISION-REQUIRED: criterion-adoption] — Cargo.toml 변경 허용 여부
+   - [USER-DECISION-REQUIRED: test-support-feature-adoption] — gpui test-support feature 활성화 (AC-P-5 해소 기회)
+5. MS-2 완료 시 contract.md v1.0.2 (MS-3 Sprint Contract) 추가 + progress.md MS-2 complete 섹션
+6. feature branch → develop: **squash merge** (Enhanced GitHub Flow §4)
 
