@@ -67,13 +67,19 @@ pub mod tokens {
 
 /// 앱 전역 상태 — Phase 1.7: workspace 리스트 + active id + storage path (버튼 클릭 시 재로드).
 /// Phase 2 (SPEC-V3-002 T4): terminal 필드 추가 — content_area TerminalSurface 분기.
+/// Phase 3 MS-1 T7 (SPEC-V3-003): terminal → pane_splitter rename.
 pub struct RootView {
     pub workspaces: Vec<Workspace>,
     pub active_id: Option<String>,
     pub storage_path: PathBuf,
-    /// Phase 2 (SPEC-V3-002 T4): 활성 TerminalSurface — None 이면 empty/placeholder 렌더.
-    /// AC-T-6: 사용자가 TerminalSurface 생성 트리거 시 Some 으로 전환.
-    pub terminal: Option<Entity<terminal::TerminalSurface>>,
+    // @MX:ANCHOR: [AUTO] root-view-content-binding
+    // @MX:REASON: [AUTO] pane_splitter 는 content_area 렌더 진입점이다.
+    //   MS-2 T8 에서 TabContainer 로 업그레이드, MS-3 T13 에서 persistence 복원 경로가
+    //   이 필드를 통해 흐른다 (fan_in >= 3: T7/T8/T13).
+    /// MS-1 활성 TerminalSurface 렌더 진입점 (단일 pane).
+    /// MS-2 T8 에서 `tab_container: Option<Entity<TabContainer>>` 로 교체 예정.
+    /// MS-3 T13 에서 persistence 복원 시 이 필드를 통해 초기화.
+    pub pane_splitter: Option<Entity<terminal::TerminalSurface>>,
 }
 
 impl RootView {
@@ -87,7 +93,7 @@ impl RootView {
             workspaces,
             active_id,
             storage_path,
-            terminal: None,
+            pane_splitter: None,
         }
     }
 
@@ -181,15 +187,15 @@ impl Render for RootView {
                 )
             })
             .collect();
-        // Phase 2 (SPEC-V3-002 T4): TerminalSurface View 를 main_body 에 전달.
-        let terminal = self.terminal.clone();
+        // Phase 3 MS-1 T7 (SPEC-V3-003): pane_splitter View 를 main_body 에 전달.
+        let pane_splitter = self.pane_splitter.clone();
         div()
             .flex()
             .flex_col()
             .size_full()
             .bg(rgb(tokens::BG_BASE))
             .child(title_bar(self.title_label()))
-            .child(main_body(&self.workspaces, rows, new_ws_btn, terminal))
+            .child(main_body(&self.workspaces, rows, new_ws_btn, pane_splitter))
             .child(status_bar())
     }
 }
@@ -288,7 +294,7 @@ fn main_body(
     workspaces: &[Workspace],
     rows: Vec<gpui::Stateful<gpui::Div>>,
     new_ws_btn: impl IntoElement,
-    terminal: Option<Entity<terminal::TerminalSurface>>,
+    pane_splitter: Option<Entity<terminal::TerminalSurface>>,
 ) -> impl IntoElement {
     let is_empty = workspaces.is_empty();
     div()
@@ -297,7 +303,7 @@ fn main_body(
         .flex_grow()
         .w_full()
         .child(sidebar(is_empty, rows, new_ws_btn))
-        .child(content_area(is_empty, terminal))
+        .child(content_area(is_empty, pane_splitter))
 }
 
 /// Sidebar 260pt — WORKSPACE + GIT WORKTREES + SPECs 섹션 + 하단 인터랙티브 "+ New Workspace".
@@ -402,15 +408,17 @@ fn workspace_row(ws: &Workspace, is_active: bool) -> gpui::Stateful<gpui::Div> {
         .child(div().text_sm().text_color(rgb(fg)).child(ws.name.clone()))
 }
 
-/// 컨텐츠 영역 — SPEC-V3-002 T4 분기.
+/// 컨텐츠 영역 — SPEC-V3-002 T4 분기 → SPEC-V3-003 MS-1 T7 pane_splitter 렌더.
 ///
-/// 우선순위 (SPEC-V3-002 RG-V3-002-4 AC-T-6):
-///   1. terminal 이 Some 이면 TerminalSurface 렌더 (첫 셀부터 시작)
+/// 우선순위 (SPEC-V3-002 RG-V3-002-4 AC-T-6, SPEC-V3-003 AC-P-24):
+///   1. pane_splitter 가 Some 이면 활성 TerminalSurface 렌더 (MS-1: 단일 pane)
 ///   2. show_empty_state 이면 Empty State CTA 렌더
-///   3. 그 외 (workspace 선택 but terminal 없음) 플레이스홀더 렌더
+///   3. 그 외 (workspace 선택 but pane_splitter 없음) 플레이스홀더 렌더
+///
+/// // @MX:TODO(T8): MS-2 T8 에서 TabContainer 로 교체 + 다중 pane divider 시각화 추가
 fn content_area(
     show_empty_state: bool,
-    terminal: Option<Entity<terminal::TerminalSurface>>,
+    pane_splitter: Option<Entity<terminal::TerminalSurface>>,
 ) -> impl IntoElement {
     let mut area = div()
         .flex()
@@ -419,8 +427,8 @@ fn content_area(
         .h_full()
         .bg(rgb(tokens::BG_BASE));
 
-    if let Some(t) = terminal {
-        // AC-T-6: active workspace + TerminalSurface 존재 시 TerminalSurface 렌더.
+    if let Some(t) = pane_splitter {
+        // AC-T-6 / AC-P-24: pane_splitter 존재 시 TerminalSurface 렌더 (MS-1 단일 pane).
         area = area.child(t);
     } else if show_empty_state {
         area = area
@@ -704,17 +712,18 @@ mod tests {
     // --- Phase 2 (SPEC-V3-002 T4) 추가 테스트 ---
 
     #[test]
-    fn root_view_terminal_is_none_by_default() {
-        // AC-T-6: 초기 상태에서 terminal 은 None (empty state 렌더)
+    fn root_view_pane_splitter_is_none_by_default() {
+        // AC-T-6: 초기 상태에서 pane_splitter 는 None (empty state 렌더).
+        // T7 rename: terminal → pane_splitter (MS-2 T8 에서 TabContainer 로 업그레이드 예정)
         let view = RootView::new(vec![], dummy_path());
-        assert!(view.terminal.is_none());
+        assert!(view.pane_splitter.is_none());
     }
 
     #[test]
-    fn root_view_with_workspaces_terminal_still_none() {
-        // 워크스페이스 존재해도 terminal 은 명시 생성 전까지 None
+    fn root_view_with_workspaces_pane_splitter_still_none() {
+        // 워크스페이스 존재해도 pane_splitter 는 명시 생성 전까지 None
         let ws = make_ws("proj", "1", 1_000);
         let view = RootView::new(vec![ws], dummy_path());
-        assert!(view.terminal.is_none());
+        assert!(view.pane_splitter.is_none());
     }
 }
