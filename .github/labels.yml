@@ -1,0 +1,97 @@
+# GoosLab/moai-studio — Issue / PR 라벨 정의 (3축 분류)
+#
+# 동기화 방법:
+#   npx github-label-sync --access-token $GH_TOKEN --labels .github/labels.yml GoosLab/moai-studio
+#
+# 운영 규칙: CLAUDE.local.md §3 참조
+# - Type / Priority / Area 3축 각 1개 이상 필수
+# - Release Drafter 보조 라벨 (release/*, skip-changelog) 은 선택
+
+# ── Type axis ──────────────────────────────────────────────────────
+- name: type/feature
+  color: 0e8a16
+  description: 새 기능 추가
+- name: type/bug
+  color: d73a4a
+  description: 결함 수정
+- name: type/refactor
+  color: c5def5
+  description: 동작 유지 리팩토링
+- name: type/docs
+  color: 0075ca
+  description: 문서 변경
+- name: type/test
+  color: fbca04
+  description: 테스트 코드 추가/수정
+- name: type/chore
+  color: eeeeee
+  description: 빌드/설정/보조 스크립트
+- name: type/security
+  color: b60205
+  description: 보안 관련 수정
+- name: type/perf
+  color: ffa500
+  description: 성능 개선
+
+# ── Priority axis ──────────────────────────────────────────────────
+- name: priority/p0-critical
+  color: b60205
+  description: production 차단, 즉시 대응
+- name: priority/p1-high
+  color: d93f0b
+  description: 현재 sprint 내 처리
+- name: priority/p2-medium
+  color: fbca04
+  description: 다음 sprint 후보
+- name: priority/p3-low
+  color: 0e8a16
+  description: backlog
+
+# ── Area axis ──────────────────────────────────────────────────────
+- name: area/panes
+  color: 1d76db
+  description: crates/moai-studio-ui/src/panes/** (SPEC-V3-003)
+- name: area/tabs
+  color: 1d76db
+  description: crates/moai-studio-ui/src/tabs/** (SPEC-V3-003 MS-2)
+- name: area/terminal
+  color: 1d76db
+  description: crates/moai-studio-terminal/** (SPEC-V3-002)
+- name: area/ui-shell
+  color: 1d76db
+  description: crates/moai-studio-ui/src/lib.rs + terminal/** wiring (SPEC-V3-001)
+- name: area/workspace
+  color: 1d76db
+  description: crates/moai-studio-workspace/** (workspace store)
+- name: area/persistence
+  color: 1d76db
+  description: persistence schema + atomic write (SPEC-V3-003 MS-3)
+- name: area/ci
+  color: 1d76db
+  description: .github/workflows, .github/actions
+- name: area/deps
+  color: 1d76db
+  description: Cargo.toml, Cargo.lock, rust-toolchain
+- name: area/docs
+  color: 1d76db
+  description: .moai/specs/**, docs/**, README
+- name: area/spec
+  color: 1d76db
+  description: SPEC authoring (.moai/specs/**)
+- name: area/infra
+  color: 1d76db
+  description: scripts/**, toolchain, release 인프라
+
+# ── Release Drafter 보조 ───────────────────────────────────────────
+- name: release/major
+  color: b60205
+  description: MAJOR version bump (X.y.z)
+- name: release/minor
+  color: 0e8a16
+  description: MINOR version bump (x.Y.z)
+- name: release/patch
+  color: fbca04
+  description: PATCH version bump (x.y.Z, 기본값)
+- name: skip-changelog
+  color: ededed
+  description: Release Drafter CHANGELOG 에서 제외 (chore, internal)

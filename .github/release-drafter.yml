@@ -1,0 +1,104 @@
+# Release Drafter 구성 — CHANGELOG 자동 초안
+#
+# 운영 규칙: CLAUDE.local.md §5
+# 라벨 정의: .github/labels.yml
+#
+# 실행: .github/workflows/release-drafter.yml 이 develop/release/* push 시 트리거
+
+name-template: "v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
+
+# Version 결정: 머지된 PR 들의 `release/*` 라벨 기반 자동 증가.
+# default 는 patch, `release/minor` / `release/major` 가 있으면 승격.
+version-resolver:
+  major:
+    labels:
+      - release/major
+  minor:
+    labels:
+      - release/minor
+  patch:
+    labels:
+      - release/patch
+  default: patch
+
+# 카테고리별 섹션 (CLAUDE.local.md §5.2 매핑)
+categories:
+  - title: "✨ Added"
+    labels:
+      - type/feature
+  - title: "🐛 Fixed"
+    labels:
+      - type/bug
+  - title: "🔒 Security"
+    labels:
+      - type/security
+  - title: "⚡ Performance"
+    labels:
+      - type/perf
+  - title: "♻️ Refactored"
+    labels:
+      - type/refactor
+  - title: "📚 Documentation"
+    labels:
+      - type/docs
+  - title: "🧪 Tests"
+    labels:
+      - type/test
+  - title: "🏗️ Internal"
+    labels:
+      - type/chore
+
+# 라벨 없는 PR 은 Unsorted 섹션으로 (author 에게 라벨 부착 리마인더 겸용)
+exclude-labels:
+  - skip-changelog
+
+# 항목 포맷
+change-template: "- $TITLE (#$NUMBER) — @$AUTHOR"
+change-title-escapes: '\<*_&'
+
+# Release body
+template: |
+  ## MoAI Studio v$RESOLVED_VERSION
+
+  배포 일자: $TODAY
+
+  $CHANGES
+
+  ### 기여자
+
+  $CONTRIBUTORS
+
+  ### 머지된 PR 전체
+
+  - full-changelog: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+
+# Auto-labeling: PR 제목의 Conventional Commit prefix 로 type 라벨 자동 부착 (보조)
+autolabeler:
+  - label: type/feature
+    title:
+      - '/^feat(\(.+\))?:/i'
+  - label: type/bug
+    title:
+      - '/^fix(\(.+\))?:/i'
+  - label: type/refactor
+    title:
+      - '/^refactor(\(.+\))?:/i'
+  - label: type/docs
+    title:
+      - '/^docs(\(.+\))?:/i'
+  - label: type/test
+    title:
+      - '/^test(\(.+\))?:/i'
+  - label: type/chore
+    title:
+      - '/^chore(\(.+\))?:/i'
+      - '/^build(\(.+\))?:/i'
+      - '/^ci(\(.+\))?:/i'
+  - label: type/security
+    title:
+      - '/^sec(\(.+\))?:/i'
+      - '/^security(\(.+\))?:/i'
+  - label: type/perf
+    title:
+      - '/^perf(\(.+\))?:/i'
