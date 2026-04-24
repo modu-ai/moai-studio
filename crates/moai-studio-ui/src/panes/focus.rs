@@ -63,13 +63,26 @@ pub struct KeyModifiers {
 
 /// GPUI 독립 키 코드.
 ///
-/// MS-1 에서 필요한 키만 열거. T7 에서 `gpui::KeyDownEvent.keystroke.key` → 이 타입으로 변환.
+/// MS-1/MS-2 에서 필요한 키 열거. T7 에서 `gpui::KeyDownEvent.keystroke.key` → 이 타입으로 변환.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyCode {
     /// 왼쪽 화살표 키.
     ArrowLeft,
     /// 오른쪽 화살표 키.
     ArrowRight,
+    // ---- MS-2 추가 키 ----
+    /// T 키 (새 탭).
+    T,
+    /// W 키 (탭 닫기).
+    W,
+    /// 숫자 1~9 키 (탭 직접 전환). tuple 값: 0-based index.
+    Digit(usize),
+    /// 백슬래시 키 `\` (수평 분할).
+    Backslash,
+    /// 왼쪽 대괄호 `[` (이전 탭, Shift 조합 시 `{`).
+    BracketLeft,
+    /// 오른쪽 대괄호 `]` (다음 탭, Shift 조합 시 `}`).
+    BracketRight,
     /// 기타 키 (passthrough).
     Other,
 }
@@ -78,15 +91,48 @@ pub enum KeyCode {
 // FocusCommand
 // ============================================================
 
-/// FocusRouter 에 전달하는 focus 변경 명령.
+/// FocusRouter 및 TabContainer 에 전달하는 명령.
+///
+/// ## MS-1 명령 (pane 레벨, FocusRouter 가 처리)
+///
+/// - [`FocusCommand::Prev`] / [`FocusCommand::Next`]: in-order pane 탐색
+/// - [`FocusCommand::Click`]: 마우스 클릭으로 특정 pane 포커스
+///
+/// ## MS-2 명령 (탭 레벨, TabContainer 가 처리)
+///
+/// - [`FocusCommand::NewTab`] / [`FocusCommand::CloseTab`]: 탭 생성/닫기
+/// - [`FocusCommand::SwitchTabIdx`]: 탭 직접 이동 (0-based)
+/// - [`FocusCommand::SplitHorizontal`] / [`FocusCommand::SplitVertical`]: active pane 분할
+/// - [`FocusCommand::PrevTab`] / [`FocusCommand::NextTab`]: 인접 탭 이동 (saturating)
+// @MX:NOTE: [AUTO] ms2-keybindings
+// PLATFORM_MOD + 키 조합 → FocusCommand MS-2 변형.
+// MS-1 명령(Prev/Next/Click)은 pane 레벨, MS-2(NewTab 등)는 탭 레벨.
+// dispatch_key 는 두 레벨을 구분 없이 Option<FocusCommand> 로 반환하며,
+// 호출자(T10 GPUI event handler)가 MS-1 vs MS-2 를 라우팅한다.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FocusCommand {
+    // ---- MS-1 (pane 레벨) ----
     /// 이전 pane 으로 이동 (in-order 역방향 wrap-around).
     Prev,
     /// 다음 pane 으로 이동 (in-order 정방향 wrap-around).
     Next,
     /// 특정 pane 을 마우스 클릭으로 선택.
     Click(PaneId),
+    // ---- MS-2 (탭 레벨) ----
+    /// 새 탭 생성 (Mod+T).
+    NewTab,
+    /// 현재 활성 탭 닫기 (Mod+W).
+    CloseTab,
+    /// n 번째 탭으로 이동 (Mod+1~9, 0-based index). n >= 9 는 9번째 탭.
+    SwitchTabIdx(usize),
+    /// active pane 을 수평 분할 (Mod+\).
+    SplitHorizontal,
+    /// active pane 을 수직 분할 (Mod+Shift+\).
+    SplitVertical,
+    /// 이전 탭으로 이동 (Mod+{). 첫 번째 탭에서는 no-op (saturating).
+    PrevTab,
+    /// 다음 탭으로 이동 (Mod+}). 마지막 탭에서는 no-op (saturating).
+    NextTab,
 }
 
 // ============================================================
@@ -163,6 +209,14 @@ impl FocusRouter {
                     self.current = Some(id);
                 }
             }
+            // MS-2 명령은 FocusRouter 가 아닌 TabContainer 가 처리 → no-op
+            FocusCommand::NewTab
+            | FocusCommand::CloseTab
+            | FocusCommand::SwitchTabIdx(_)
+            | FocusCommand::SplitHorizontal
+            | FocusCommand::SplitVertical
+            | FocusCommand::PrevTab
+            | FocusCommand::NextTab => {}
         }
     }
 }
@@ -171,32 +225,67 @@ impl FocusRouter {
 // 키 dispatch (MS-1 바인딩)
 // ============================================================
 
-/// MS-1 키 이벤트를 [`FocusCommand`] 로 변환한다.
+/// 키 이벤트를 [`FocusCommand`] 로 변환한다.
 ///
-/// 매핑 테이블 (MS-1 범위):
-/// - `PLATFORM_MOD + Alt + ArrowLeft`  → `FocusCommand::Prev`
-/// - `PLATFORM_MOD + Alt + ArrowRight` → `FocusCommand::Next`
-/// - 그 외 모든 키                     → `None` (passthrough)
+/// ## 매핑 테이블 (MS-1 + MS-2)
 ///
-/// # AC-P-23 Ctrl+B passthrough 보장
+/// | 키 조합                         | FocusCommand           |
+/// |----------------------------------|------------------------|
+/// | `Mod + Alt + ArrowLeft`         | `Prev`                 |
+/// | `Mod + Alt + ArrowRight`        | `Next`                 |
+/// | `Mod + T`                       | `NewTab`               |
+/// | `Mod + W`                       | `CloseTab`             |
+/// | `Mod + Digit(n)` (n=0..8)      | `SwitchTabIdx(n)`      |
+/// | `Mod + Backslash`               | `SplitHorizontal`      |
+/// | `Mod + Shift + Backslash`       | `SplitVertical`        |
+/// | `Mod + Shift + BracketLeft`     | `PrevTab`              |
+/// | `Mod + Shift + BracketRight`    | `NextTab`              |
+/// | 그 외 모든 키                   | `None` (passthrough)   |
+///
+/// `Mod` = macOS 에서는 Cmd, 그 외에서는 Ctrl ([`PLATFORM_MOD`] 참조).
+///
+/// # AC-P-23 / AC-P-26 Ctrl+B passthrough 보장
 ///
 // @MX:NOTE: [AUTO] ac-p-23-ctrl-b-passthrough
 // PLATFORM_MOD = Ctrl (Linux) 인 경우, 순수 Ctrl+B 는 tmux prefix 키다.
-// dispatch_key 는 Ctrl+Alt+Arrow 만 소비하므로 Ctrl+B (alt=false, code=Other) 는
-// 항상 None 을 반환 → caller(T7 GPUI event handler) 가 passthrough 처리.
+// MS-2 바인딩은 모두 PLATFORM_MOD 단독 또는 Shift 조합이므로,
+// Ctrl+B (alt=false, shift=false, code=Other) 는 어떤 분기에도 매치되지 않아
+// 항상 None 을 반환 → caller(T10 GPUI event handler) 가 passthrough 처리 (AC-P-26).
 pub fn dispatch_key(modifiers: KeyModifiers, code: KeyCode) -> Option<FocusCommand> {
     let platform_mod_active = match PLATFORM_MOD {
         PlatformMod::Cmd => modifiers.cmd,
         PlatformMod::Ctrl => modifiers.ctrl,
     };
 
-    if !platform_mod_active || !modifiers.alt {
+    if !platform_mod_active {
         return None;
     }
 
-    match code {
-        KeyCode::ArrowLeft => Some(FocusCommand::Prev),
-        KeyCode::ArrowRight => Some(FocusCommand::Next),
+    // ---- MS-1: Mod + Alt + Arrow ----
+    if modifiers.alt {
+        return match code {
+            KeyCode::ArrowLeft => Some(FocusCommand::Prev),
+            KeyCode::ArrowRight => Some(FocusCommand::Next),
+            _ => None,
+        };
+    }
+
+    // ---- MS-2: Mod + (Shift +) key ----
+    match (modifiers.shift, code) {
+        // Mod+T → 새 탭
+        (false, KeyCode::T) => Some(FocusCommand::NewTab),
+        // Mod+W → 탭 닫기
+        (false, KeyCode::W) => Some(FocusCommand::CloseTab),
+        // Mod+1~9 → 탭 이동 (0-based)
+        (false, KeyCode::Digit(n)) => Some(FocusCommand::SwitchTabIdx(n)),
+        // Mod+\ → 수평 분할
+        (false, KeyCode::Backslash) => Some(FocusCommand::SplitHorizontal),
+        // Mod+Shift+\ → 수직 분할
+        (true, KeyCode::Backslash) => Some(FocusCommand::SplitVertical),
+        // Mod+Shift+[ (즉 Mod+{) → 이전 탭
+        (true, KeyCode::BracketLeft) => Some(FocusCommand::PrevTab),
+        // Mod+Shift+] (즉 Mod+}) → 다음 탭
+        (true, KeyCode::BracketRight) => Some(FocusCommand::NextTab),
         _ => None,
     }
 }
@@ -462,5 +551,174 @@ mod tests {
         router.apply(&tree, FocusCommand::Click(pid("a")));
         router.apply(&tree, FocusCommand::Prev);
         assert_eq!(router.current(), Some(&pid("c")));
+    }
+
+    // -------------------------------------------------------
+    // MS-2 dispatch_key 테스트 (T9)
+    // -------------------------------------------------------
+
+    /// Mod+T → FocusCommand::NewTab (AC-P-9a/9b).
+    #[test]
+    fn dispatch_mod_t_is_new_tab() {
+        #[cfg(target_os = "macos")]
+        let mods = KeyModifiers {
+            cmd: true,
+            alt: false,
+            ctrl: false,
+            shift: false,
+        };
+        #[cfg(not(target_os = "macos"))]
+        let mods = KeyModifiers {
+            ctrl: true,
+            alt: false,
+            cmd: false,
+            shift: false,
+        };
+
+        assert_eq!(dispatch_key(mods, KeyCode::T), Some(FocusCommand::NewTab));
+    }
+
+    /// Mod+W → FocusCommand::CloseTab (AC-P-9a/9b).
+    #[test]
+    fn dispatch_mod_w_is_close_tab() {
+        #[cfg(target_os = "macos")]
+        let mods = KeyModifiers {
+            cmd: true,
+            alt: false,
+            ctrl: false,
+            shift: false,
+        };
+        #[cfg(not(target_os = "macos"))]
+        let mods = KeyModifiers {
+            ctrl: true,
+            alt: false,
+            cmd: false,
+            shift: false,
+        };
+
+        assert_eq!(dispatch_key(mods, KeyCode::W), Some(FocusCommand::CloseTab));
+    }
+
+    /// Mod+Digit(0) ~ Mod+Digit(8) → FocusCommand::SwitchTabIdx(0..=8) (AC-P-9a/9b).
+    #[test]
+    fn dispatch_mod_digit_1_to_9_is_switch_tab_idx() {
+        #[cfg(target_os = "macos")]
+        let mods = KeyModifiers {
+            cmd: true,
+            alt: false,
+            ctrl: false,
+            shift: false,
+        };
+        #[cfg(not(target_os = "macos"))]
+        let mods = KeyModifiers {
+            ctrl: true,
+            alt: false,
+            cmd: false,
+            shift: false,
+        };
+
+        for n in 0usize..=8 {
+            assert_eq!(
+                dispatch_key(mods, KeyCode::Digit(n)),
+                Some(FocusCommand::SwitchTabIdx(n)),
+                "Mod+Digit({n}) → SwitchTabIdx({n})"
+            );
+        }
+    }
+
+    /// Mod+\ → FocusCommand::SplitHorizontal (AC-P-9a/9b).
+    #[test]
+    fn dispatch_mod_backslash_is_split_horizontal() {
+        #[cfg(target_os = "macos")]
+        let mods = KeyModifiers {
+            cmd: true,
+            alt: false,
+            ctrl: false,
+            shift: false,
+        };
+        #[cfg(not(target_os = "macos"))]
+        let mods = KeyModifiers {
+            ctrl: true,
+            alt: false,
+            cmd: false,
+            shift: false,
+        };
+
+        assert_eq!(
+            dispatch_key(mods, KeyCode::Backslash),
+            Some(FocusCommand::SplitHorizontal)
+        );
+    }
+
+    /// Mod+Shift+\ → FocusCommand::SplitVertical (AC-P-9a/9b).
+    #[test]
+    fn dispatch_mod_shift_backslash_is_split_vertical() {
+        #[cfg(target_os = "macos")]
+        let mods = KeyModifiers {
+            cmd: true,
+            alt: false,
+            ctrl: false,
+            shift: true,
+        };
+        #[cfg(not(target_os = "macos"))]
+        let mods = KeyModifiers {
+            ctrl: true,
+            alt: false,
+            cmd: false,
+            shift: true,
+        };
+
+        assert_eq!(
+            dispatch_key(mods, KeyCode::Backslash),
+            Some(FocusCommand::SplitVertical)
+        );
+    }
+
+    /// Mod+Shift+[ (Mod+{) → FocusCommand::PrevTab (AC-P-9a/9b).
+    #[test]
+    fn dispatch_mod_shift_bracket_left_is_prev_tab() {
+        #[cfg(target_os = "macos")]
+        let mods = KeyModifiers {
+            cmd: true,
+            alt: false,
+            ctrl: false,
+            shift: true,
+        };
+        #[cfg(not(target_os = "macos"))]
+        let mods = KeyModifiers {
+            ctrl: true,
+            alt: false,
+            cmd: false,
+            shift: true,
+        };
+
+        assert_eq!(
+            dispatch_key(mods, KeyCode::BracketLeft),
+            Some(FocusCommand::PrevTab)
+        );
+    }
+
+    /// Mod+Shift+] (Mod+}) → FocusCommand::NextTab (AC-P-9a/9b).
+    #[test]
+    fn dispatch_mod_shift_bracket_right_is_next_tab() {
+        #[cfg(target_os = "macos")]
+        let mods = KeyModifiers {
+            cmd: true,
+            alt: false,
+            ctrl: false,
+            shift: true,
+        };
+        #[cfg(not(target_os = "macos"))]
+        let mods = KeyModifiers {
+            ctrl: true,
+            alt: false,
+            cmd: false,
+            shift: true,
+        };
+
+        assert_eq!(
+            dispatch_key(mods, KeyCode::BracketRight),
+            Some(FocusCommand::NextTab)
+        );
     }
 }

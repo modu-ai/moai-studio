@@ -4,8 +4,6 @@
 //! - spec.md §5 RG-P-5 (REQ-P-040 ~ REQ-P-045)
 //! - spec.md §5 RG-P-3 REQ-P-023 (탭 전환 시 last_focused_pane 복원)
 //! - spec.md §5 RG-P-4 REQ-P-034 (tmux 중첩 시 OS/GPUI 레벨 우선 — AC-P-26)
-//!
-//! @MX:TODO(T9): 키 바인딩 dispatcher (platform_mod 재사용) + tests/integration_tmux_nested.rs 통합 테스트.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -58,6 +56,17 @@ pub enum TabError {
     LastTabCloseNoop,
     /// switch_tab / close_tab 에서 idx 가 범위를 벗어남 (AC-P-25 negative).
     IndexOutOfBounds,
+    /// split_horizontal / split_vertical 에서 target pane 이 트리에 없음.
+    SplitTargetNotFound,
+}
+
+impl From<crate::panes::SplitError> for TabError {
+    fn from(e: crate::panes::SplitError) -> Self {
+        match e {
+            crate::panes::SplitError::TargetNotFound => TabError::SplitTargetNotFound,
+            crate::panes::SplitError::MinSizeViolated => TabError::SplitTargetNotFound,
+        }
+    }
 }
 
 // ============================================================
@@ -248,6 +257,78 @@ impl<L: Clone + 'static> TabContainer<L> {
     /// 현재 active 탭의 mutable 참조를 반환한다.
     pub fn active_tab_mut(&mut self) -> &mut Tab<L> {
         &mut self.tabs[self.active_tab_idx]
+    }
+
+    // @MX:ANCHOR: [AUTO] tab-dispatch-api
+    // @MX:REASON: [AUTO] FocusCommand MS-2 변형을 TabContainer 연산으로 매핑하는 단일 진입점.
+    //   fan_in >= 2: T10 키 바인딩 핸들러 wire, T11 bench trigger.
+    //   PrevTab/NextTab 은 saturating 처리 (첫/마지막 탭에서 no-op).
+    /// MS-2 [`FocusCommand`] 를 TabContainer 상태 변경으로 디스패치한다.
+    ///
+    /// ## 매핑
+    ///
+    /// | 명령 | 동작 |
+    /// |------|------|
+    /// | `NewTab` | `new_tab(title, splitter)` — splitter_factory 호출 |
+    /// | `CloseTab` | `close_tab(active_tab_idx)` |
+    /// | `SwitchTabIdx(n)` | `switch_tab(n)` |
+    /// | `SplitHorizontal` | `get_active_splitter_mut().split_horizontal(focused)` |
+    /// | `SplitVertical` | `get_active_splitter_mut().split_vertical(focused)` |
+    /// | `PrevTab` | `switch_tab(active_tab_idx - 1)` saturating (0 에서 no-op) |
+    /// | `NextTab` | `switch_tab(active_tab_idx + 1)` saturating (마지막에서 no-op) |
+    /// | MS-1 명령 (`Prev`/`Next`/`Click`) | `Ok(())` no-op (탭 레벨 불필요) |
+    ///
+    /// # Errors
+    ///
+    /// - [`TabError::IndexOutOfBounds`]: `SwitchTabIdx(n)` 에서 n >= tabs.len()
+    /// - [`TabError::LastTabCloseNoop`]: 탭 1개 남았을 때 `CloseTab`
+    pub fn dispatch_tab_command(
+        &mut self,
+        cmd: crate::panes::FocusCommand,
+        new_tab_factory: Option<(&str, GpuiNativeSplitter<L>)>,
+    ) -> Result<(), TabError> {
+        use crate::panes::FocusCommand;
+        match cmd {
+            FocusCommand::NewTab => {
+                if let Some((title, splitter)) = new_tab_factory {
+                    self.new_tab(title.to_string(), splitter);
+                }
+                Ok(())
+            }
+            FocusCommand::CloseTab => self.close_tab(self.active_tab_idx),
+            FocusCommand::SwitchTabIdx(n) => self.switch_tab(n),
+            FocusCommand::SplitHorizontal => {
+                let splitter = self.get_active_splitter_mut();
+                if let Some(focused_id) = splitter.focused().cloned() {
+                    splitter.split_horizontal(focused_id).map(|_| ())?;
+                }
+                Ok(())
+            }
+            FocusCommand::SplitVertical => {
+                let splitter = self.get_active_splitter_mut();
+                if let Some(focused_id) = splitter.focused().cloned() {
+                    splitter.split_vertical(focused_id).map(|_| ())?;
+                }
+                Ok(())
+            }
+            FocusCommand::PrevTab => {
+                // saturating: 첫 번째 탭에서는 no-op
+                if self.active_tab_idx > 0 {
+                    self.switch_tab(self.active_tab_idx - 1)?;
+                }
+                Ok(())
+            }
+            FocusCommand::NextTab => {
+                // saturating: 마지막 탭에서는 no-op
+                let next = self.active_tab_idx + 1;
+                if next < self.tabs.len() {
+                    self.switch_tab(next)?;
+                }
+                Ok(())
+            }
+            // MS-1 명령: 탭 레벨에서는 no-op (pane 레벨 FocusRouter 가 처리)
+            FocusCommand::Prev | FocusCommand::Next | FocusCommand::Click(_) => Ok(()),
+        }
     }
 }
 
@@ -520,6 +601,100 @@ mod tests {
             );
         }
         assert_eq!(container.active_tab_idx, 4, "최종 active_tab_idx == 4");
+    }
+
+    // -------------------------------------------------------
+    // Test T9-1: dispatch_new_tab_command_creates_tab (MS-2 dispatch)
+    // -------------------------------------------------------
+
+    /// dispatch_tab_command(NewTab, factory) → tabs.len() 증가 + active_tab_idx 이동.
+    #[test]
+    fn dispatch_new_tab_command_creates_tab() {
+        use crate::panes::FocusCommand;
+        let mut container = make_container();
+        assert_eq!(container.tabs.len(), 1);
+
+        let new_splitter = make_splitter("new-dispatch");
+        container
+            .dispatch_tab_command(FocusCommand::NewTab, Some(("dispatch-tab", new_splitter)))
+            .expect("NewTab dispatch 성공");
+
+        assert_eq!(
+            container.tabs.len(),
+            2,
+            "dispatch NewTab 후 tabs.len() == 2"
+        );
+        assert_eq!(
+            container.active_tab_idx, 1,
+            "active_tab_idx == 1 (새 탭 활성)"
+        );
+    }
+
+    // -------------------------------------------------------
+    // Test T9-2: dispatch_split_horizontal_command_updates_active_pane_tree (MS-2 dispatch)
+    // -------------------------------------------------------
+
+    /// dispatch_tab_command(SplitHorizontal, None) → active splitter leaf_count 증가.
+    #[test]
+    fn dispatch_split_horizontal_command_updates_active_pane_tree() {
+        use crate::panes::FocusCommand;
+        let mut container = make_container();
+        assert_eq!(container.get_active_splitter().tree().leaf_count(), 1);
+
+        container
+            .dispatch_tab_command(FocusCommand::SplitHorizontal, None)
+            .expect("SplitHorizontal dispatch 성공");
+
+        assert_eq!(
+            container.get_active_splitter().tree().leaf_count(),
+            2,
+            "SplitHorizontal 후 leaf_count == 2"
+        );
+    }
+
+    // -------------------------------------------------------
+    // Test T9-3: dispatch_prev_next_tab_saturating_at_boundary (MS-2 dispatch)
+    // -------------------------------------------------------
+
+    /// PrevTab 은 첫 번째 탭에서 no-op, NextTab 은 마지막 탭에서 no-op (saturating).
+    #[test]
+    fn dispatch_prev_next_tab_saturating_at_boundary() {
+        use crate::panes::FocusCommand;
+        let mut container = make_container(); // idx 0
+
+        // 첫 번째 탭에서 PrevTab → no-op
+        container
+            .dispatch_tab_command(FocusCommand::PrevTab, None)
+            .expect("PrevTab at first tab Ok");
+        assert_eq!(
+            container.active_tab_idx, 0,
+            "PrevTab saturating: 여전히 idx 0"
+        );
+
+        // 탭 추가
+        container.new_tab("tab-b".to_string(), make_splitter("b"));
+        assert_eq!(container.active_tab_idx, 1);
+
+        // 마지막 탭에서 NextTab → no-op
+        container
+            .dispatch_tab_command(FocusCommand::NextTab, None)
+            .expect("NextTab at last tab Ok");
+        assert_eq!(
+            container.active_tab_idx, 1,
+            "NextTab saturating: 여전히 idx 1"
+        );
+
+        // PrevTab → idx 0 으로 이동 (정상 동작 확인)
+        container
+            .dispatch_tab_command(FocusCommand::PrevTab, None)
+            .expect("PrevTab 정상 이동");
+        assert_eq!(container.active_tab_idx, 0, "PrevTab 이동 후 idx 0");
+
+        // NextTab → idx 1 (정상 동작 확인)
+        container
+            .dispatch_tab_command(FocusCommand::NextTab, None)
+            .expect("NextTab 정상 이동");
+        assert_eq!(container.active_tab_idx, 1, "NextTab 이동 후 idx 1");
     }
 
     // -------------------------------------------------------
