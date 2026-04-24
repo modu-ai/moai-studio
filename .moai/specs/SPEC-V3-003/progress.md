@@ -688,3 +688,112 @@ Working tree: 본 commit 후 clean
 5. MS-2 완료 시 contract.md v1.0.2 (MS-3 Sprint Contract) 추가 + progress.md MS-2 complete 섹션
 6. feature branch → develop: **squash merge** (Enhanced GitHub Flow §4)
 
+---
+
+### Phase 2 T9 Complete — MS-2 키 바인딩 + tmux 중첩 (2026-04-24)
+
+- 수정 파일:
+  1. `crates/moai-studio-ui/src/panes/focus.rs` — `KeyCode` MS-2 키 6종 추가, `FocusCommand` MS-2 7종 추가, `dispatch_key` 전면 리팩터, `FocusRouter::apply` no-op 분기 추가, 단위 테스트 7개 추가
+  2. `crates/moai-studio-ui/src/tabs/container.rs` — `TabError::SplitTargetNotFound` 추가, `From<SplitError> for TabError` 추가, `dispatch_tab_command` 추가, 단위 테스트 3개 추가
+  3. `crates/moai-studio-ui/src/tabs/mod.rs` — `@MX:TODO(T9)` 제거 (T9 완료)
+  4. `crates/moai-studio-ui/tests/integration_key_bindings.rs` — 신규 (7개 통합 테스트, `#[cfg]` 플랫폼 분기)
+  5. `crates/moai-studio-ui/tests/integration_tmux_nested.rs` — 신규 (순수 Rust 1개 + `#[ignore]` tmux 프로세스 1개)
+
+- 추가된 테스트 (총 19개):
+  - 단위 (focus.rs, 7개): `dispatch_mod_t_is_new_tab`, `dispatch_mod_w_is_close_tab`, `dispatch_mod_digit_is_switch_tab`, `dispatch_mod_backslash_is_split_horizontal`, `dispatch_mod_shift_backslash_is_split_vertical`, `dispatch_mod_shift_bracket_left_is_prev_tab`, `dispatch_mod_shift_bracket_right_is_next_tab`
+  - 단위 (container.rs, 3개): `dispatch_new_tab_command_creates_tab`, `dispatch_split_horizontal_command_updates_active_pane_tree`, `dispatch_prev_next_tab_saturating_at_boundary`
+  - 통합 integration_key_bindings (7개): `macos_ms2_cmd_t_creates_new_tab`, `linux_ms2_ctrl_t_creates_new_tab`, `macos_ms2_cmd_digit_switches_tab`, `linux_ms2_ctrl_digit_switches_tab`, `macos_ms2_cmd_backslash_splits_horizontal`, `linux_ms2_ctrl_backslash_splits_horizontal`, `ms2_ctrl_b_not_consumed_for_tmux_passthrough`
+  - 통합 integration_tmux_nested (2개): `ctrl_b_dispatch_key_returns_none_for_passthrough` (항상 실행), `ctrl_b_passes_through_to_nested_tmux` (`#[ignore]`)
+
+- 테스트 결과:
+  - `cargo test -p moai-studio-ui --lib`: **135/135 PASS** (기존 125 + T9 신규 10)
+  - `cargo test --all-targets` (통합): **4/4 PASS** (integration_key_bindings macOS), **2/2 PASS** (integration_pane_core), **1/1 PASS + 1 ignored** (integration_tmux_nested)
+  - `cargo test --doc -p moai-studio-ui`: **3/3 PASS**
+  - `cargo test -p moai-studio-terminal --all-targets`: **AC-P-16 regression 0**
+  - `cargo clippy -p moai-studio-ui --all-targets -- -D warnings`: **0 warnings**
+  - `cargo fmt --package moai-studio-ui -- --check`: clean
+
+- AC 통과:
+  - **AC-P-9a** ✅ macOS Cmd 바인딩 전체 (Cmd+T/W/1..9/\/Shift+\/{/})
+  - **AC-P-9b** ✅ Linux Ctrl 바인딩 전체 (동일 조합)
+  - **AC-P-26** ✅ tmux Ctrl+B passthrough — `dispatch_key` returns `None`
+  - **AC-P-23** regression ✅ Ctrl+B 소비 없음 재확인
+
+- USER-DECISION 기록: `[spike-4-linux-shell-path] = (a) 현행 Ctrl 유지` (Linux Ctrl 바인딩 현행 유지, Customization SPEC 는 v0.2.x 로 defer)
+
+- MX 태그:
+  - `panes/focus.rs`: `// @MX:NOTE: [AUTO] ms2-keybindings` (FocusCommand enum 앞)
+  - `tabs/container.rs`: `// @MX:ANCHOR: [AUTO] tab-dispatch-api` + `// @MX:REASON:` (dispatch_tab_command 앞)
+  - `tests/integration_tmux_nested.rs`: `// @MX:TODO(T9.1)` (실제 tmux 프로세스 통합 — CI apt install tmux 후 `#[ignore]` 제거)
+
+- commit: 1685296 (feature/SPEC-V3-003-ms2-tabcontainer)
+- blockers: 없음
+- 구현 divergence: 0%
+
+### Phase 2 T10 Complete — 탭 바 UI + toolbar.tab.active.background token (2026-04-24)
+
+- 수정 파일:
+  1. `crates/moai-studio-ui/src/tabs/bar.rs` — stub → 실제 구현 (FontWeight + TabBarStyle + TabBar<L> + style_for + is_active + 8 단위 테스트 + 3 doc test)
+  2. `crates/moai-studio-ui/src/tabs/mod.rs` — `pub mod bar;` + `pub use bar::{FontWeight, TabBar, TabBarStyle};` append
+  3. `crates/moai-studio-ui/src/lib.rs` — `tokens::TOOLBAR_TAB_ACTIVE_BG` const 추가 (= BG_SURFACE_3) + @MX:NOTE(token-alias-bg-surface-3)
+  4. `.moai/design/v3/system.md` — `### Toolbar` 섹션 + `toolbar.tab.active.background` token 엔트리 추가
+
+- 추가된 테스트 (8개 단위 + 3개 doc):
+  - `active_tab_uses_bg_surface_3`
+  - `inactive_tab_uses_bg_surface`
+  - `active_tab_is_bold`
+  - `inactive_tab_is_not_bold`
+  - `active_tab_fg_is_fg_primary`
+  - `is_active_returns_true_for_active_idx`
+  - `is_active_returns_false_for_other_idx`
+  - `toolbar_tab_active_background_alias_matches_bg_surface_3`
+  - doc tests: `TabBar::is_active` / `TabBar` struct / `TabBar::style_for` (3개)
+
+- 테스트 결과:
+  - `cargo test -p moai-studio-ui --lib`: **143/143 PASS** (기존 135 + T10 신규 8)
+  - `cargo test -p moai-studio-ui --all-targets`: 143 lib + 4 integration_key_bindings + 2 integration_pane_core + 1+1(ignored) integration_tmux_nested = **150 PASS (1 ignored)**
+  - `cargo test --doc -p moai-studio-ui`: **3 bar.rs doc 신규 + 3 기존 compile_fail = 6 PASS (1 ignored)**
+  - `cargo test -p moai-studio-terminal --all-targets`: **AC-P-16 regression 0** (13 PASS)
+  - `cargo clippy -p moai-studio-ui --all-targets -- -D warnings`: **0 warnings**
+  - `cargo fmt --package moai-studio-ui -- --check`: clean
+
+- AC 통과:
+  - **AC-P-27** ✅ bold active indicator + BG_SURFACE_3 배경 (active_tab_is_bold + active_tab_uses_bg_surface_3)
+  - **AC-P-24** ✅ 완전 (TabBar library 모듈 제공 + toolbar.tab.active.background token alias 노출 — 탭 바 가시성 준비 완료. 실제 RootView wire-up 은 MS-3)
+
+- USER-DECISION 기록: `[design-token-color-value] = (a) BG_SURFACE_3 계열 확정` (2026-04-24)
+  - 활성 탭 배경 = `BG_SURFACE_3` (0x232327). sidebar active workspace row 와 일관성. 신규 색상 토큰 미생성.
+
+- MX 태그:
+  - `tabs/bar.rs` before `TabBarStyle`: `// @MX:ANCHOR: [AUTO] tab-bar-style-contract` + REASON (fan_in >= 2)
+  - `tabs/bar.rs` `FontWeight::Bold` variant: `// @MX:NOTE: [AUTO] bold-active-indicator` (AC-P-27 직접 근거)
+  - `lib.rs` `TOOLBAR_TAB_ACTIVE_BG`: `// @MX:NOTE: [AUTO] token-alias-bg-surface-3` (design token alias)
+  - `tabs/mod.rs`: `@MX:TODO(T10)` 제거 (T10 완료)
+
+- 구현 divergence: 0% (style_for 분기 통합 — pure-Rust 팔레트 반환, 렌더러가 is_active 분기 담당)
+
+### AC 통과 누계 (T10 완료 시점, MS-2 AC)
+
+- AC-P-8 ✅ (T8)
+- AC-P-9a ✅ 완전 (T6 MS-1 부분 + T9 MS-2 전체)
+- AC-P-9b ✅ 완전 (T6 MS-1 부분 + T9 MS-2 전체)
+- AC-P-10 ✅ (T8)
+- AC-P-11 ✅ (T8)
+- AC-P-16 ✅ regression 0 (전체 MS-2)
+- AC-P-19 ✅ (T8/T9 dispatch 연계)
+- AC-P-24 ✅ 완전 (T7 부분 → T10 완전)
+- AC-P-25 ✅ (T8)
+- AC-P-26 ✅ (T9)
+- AC-P-27 ✅ (T10, bold + BG_SURFACE_3)
+- 잔여: AC-P-5 / AC-P-18 → T11 bench (Cargo.toml 변경 허용 여부 USER-DECISION 필요)
+
+### Next Session Resume Instructions — MS-2 T11 진입
+
+다음 session 에서 feature/SPEC-V3-003-ms2-tabcontainer 체크아웃 후:
+
+1. progress.md "Phase 2 T10 Complete" 확인
+2. T11 bench 착수 **직전** AskUserQuestion:
+   - [USER-DECISION-REQUIRED: criterion-adoption] — Cargo.toml 변경 허용 여부 (criterion 도입 필요)
+   - [USER-DECISION-REQUIRED: test-support-feature-adoption] — gpui test-support feature 활성화 (AC-P-5 해소 기회)
+3. MS-2 완료 시 contract.md v1.0.2 (MS-3 Sprint Contract) 추가 + progress.md MS-2 complete 섹션
+4. feature branch → develop: **squash merge** (Enhanced GitHub Flow §4)

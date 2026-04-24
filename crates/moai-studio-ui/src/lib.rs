@@ -61,6 +61,14 @@ pub mod tokens {
     pub const TRAFFIC_RED: u32 = 0xff5f57;
     pub const TRAFFIC_YELLOW: u32 = 0xfebc2e;
     pub const TRAFFIC_GREEN: u32 = 0x28c840;
+
+    // @MX:NOTE: [AUTO] token-alias-bg-surface-3
+    // design token alias — toolbar.tab.active.background 의 단일 색상 source.
+    // USER-DECISION (design-token-color-value, 2026-04-24): (a) BG_SURFACE_3 계열 확정.
+    // sidebar active workspace row 와 일관된 색상. 신규 색상 토큰 미생성.
+    /// 탭 바 활성 탭 배경 토큰 alias (= `BG_SURFACE_3`).
+    /// design system: `toolbar.tab.active.background`.
+    pub const TOOLBAR_TAB_ACTIVE_BG: u32 = BG_SURFACE_3;
 }
 
 // ============================================================

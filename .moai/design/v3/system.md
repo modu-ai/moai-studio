@@ -80,6 +80,22 @@ $traffic-yellow     #FEBC2E
 $traffic-green      #28C840
 ```
 
+### Toolbar
+
+```
+$toolbar-tab-active-bg   #232327   # 활성 탭 배경 (= $bg-surface-3 alias)
+```
+
+#### toolbar.tab.active.background
+
+- value: `BG_SURFACE_3` (0x232327)
+- USER-DECISION (design-token-color-value): (a) 기존 BG_SURFACE_3 계열 확정 (2026-04-24)
+- rationale: sidebar active workspace row 와 일관성. 신규 색상 토큰 미생성.
+- Rust alias: `tokens::TOOLBAR_TAB_ACTIVE_BG` (lib.rs `pub mod tokens`)
+- AC: AC-P-27 (v1.0.0 Nm-2) — bold active indicator + color 동시 적용
+
+---
+
 ### Light (secondary)
 
 ```
