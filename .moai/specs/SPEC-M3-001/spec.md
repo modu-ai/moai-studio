@@ -1,14 +1,23 @@
-# SPEC-M3-001: M3 Code Viewer — SwiftTreeSitter + LSP 진단 + @MX 거터 + Tri-pane Diff + Time-travel
+# SPEC-M3-001: M3 Code Viewer — SwiftTreeSitter + LSP 진단 + @MX 거터 + Tri-pane Diff + Time-travel (ARCHIVED — v2 Swift design)
+
+> **⚠️ SUPERSEDED (2026-04-24)**: 본 SPEC 은 Swift/AppKit + SwiftTreeSitter 기반 v2 아키텍처를 전제한다. 2026-04-21 v3 pivot (GPUI + Rust) 으로 모든 참조 경로 (`app/Sources/Surfaces/Code/`, `core/crates/moai-lsp-bridge/`, `core/crates/moai-mx/`) 가 `archive/swift-legacy/` 로 이관되었으며, Code Viewer 기능 자체는 v3 아키텍처에서 **TBD — 후속 SPEC (SPEC-V3-CODE-VIEWER 등) 로 재발행** 예정.
+>
+> **주요 미정 결정**: (i) syntax highlighting 라이브러리 (tree-sitter-rust vs Zed 's gpui-syntax), (ii) LSP 클라이언트 경로 (lsp-types crate vs tower-lsp), (iii) tri-pane diff 구조 (diff-match-patch-rs 등), (iv) time-travel (git 통합 수준).
+>
+> **후속 조치**: (b) `status: archived-v2-design` 로 동결 채택. v3 기반 재설계 SPEC 은 SPEC-V3-003 MS-3 완료 이후 시점에 착수.
 
 ---
 id: SPEC-M3-001
-version: 1.0.0
-status: draft
-created: 2026-04-16
-updated: 2026-04-16
+version: 1.1.0-archived
+status: archived-v2-design
+created_at: 2026-04-16
+updated_at: 2026-04-24
+superseded_by: TBD (v3 기반 Code Viewer SPEC 은 SPEC-V3-003 MS-3 완료 후 재발행)
 author: MoAI (manager-spec)
 priority: High
 issue_number: 0
+labels: [archived, v2-swift, code-viewer, lsp, superseded]
+revision: v1.1.0-archived (plan-auditor 2026-04-24 감사 FAILED — v3 pivot 으로 archive 처리)
 ---
 
 ## HISTORY
@@ -16,6 +25,7 @@ issue_number: 0
 | 버전 | 날짜 | 변경 내용 |
 |------|------|-----------|
 | 1.0.0 | 2026-04-16 | 초안 작성. M2 Conditional GO v1.2.0 (339 tests) 기반. DESIGN.v4 §5.2 / §7.1 / §11.1 / 로드맵 M3 (3주) 기준. P-1 (SPEC-M2-002 MS-2) 완료를 선행 조건으로 명시. |
+| 1.1.0-archived | 2026-04-24 | plan-auditor 감사 FAILED — C-001 (archive 경로 drift 전면: SwiftTreeSitter, `core/crates/moai-lsp-bridge/`, `core/crates/moai-mx/` 모두 archive). v3 pivot 으로 v2 design 전제 모두 무효. status `draft → archived-v2-design`. v3 기반 재발행은 SPEC-V3-003 MS-3 완료 이후. |
 
 ---
 

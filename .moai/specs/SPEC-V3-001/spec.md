@@ -2,13 +2,15 @@
 
 ---
 id: SPEC-V3-001
-version: 1.0.0
-status: draft
-created: 2026-04-21
-updated: 2026-04-21
+version: 1.3.0
+status: completed
+created_at: 2026-04-21
+updated_at: 2026-04-24
 author: MoAI (manager-spec)
 priority: Critical
 issue_number: 0
+labels: [phase-0, phase-1, scaffold, gpui, rust-workspace]
+revision: v1.3.0 (plan-auditor 2026-04-24 감사 결과 반영 — status/MSRV/frontmatter schema 동기화)
 ---
 
 ## HISTORY
@@ -18,6 +20,7 @@ issue_number: 0
 | 1.0.0 | 2026-04-21 | 초안 작성. v3 아키텍처 대폭 pivot 반영 (GPUI + libghostty-vt, Tauri/Swift 폐기). Phase 0 + Phase 1 범위. 9 핵심 결정 (master-plan.md §Executive) 에 근거. |
 | 1.1.0 | 2026-04-21 | Phase 1 체크포인트 sync. RG-V3-1/2/5 완료 (Phase 0.2~1.8, 8 커밋), 248 tests 통과 regression 0. RG-V3-3 (libghostty) 는 Metal Toolchain 블로킹, RG-V3-4 (CI matrix) 미시작. 상세: `.moai/specs/SPEC-V3-001/progress.md`. |
 | 1.2.0 | 2026-04-21 | RG-V3-4 CI matrix 실증 완료 (GoosLab/moai-studio repo 생성 + CI run 24708460052 ALL GREEN, macOS + Linux × rust+smoke 4 job). RG-V3-3 재진단 결과 "Metal blocker" 오해 확인 — Metal toolchain/Zig/Xcode 모두 정상, 실제로는 libghostty-rs 스파이크 작업 미시작 상태. RG-V3-3 을 **SPEC-V3-002 (Terminal Core)** 로 rescope. 본 SPEC 은 4/5 RG 실증 완료로 종결 처리. 상세: progress.md, SPEC-V3-002/spec.md (stub). |
+| 1.3.0 | 2026-04-24 | plan-auditor (2026-04-24 전 SPEC 감사) 결과 반영: (C-001) `status: draft → completed` — progress.md DONE 판정 반영. (C-002) Rust MSRV `1.82+ → 1.93` — SPEC-V3-002 의 toolchain 상향 + workspace Cargo.toml 일치. (M-001) MS-2 (GPUI + libghostty 스파이크) 를 SPEC-V3-002 로 공식 이관 표시. (M-002) AC-4.2 에 `(DEFERRED: GitHub Free 제약 — branch protection rule 활성 대기)` 주석. (m-001) frontmatter `created/updated → created_at/updated_at` 로 V3-003 schema 일치 + `labels` / `revision` 필드 추가. |
 
 ---
 
@@ -108,7 +111,7 @@ MoAI Studio v3 아키텍처 전환의 **스캐폴드 스프린트**. 기존 Swif
 | AC-3.1 | libghostty-vt crate 설치 | `cargo run --example ghostty-spike` | 터미널 윈도우에 `$SHELL` 프롬프트 렌더 |
 | AC-3.2 | Zig 미설치 환경 | `cargo build` | 명확한 에러 메시지 + exit code 1 |
 | AC-4.1 | PR 생성 | CI workflow 트리거 | 4 게이트 모두 통과, macOS+Linux 빌드 성공 |
-| AC-4.2 | 린트 오류 포함 PR | `cargo clippy` | CI 실패, 머지 차단 |
+| AC-4.2 | 린트 오류 포함 PR | `cargo clippy` | CI 실패, 머지 차단 *(DEFERRED: GitHub Free 플랜의 branch protection rule 활성 필요, CLAUDE.local.md §2 체크리스트)* |
 | AC-5.1 | `app/` Swift 코드 존재 | `git mv app/ archive/swift-legacy/` | 히스토리 보존된 채 이동, README 생성 |
 
 ---
@@ -122,11 +125,13 @@ MoAI Studio v3 아키텍처 전환의 **스캐폴드 스프린트**. 기존 Swif
 - Cargo.toml workspace 재설정
 - 기존 289 tests 통과 확인
 
-### MS-2: GPUI + libghostty 스파이크 (Phase 0)
+### MS-2: GPUI + libghostty 스파이크 (Phase 0) — **이관됨: SPEC-V3-002**
 
-- GPUI 의존성 추가 (Zed 서브모듈 또는 path dependency)
-- libghostty-rs 의존성 + Zig 0.15.x CI 설치 스크립트
-- "Hello World" GPUI 윈도우 + libghostty 샘플 터미널 렌더
+> 본 마일스톤은 v1.2.0 RG-V3-3 rescope 와 함께 **SPEC-V3-002 (Terminal Core)** 로 완전 이관. v1.3.0 에서 공식 표시.
+
+- ~~GPUI 의존성 추가 (Zed 서브모듈 또는 path dependency)~~ → SPEC-V3-002 MS-1 (완료, `gpui = "0.2"` crates.io)
+- ~~libghostty-rs 의존성 + Zig 0.15.x CI 설치 스크립트~~ → SPEC-V3-002 MS-2/MS-3 (완료, pinned rev)
+- ~~"Hello World" GPUI 윈도우 + libghostty 샘플 터미널 렌더~~ → SPEC-V3-002 `examples/ghostty-spike.rs` (완료)
 
 ### MS-3: 스캐폴드 바이너리 + 기본 레이아웃 (Phase 1)
 
@@ -165,7 +170,7 @@ MoAI Studio v3 아키텍처 전환의 **스캐폴드 스프린트**. 기존 Swif
 
 ### 내부 제약
 
-- Rust MSRV 1.82+ (GPUI 요구)
+- Rust MSRV **1.93+** (SPEC-V3-002 workspace 상향 반영, v1.3.0 plan-auditor 교정)
 - macOS 14+, Ubuntu 22.04+, Windows 11 (Windows 는 Phase 7)
 - Swift 코드 수정 금지 (archive 만)
 - moai-core 테스트 유지
@@ -244,4 +249,4 @@ MoAI Studio v3 아키텍처 전환의 **스캐폴드 스프린트**. 기존 Swif
 
 ---
 
-버전: 1.0.0 · 2026-04-21
+버전: 1.3.0 · 2026-04-24 (v1.0.0 → v1.3.0 plan-auditor 교정)

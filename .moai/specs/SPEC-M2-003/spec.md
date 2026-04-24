@@ -1,14 +1,23 @@
-# SPEC-M2-003: Surface State Persistence -- 재시작 후 완전 복원
+# SPEC-M2-003: Surface State Persistence -- 재시작 후 완전 복원 (ARCHIVED — v2 Swift design)
+
+> **⚠️ SUPERSEDED (2026-04-24)**: 본 SPEC 은 Swift/AppKit 기반 v2 아키텍처에서 작성되었다. 2026-04-21 v3 pivot (GPUI + libghostty-vt) 으로 모든 참조 경로 (`core/crates/moai-store/`, `app/Sources/Shell/**`) 가 `archive/swift-legacy/` 로 이관되었으며, "Surface State Persistence" 기능 자체는 **SPEC-V3-003 MS-3 Persistence (T12-T13)** 에서 pane tree + tab 목록 + cwd + last focused pane 의 복원 범위로 재정의된다.
+>
+> **AC-P-NN 네임스페이스 주의**: 본 SPEC 의 `AC-P-1 ~ AC-P-10` 은 SPEC-V3-003 의 `AC-P-1 ~ AC-P-27` 과 ID 충돌. SPEC-V3-003 v1.1.0 의 AC-P 가 canonical. 본 SPEC 의 AC-P 는 **historical only**.
+>
+> **후속 조치 (user 결정)**: (b) `status: archived-v2-design` 로 동결 채택 (2026-04-24 plan-auditor FAILED 판정 대응).
 
 ---
 id: SPEC-M2-003
-version: 1.0.0
-status: draft
-created: 2026-04-16
-updated: 2026-04-16
+version: 1.1.0-archived
+status: archived-v2-design
+created_at: 2026-04-16
+updated_at: 2026-04-24
+superseded_by: SPEC-V3-003 (MS-3 Persistence, pane tree + tab list + cwd + focus)
 author: MoAI (manager-spec)
 priority: Medium
 issue_number: 0
+labels: [archived, v2-swift, persistence, superseded]
+revision: v1.1.0-archived (plan-auditor 2026-04-24 감사 FAILED — v3 pivot 으로 archive 처리)
 ---
 
 ## HISTORY
@@ -16,6 +25,7 @@ issue_number: 0
 | 버전 | 날짜 | 변경 내용 |
 |------|------|-----------|
 | 1.0.0 | 2026-04-16 | 초안 작성. M2 완료 보고서 "알려진 제한 사항" 4건 (P-5 statePathCache, P-6 FileTree 재귀 expand, P-7 Browser URL 영속, P-8 resolveWorkspacePath) 을 SPEC 화. |
+| 1.1.0-archived | 2026-04-24 | plan-auditor 감사 FAILED — C-001 (AC-P-NN 네임스페이스 충돌 with SPEC-V3-003) + C-002 (archive 경로 drift) 이유로 archive 처리. status `draft → archived-v2-design`. frontmatter `superseded_by: SPEC-V3-003` 추가. 본 SPEC 의 5 RG / 10 AC 는 historical reference 로만 보존. persistence 기능은 SPEC-V3-003 MS-3 로 계승. |
 
 ---
 

@@ -1,7 +1,7 @@
 ---
 id: SPEC-V3-003
-version: 1.0.0
-status: approved
+version: 1.1.0
+status: run-in-progress-ms2-complete
 created_at: 2026-04-24
 updated_at: 2026-04-24
 approved_at: 2026-04-24
@@ -12,7 +12,11 @@ depends_on: [SPEC-V3-001, SPEC-V3-002]
 milestones: [MS-1, MS-2, MS-3]
 language: ko
 labels: [phase-3, ui, terminal, panes, tabs, persistence]
-revision: v1.0.0 (iter 2 CONDITIONAL PASS 후 annotation cycle 승인, NM-1/Nm-1/Nm-2/Nm-3 해소)
+revision: v1.1.0 (plan-auditor 2026-04-24 감사 — MS-1/MS-2 완료, MS-3 대기; status 세분화 + §7.7 TabBar abstract 추가)
+milestone_status:
+  MS-1: completed (2026-04-24, 14 AC FULL 13 / PARTIAL 0 / DEFERRED 1 → AC-P-5 MS-3 재승계)
+  MS-2: completed (2026-04-24, 10 primary + 2 carry-over, FULL 11 / DEFERRED 1 AC-P-5)
+  MS-3: pending (T12 persistence + T13 E2E + T14 CI, contract.md §12)
 ---
 
 # SPEC-V3-003: Tab / Pane Split — 다중 탭 + 이진 트리 pane split
@@ -24,6 +28,7 @@ revision: v1.0.0 (iter 2 CONDITIONAL PASS 후 annotation cycle 승인, NM-1/Nm-1
 | 0.1.0-draft | 2026-04-24 | research.md (625 LOC) 완료 후 사용자의 7개 scope 질문 확정 답변을 반영해 초안 작성. Q1 다중 탭 + 탭당 pane tree, Q2 깊이 무제한 + 최소 pane 크기, Q3 direct modifier 키 바인딩, Q4 open pane 구조만 JSON 복원, Q5 단일 SPEC + 3 milestones, Q6 추상 인터페이스만 정의 후 plan spike 에서 결정, Q7 MS-1 Pane core → MS-2 Tabs → MS-3 Persistence. gpui-component 의존 여부 및 divider drag API 확인은 plan 단계로 연기. |
 | 0.2.0-draft | 2026-04-24 | plan-auditor iter 1 감사 FAIL 대응 iter 2 재작업. (C-1) §1.3 / §13.1 의 `system.md:422-439` 참조를 실존 경로 `.moai/design/v3/spec.md:420-438` 로 교정. (C-2) 사용자 확정 (2026-04-24): macOS Cmd ↔ Linux Ctrl 이원화를 RG-P-4 표 두 컬럼 구조로 반영, G3 / G7 / §6.4 / AC-P-9 에 양 플랫폼 검증 명시. (C-3) Horizontal = 좌/우 배치 (수직 divider), Vertical = 상/하 배치 (수평 divider) 를 §7.1 / §15 / RG-P-1 / US-1 / AC-P-4 에 확정. PaneTree 필드 `left/right` → `first/second` 로 방향 중립 재명명. (MP-1) 전체 EARS 문장에 REQ-P-NNN ID 부여. (MP-2) spec.md:113, :137, :159 의 EARS 레이블 오분류 재분류. (MP-3) frontmatter 를 H1 앞으로 이동, `created_at` / `updated_at` / `labels` / `revision` 추가. (M-2) PaneConstraints 를 `impl` associated const 로 단일화. (M-4) 최소 6건의 [Unwanted] / [Ubiquitous] REQ 에 negative/positive assertion AC 추가 (AC-P-20 ~ AC-P-25). (M-5) 탭 바 시각 스펙을 "bold active indicator + color" 최소값으로 직접 규정. (M-6) cwd fallback REQ-P-057 + AC-P-13a 신규. (M-7) 접근성 §6.3 에 VoiceOver / Orca / pane role / tab title source 명시. (M-8) 성능 목표 각 숫자에 근거 링크 주석. (M-9) §14 Exclusions 를 §3.2 참조 + 고유 3건 (#11~#13) 만 유지로 축약. (m-1) horizontal 용어 검증을 plan spike #3 에 추가. (m-3) AC-P-18 / AC-P-19 Requirement Group 컬럼을 `§6.1` / `§6.2` 로 교정. |
 | 1.0.0 | 2026-04-24 | plan-auditor iter 2 CONDITIONAL PASS 후 annotation cycle 승인 (v1.0.0). NM-1/Nm-1/Nm-2 해소 반영. (NM-1) RG-P-6 내 REQ-P-057 (cwd fallback) 을 **REQ-P-056** 으로 rename — §5 RG-P-6 / §8 MS-3 / §10 AC-P-13a 의 Requirement Group 컬럼 갱신. (Nm-1) REQ-P-034 (Optional, pane 내부 tmux 중첩 시 OS-level 우선 처리) 에 대한 **AC-P-26** 신규 추가 (§10, MS-2). (Nm-2) REQ-P-044 (State-Driven, tab bar active 탭 시각 구분) 에 대한 **AC-P-27** 신규 추가 (§10, MS-2). (Nm-3) §6.4 Linux 포터빌리티 문단에 Ctrl+D (shell EOF) / Ctrl+W (readline word-delete-backward) / Ctrl+\\ (SIGQUIT) 의 shell 관례 충돌을 명시하고, R-9 신규 추가 및 plan Spike 4 (Linux shell 관례 실제 UX 검증) 로 연기. AC 총수 27 → 29. status draft → approved. |
+| 1.1.0 | 2026-04-24 | plan-auditor (2026-04-24 전 SPEC 감사) 결과 반영. (C-001) `status: approved` → `run-in-progress-ms2-complete` 세분화 — MS-1/MS-2 run 완료, MS-3 대기. frontmatter 에 `milestone_status` 필드 추가. (M-001) §7.7 에 `TabBar` / `TabBarStyle` / `FontWeight` abstract API 추가 (T10 구현체 대응). (M-002) §6.4 "60 tests baseline" 주석 명확화 — 본 SPEC 시작 시점 (2026-04-24 pre-T1) 기준. (m-001) REQ-P-057 rename 잔재 주석 유지 (historical clarity). (m-002) §11.1 Plan Spikes 표에 Spike 4 (Linux shell 관례) 엔트리 명시 추가. (m-003) §6.2 `60 × 18 = 1080 MB` 숫자 일치 교정. |
 
 ---
 
@@ -382,6 +387,39 @@ impl PaneConstraints {
 ```
 
 *(M-2 해소: iter 1 의 struct field 와 상수 병존 모호성을 제거. 불변 associated const 단일화.)*
+
+### 7.7 TabBar / TabBarStyle / FontWeight (v1.1.0 신규)
+
+T10 구현체 (`crates/moai-studio-ui/src/tabs/bar.rs`, commit 4428e93) 의 공개 API 를 spec 추상 형태로 명시. plan-auditor 2026-04-24 감사 M-001 대응.
+
+```rust
+pub enum FontWeight {
+    Normal,
+    Medium,
+    Bold,
+}
+
+pub struct TabBarStyle {
+    pub active_bg: u32,              // = tokens::TOOLBAR_TAB_ACTIVE_BG (= BG_SURFACE_3 = 0x232327)
+    pub inactive_bg: u32,            // = tokens::BG_SURFACE
+    pub active_font_weight: FontWeight,    // Bold (AC-P-27 직접 근거)
+    pub inactive_font_weight: FontWeight,  // Normal 또는 Medium
+    pub active_fg: u32,              // FG_PRIMARY
+    pub inactive_fg: u32,            // FG_SECONDARY
+}
+
+pub struct TabBar<L: Clone + 'static> { /* ... */ }
+
+impl<L: Clone + 'static> TabBar<L> {
+    pub fn style_for(idx: usize, active_idx: usize) -> TabBarStyle;
+    pub fn is_active(idx: usize, active_idx: usize) -> bool;
+    // 실제 GPUI 렌더 래퍼 메서드는 thin wrapper — 테스트 영역 외.
+}
+```
+
+USER-DECISION (design-token-color-value): **(a) BG_SURFACE_3** 확정 (2026-04-24). `TOOLBAR_TAB_ACTIVE_BG` alias 는 `lib.rs::tokens` 에서 노출되며 `BG_SURFACE_3` (0x232327) 과 동일. sidebar 의 active workspace row 색상과 일관성 유지.
+
+AC-P-27 (v1.0.0 Nm-2) 직접 검증: `tabs::bar::tests::active_tab_is_bold` + `active_tab_uses_bg_surface_3` + `inactive_tab_is_not_bold` (T10 산출, 8 unit tests).
 
 ---
 
