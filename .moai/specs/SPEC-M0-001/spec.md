@@ -1,20 +1,28 @@
-# SPEC-M0-001: M0 킥오프 — Proof of Life
+# SPEC-M0-001: M0 킥오프 — Proof of Life (ARCHIVED — v2 Swift design)
+
+> **⚠️ SUPERSEDED (2026-04-24)**: 본 SPEC 은 Swift/AppKit 기반 v2 아키텍처를 전제한다. 2026-04-21 v3 pivot (GPUI + Rust) 으로 기존 구현 경로가 `archive/swift-legacy/` 로 이관되었으며, v3 pivot 으로 M0 "Proof of Life" 개념은 SPEC-V3-001 scaffold sprint 로 재정의되었다.
+>
+> **후속 조치**: (b) `status: archived-v2-design` 로 동결 채택 (2026-04-24 Priority Low 정비).
 
 ---
 id: SPEC-M0-001
-version: 1.0.0
-status: draft
+version: 1.1.0-archived
+status: archived-v2-design
 created: 2026-04-11
-updated: 2026-04-11
+updated: 2026-04-24
+superseded_by: SPEC-V3-001
 author: MoAI (manager-spec)
 priority: High
 issue_number: null
+labels: [archived, v2-swift, m0, proof-of-life, superseded]
+revision: v1.1.0-archived (Priority Low 정비 2026-04-24 — v3 pivot 으로 archive, superseded_by 명시)
 ---
 
 ## HISTORY
 
 | 버전 | 날짜 | 변경 내용 |
 |------|------|-----------|
+| 1.1.0-archived | 2026-04-24 | v3 pivot 으로 archive. Swift/AppKit 기반 설계는 Rust + GPUI 기반 v3 SPEC (SPEC-V3-001) 로 계승. status: draft → archived-v2-design. Priority Low 정비 PR. |
 | 1.0.0 | 2026-04-11 | 초안 작성. SPEC-SPIKE-001 결과 반영, spike errata E1-E6 통합 |
 
 ---
@@ -80,7 +88,7 @@ SPEC-SPIKE-001 에서 검증된 6건의 errata 는 M0 전 요구사항에 반영
 
 **[Ubiquitous]** `vendor/ghostty` 는 git submodule 로 **관리되어야 한다** (shall be managed).
 
-**[If-Then]** Metal Toolchain 이 설치되지 않은 환경에서 빌드가 실패하면 (If), 빌드 스크립트는 Metal Toolchain 설치 안내 메시지를 출력하고 비정상 종료 코드를 **반환해야 한다** (shall return).
+**[Unwanted]** Metal Toolchain 이 설치되지 않은 환경에서 빌드가 실패하면 (If), 빌드 스크립트는 Metal Toolchain 설치 안내 메시지를 출력하고 비정상 종료 코드를 **반환해야 한다** (shall return).
 
 **산출물**: `vendor/ghostty` (submodule), `scripts/build-ghostty-xcframework.sh`, `GhosttyKit.xcframework` 빌드 성공
 
@@ -112,7 +120,7 @@ claude --bare -p "" \
 
 **[Event-Driven]** 사용자 메시지 전송이 요청되면 (When), `moai-claude-host` 는 stdin 을 통해 `SDKUserMessage` JSON 을 subprocess 에 **전송해야 한다** (shall send).
 
-**[If-Then]** subprocess 가 비정상 종료하면 (If), `moai-claude-host` 는 오류 이벤트를 EventBus 에 발행하고 workspace 상태를 `error` 로 **전환해야 한다** (shall transition).
+**[Unwanted]** subprocess 가 비정상 종료하면 (If), `moai-claude-host` 는 오류 이벤트를 EventBus 에 발행하고 workspace 상태를 `error` 로 **전환해야 한다** (shall transition).
 
 **산출물**: `core/crates/moai-claude-host/src/lib.rs`, `cargo test --package moai-claude-host` 통과
 

@@ -1,20 +1,28 @@
-# SPEC-M1-001: M1 Working Shell — Multi-Workspace + UI Shell
+# SPEC-M1-001: M1 Working Shell — Multi-Workspace + UI Shell (ARCHIVED — v2 Swift design)
+
+> **⚠️ SUPERSEDED (2026-04-24)**: 본 SPEC 은 Swift/AppKit 기반 v2 아키텍처를 전제한다. 2026-04-21 v3 pivot (GPUI + Rust) 으로 기존 구현 경로가 `archive/swift-legacy/` 로 이관되었으며, Working Shell 기능은 SPEC-V3-001 (scaffold) + SPEC-V3-002 (libghostty-vt 통합) 로 계승되었다.
+>
+> **후속 조치**: (b) `status: archived-v2-design` 로 동결 채택 (2026-04-24 Priority Low 정비).
 
 ---
 id: SPEC-M1-001
-version: 1.1.0
-status: completed
+version: 1.2.0-archived
+status: archived-v2-design
 created: 2026-04-11
-updated: 2026-04-13
+updated: 2026-04-24
+superseded_by: SPEC-V3-001, SPEC-V3-002
 author: MoAI (manager-spec)
 priority: High
 issue_number: null
+labels: [archived, v2-swift, m1, working-shell, superseded]
+revision: v1.2.0-archived (Priority Low 정비 2026-04-24 — v3 pivot 으로 archive, superseded_by 명시)
 ---
 
 ## HISTORY
 
 | 버전 | 날짜 | 변경 내용 |
 |------|------|-----------|
+| 1.2.0-archived | 2026-04-24 | v3 pivot 으로 archive. Swift/AppKit 기반 설계는 Rust + GPUI 기반 v3 SPEC (SPEC-V3-001, SPEC-V3-002) 로 계승. status: completed → archived-v2-design. Priority Low 정비 PR. |
 | 1.0.0 | 2026-04-11 | 초안 작성. M0 conditional GO 기반, M0 carry-over 항목 포함 |
 | 1.1.0 | 2026-04-13 | 구현 완료. 조건부 GO. 30 tasks, 186 tests, 7 commits. |
 
@@ -80,9 +88,9 @@ M0 에서 미완료된 항목이 M1 의 선행 작업으로 포함된다.
 
 **[State-Driven]** 터미널 surface 가 활성 상태인 동안 (While), GhosttyKit Metal 렌더링으로 zsh shell 을 60fps@4K 해상도에서 **표시해야 한다** (shall render).
 
-**[If-Then]** Metal Toolchain 이 설치되지 않은 환경에서 GhosttyKit 빌드가 실패하면 (If), 빌드 스크립트는 설치 안내 메시지를 출력하고 비정상 종료 코드를 **반환해야 한다** (shall return).
+**[Unwanted]** Metal Toolchain 이 설치되지 않은 환경에서 GhosttyKit 빌드가 실패하면 (If), 빌드 스크립트는 설치 안내 메시지를 출력하고 비정상 종료 코드를 **반환해야 한다** (shall return).
 
-**[If-Then]** GhosttyKit 초기화가 실패하면 (If), 콘텐츠 영역은 "Terminal unavailable" 메시지와 재시도 버튼을 **표시해야 한다** (shall display).
+**[Unwanted]** GhosttyKit 초기화가 실패하면 (If), 콘텐츠 영역은 "Terminal unavailable" 메시지와 재시도 버튼을 **표시해야 한다** (shall display).
 
 **산출물**: `GhosttyKit.xcframework` 빌드 성공, 터미널 surface 에 zsh 렌더링 확인
 
@@ -126,7 +134,7 @@ M0 에서 미완료된 항목이 M1 의 선행 작업으로 포함된다.
 
 **[State-Driven]** 워크스페이스가 `Running` 상태인 동안 (While), `moai-fs` 는 워크스페이스 디렉토리의 파일 변경을 감지하여 EventBus 에 **발행해야 한다** (shall publish).
 
-**[If-Then]** Claude subprocess 가 비정상 종료하면 (If), 워크스페이스 상태를 `Error` 로 전환하고 사이드바에 오류 아이콘을 **표시해야 한다** (shall display). 사용자가 재시작 버튼을 클릭하면 subprocess 를 다시 spawn 한다.
+**[Unwanted]** Claude subprocess 가 비정상 종료하면 (If), 워크스페이스 상태를 `Error` 로 전환하고 사이드바에 오류 아이콘을 **표시해야 한다** (shall display). 사용자가 재시작 버튼을 클릭하면 subprocess 를 다시 spawn 한다.
 
 **[Ubiquitous]** `moai-store` 는 `workspaces` 테이블에 `id, name, project_path, worktree_path, status, spec_id, claude_session_id, created_at, updated_at` 를 **저장해야 한다** (shall persist).
 
@@ -192,7 +200,7 @@ claude --bare -p "" \
 
 **[Event-Driven]** 앱이 업데이트 후 실행되면 (When), `moai-plugin-installer` 는 번들 내 플러그인 버전과 설치된 버전을 비교하고 필요 시 **업데이트해야 한다** (shall update).
 
-**[If-Then]** 플러그인 설치 경로에 쓰기 권한이 없으면 (If), `moai-plugin-installer` 는 오류를 로그에 기록하고 사용자에게 수동 설치 안내를 **표시해야 한다** (shall display).
+**[Unwanted]** 플러그인 설치 경로에 쓰기 권한이 없으면 (If), `moai-plugin-installer` 는 오류를 로그에 기록하고 사용자에게 수동 설치 안내를 **표시해야 한다** (shall display).
 
 **[Ubiquitous]** 플러그인 디렉토리 구조는 다음을 **포함해야 한다** (shall include):
 - `.claude-plugin/plugin.json`

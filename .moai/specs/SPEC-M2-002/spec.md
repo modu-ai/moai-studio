@@ -1,20 +1,28 @@
-# SPEC-M2-002: M2.5 Polish -- Placeholder 잔재 해소 (ActivePaneProvider + GhosttyHost 실연결 + Command Palette 콜백 활성화)
+# SPEC-M2-002: M2.5 Polish -- Placeholder 잔재 해소 (ActivePaneProvider + GhosttyHost 실연결 + Command Palette 콜백 활성화) (ARCHIVED — v2 Swift design)
+
+> **⚠️ SUPERSEDED (2026-04-24)**: 본 SPEC 은 Swift/AppKit 기반 v2 아키텍처를 전제한다. 2026-04-21 v3 pivot (GPUI + Rust) 으로 기존 구현 경로가 `archive/swift-legacy/` 로 이관되었으며, Swift placeholder 해소 작업 자체가 v3 pivot 으로 무효화되었다 — v3 는 새 구현이므로 legacy polish 대상이 없다.
+>
+> **후속 조치**: (b) `status: archived-v2-design` 로 동결 채택 (2026-04-24 Priority Low 정비).
 
 ---
 id: SPEC-M2-002
-version: 1.1.0
-status: completed
+version: 1.2.0-archived
+status: archived-v2-design
 created: 2026-04-16
-updated: 2026-04-17
+updated: 2026-04-24
+superseded_by: SPEC-V3-001
 author: MoAI (manager-spec)
 priority: High
 issue_number: 0
+labels: [archived, v2-swift, m2, polish, placeholder, superseded]
+revision: v1.2.0-archived (Priority Low 정비 2026-04-24 — v3 pivot 으로 archive, superseded_by 명시)
 ---
 
 ## HISTORY
 
 | 버전 | 날짜 | 변경 내용 |
 |------|------|-----------|
+| 1.2.0-archived | 2026-04-24 | v3 pivot 으로 archive. Swift/AppKit 기반 설계는 Rust + GPUI 기반 v3 SPEC (SPEC-V3-001) 로 계승. status: completed → archived-v2-design. Priority Low 정비 PR. |
 | 1.1.0 | 2026-04-17 | Run phase 완료. 18 tasks 모두 GREEN-REFACTOR. 4개 placeholder 해소. Swift 테스트 130/130 PASS, Rust 289/289 PASS. @MX 태그 2건 ANCHOR + 6건 NOTE 추가. |
 | 1.0.0 | 2026-04-16 | 초안 작성. SPEC-M2-001 (completed, 2026-04-15) placeholder 4건 (P-1~P-4) 해소. ActivePaneProvider → GhosttyHost 실연결 → Command Palette onSurfaceOpen/onPaneSplit 활성화 순서. |
 
