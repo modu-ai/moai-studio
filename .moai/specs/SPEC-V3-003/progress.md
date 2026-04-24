@@ -797,3 +797,90 @@ Working tree: 본 commit 후 clean
    - [USER-DECISION-REQUIRED: test-support-feature-adoption] — gpui test-support feature 활성화 (AC-P-5 해소 기회)
 3. MS-2 완료 시 contract.md v1.0.2 (MS-3 Sprint Contract) 추가 + progress.md MS-2 complete 섹션
 4. feature branch → develop: **squash merge** (Enhanced GitHub Flow §4)
+
+### Phase 2 T11 Complete — criterion bench + headless resize (2026-04-24)
+
+- 수정 파일:
+  1. `crates/moai-studio-ui/Cargo.toml` — `[dev-dependencies]` criterion 0.5 + `[[bench]]` tab_switch + pane_split 추가
+  2. `crates/moai-studio-ui/benches/tab_switch.rs` — 신규 (9 탭 × 50 사이클 criterion bench, AC-P-19)
+  3. `crates/moai-studio-ui/benches/pane_split.rs` — 신규 (9-leaf split criterion bench, AC-P-18)
+  4. `crates/moai-studio-ui/tests/integration_headless_resize.rs` — 신규 (smoke 2 PASS + headless 1 #[ignore])
+
+- USER-DECISION 기록:
+  - `[criterion-adoption] = 추가` (default) — Cargo.toml dev-dep 변경 승인
+  - `[test-support-feature-adoption] = 추가` (default) — 승인했으나 gpui 0.2.2 에 미존재
+    → cargo info gpui@0.2.2 검증 결과 `test-support` feature 없음
+    → AC-P-5 headless resize test: `#[ignore]` + TODO(T11.1) 처리
+
+- 테스트 결과:
+  - `cargo test -p moai-studio-ui --all-targets`: **143+2 PASS, 2 ignored, 0 failed**
+    - lib: 143 PASS
+    - integration_headless_resize: 2 PASS (smoke), 1 ignored (#[ignore] headless)
+    - integration_key_bindings: 4 PASS
+    - integration_pane_core: 2 PASS
+    - integration_tmux_nested: 1 PASS + 1 ignored
+  - `cargo test -p moai-studio-terminal --all-targets`: **13 PASS** (AC-P-16 regression 0)
+  - `cargo bench --bench tab_switch`: `tab_switch_9_tabs_50_cycles` avg **14.6µs** (목표 50ms → 3000× 마진)
+  - `cargo bench --bench pane_split`: `pane_split_9_leaf` avg **4.3µs** (목표 200ms → 46000× 마진)
+  - `cargo clippy --workspace --all-targets -- -D warnings`: **0 warnings**
+  - `cargo fmt --all -- --check`: clean
+
+- AC 통과 (T11 범위):
+  - **AC-P-19** ✅ MS-2 primary: tab switch harness 성립 + criterion 리포트 생성 (14.6µs avg)
+  - **AC-P-18** ✅ MS-1 carry-over: pane split bench harness 성립 + criterion 리포트 생성 (4.3µs avg)
+  - **AC-P-5** ⏸ MS-1 carry-over deferred: gpui 0.2.2 `test-support` feature 미존재
+    - smoke test 2개 항상 PASS (PaneConstraints 상수 접근 확인)
+    - TODO(T11.1): gpui 버전 업그레이드 시 `#[ignore]` 제거 + 구현 완성
+
+- MX 태그:
+  - `benches/tab_switch.rs` header: `// @MX:ANCHOR: [AUTO] bench-tab-switch` + REASON (AC-P-19 measurement harness)
+  - `benches/pane_split.rs` header: `// @MX:ANCHOR: [AUTO] bench-pane-split` + REASON (AC-P-18 measurement harness)
+  - `tests/integration_headless_resize.rs` header: `// @MX:NOTE: [AUTO] ac-p-5-headless-resize` (AC-P-5 carry-over)
+
+- commit: 3c05d3d (feature/SPEC-V3-003-ms2-tabcontainer)
+- blockers: 없음
+- 구현 divergence: 경로 B (test-support) → #[ignore]+TODO(T11.1) (gpui 0.2.2 feature 미존재 — 계획에 명시된 fallback 경로)
+
+### AC 통과 누계 (T11 완료 시점, MS-2 AC 전체)
+
+- AC-P-4 ✅ (T2/T5/T8 carry-over — boundary math + integration 준비)
+- AC-P-5 ⏸ deferred → TODO(T11.1) gpui 버전 업
+- AC-P-8 ✅ (T8)
+- AC-P-9a ✅ 완전 (T6/T9)
+- AC-P-9b ✅ 완전 (T6/T9)
+- AC-P-10 ✅ (T8)
+- AC-P-11 ✅ (T8)
+- AC-P-16 ✅ regression 0 (전체 T11 포함)
+- AC-P-18 ✅ (T11 bench harness)
+- AC-P-19 ✅ (T11 bench harness, 14.6µs avg — MS-2 primary 달성)
+- AC-P-24 ✅ 완전 (T7/T10)
+- AC-P-25 ✅ (T8)
+- AC-P-26 ✅ (T9)
+- AC-P-27 ✅ (T10)
+
+### MS-2 Sprint Exit 상태 (T11 완료)
+
+contract.md §10.2 MS-2 primary AC:
+- [x] AC-P-8 ✅
+- [x] AC-P-9a ✅ 완전
+- [x] AC-P-9b ✅ 완전
+- [x] AC-P-10 ✅
+- [x] AC-P-11 ✅
+- [x] AC-P-19 ✅ (bench harness 14.6µs)
+- [x] AC-P-24 ✅ 완전
+- [x] AC-P-25 ✅
+- [x] AC-P-26 ✅
+- [x] AC-P-27 ✅
+
+MS-1 carry-over:
+- [x] AC-P-18 ✅ (bench harness 4.3µs)
+- [ ] AC-P-5 ⏸ TODO(T11.1)
+
+**판정: MS-2 EXIT PASS** (AC-P-5 는 gpui 제약으로 deferred, 나머지 전원 완전 달성)
+
+### Next: MS-2 Sprint Exit Gate + MS-3 Sprint Contract
+
+다음 session 에서:
+1. contract.md §10.2 MS-2 Sprint Exit Record 작성
+2. contract.md §11 MS-3 Sprint Contract 추가 (T12 persistence, T13 E2E 범위)
+3. feature branch → develop: **squash merge** (Enhanced GitHub Flow §4)
