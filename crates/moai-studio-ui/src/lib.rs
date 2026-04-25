@@ -18,11 +18,12 @@ pub mod tabs;
 pub mod terminal;
 
 use gpui::{
-    App, Application, Context, Entity, IntoElement, MouseButton, ParentElement, Render, Styled,
-    Window, WindowOptions, div, prelude::*, px, rgb, size,
+    App, Application, Context, Entity, IntoElement, KeyDownEvent, MouseButton, ParentElement,
+    Render, Styled, Window, WindowOptions, div, prelude::*, px, rgb, size,
 };
 use moai_studio_workspace::{Workspace, WorkspacesStore};
 use std::path::PathBuf;
+use tabs::TabContainer;
 use tracing::{error, info};
 
 // ============================================================
@@ -69,18 +70,18 @@ pub mod tokens {
 /// 앱 전역 상태 — Phase 1.7: workspace 리스트 + active id + storage path (버튼 클릭 시 재로드).
 /// Phase 2 (SPEC-V3-002 T4): terminal 필드 추가 — content_area TerminalSurface 분기.
 /// Phase 3 MS-1 T7 (SPEC-V3-003): terminal → pane_splitter rename.
+/// Phase 4 T2 (SPEC-V3-004 MS-1): pane_splitter → tab_container rename.
 pub struct RootView {
     pub workspaces: Vec<Workspace>,
     pub active_id: Option<String>,
     pub storage_path: PathBuf,
-    // @MX:ANCHOR: [AUTO] root-view-content-binding
-    // @MX:REASON: [AUTO] pane_splitter 는 content_area 렌더 진입점이다.
-    //   MS-2 T8 에서 TabContainer 로 업그레이드, MS-3 T13 에서 persistence 복원 경로가
-    //   이 필드를 통해 흐른다 (fan_in >= 3: T7/T8/T13).
-    /// MS-1 활성 TerminalSurface 렌더 진입점 (단일 pane).
-    /// MS-2 T8 에서 `tab_container: Option<Entity<TabContainer>>` 로 교체 예정.
-    /// MS-3 T13 에서 persistence 복원 시 이 필드를 통해 초기화.
-    pub pane_splitter: Option<Entity<terminal::TerminalSurface>>,
+    // @MX:ANCHOR: [AUTO] root-view-tab-container-binding
+    // @MX:REASON: [AUTO] SPEC-V3-004 RG-R-1. tab_container 는 content_area 진입점이며
+    //   key dispatch (RG-R-4) 와 divider drag (RG-R-3) 의 mutation target 이다.
+    //   fan_in >= 3: T2 init, T5 key handler (MS-2), T7 divider drag (MS-3).
+    /// SPEC-V3-004 MS-1: content_area 렌더 진입점 (TabContainer Entity).
+    /// None 이면 Empty State CTA 렌더 (REQ-R-005).
+    pub tab_container: Option<Entity<TabContainer>>,
 }
 
 impl RootView {
@@ -94,7 +95,7 @@ impl RootView {
             workspaces,
             active_id,
             storage_path,
-            pane_splitter: None,
+            tab_container: None,
         }
     }
 
@@ -145,6 +146,68 @@ impl RootView {
         cx.notify();
     }
 
+    /// GPUI 키 이벤트를 탭 명령으로 변환하여 TabContainer 에 전달한다 (REQ-R-031).
+    ///
+    /// @MX:NOTE: [AUTO] rootview-key-dispatch-ac-r-3
+    /// RootView 의 on_key_down 핸들러. keystroke_to_tab_key → dispatch_tab_key 순서로 변환.
+    /// Some(TabCommand) 시에만 tab_container.update 호출 (REQ-R-031).
+    /// None 이면 RootView 가 keystroke 를 소비하지 않아 활성 leaf 로 자동 forward (REQ-R-035).
+    fn handle_key_event(&mut self, ev: &KeyDownEvent, cx: &mut Context<Self>) {
+        let (mods, code) = tabs::keys::keystroke_to_tab_key(&ev.keystroke);
+        let Some(cmd) = tabs::keys::dispatch_tab_key(mods, code) else {
+            return; // REQ-R-035: passthrough
+        };
+        let Some(tc) = self.tab_container.as_ref() else {
+            return;
+        };
+        let tc = tc.clone();
+        tc.update(cx, |tc, cx| {
+            use crate::panes::PaneId;
+            use tabs::keys::TabCommand;
+            match cmd {
+                TabCommand::NewTab => {
+                    tc.new_tab(None);
+                }
+                TabCommand::SwitchToTab(idx) => {
+                    // REQ-R-033: IndexOutOfBounds 는 무시.
+                    let _ = tc.switch_tab(idx);
+                }
+                TabCommand::SplitVertical => {
+                    // REQ-R-034: SplitVertical → split_horizontal (좌우 분할).
+                    if let Some(focused) = tc.active_tab().last_focused_pane.clone() {
+                        let _ = tc.active_tab_mut().pane_tree.split_horizontal(
+                            &focused,
+                            PaneId::new_unique(),
+                            "new-pane".to_string(),
+                        );
+                    }
+                }
+                TabCommand::SplitHorizontal => {
+                    // REQ-R-034: SplitHorizontal → split_vertical (상하 분할).
+                    if let Some(focused) = tc.active_tab().last_focused_pane.clone() {
+                        let _ = tc.active_tab_mut().pane_tree.split_vertical(
+                            &focused,
+                            PaneId::new_unique(),
+                            "new-pane".to_string(),
+                        );
+                    }
+                }
+                TabCommand::PrevTab => {
+                    if tc.active_tab_idx > 0 {
+                        let _ = tc.switch_tab(tc.active_tab_idx - 1);
+                    }
+                }
+                TabCommand::NextTab => {
+                    let next = tc.active_tab_idx + 1;
+                    if next < tc.tabs.len() {
+                        let _ = tc.switch_tab(next);
+                    }
+                }
+            }
+            cx.notify();
+        });
+    }
+
     /// + New Workspace 버튼 클릭 처리 — store 재로드, 네이티브 picker, 상태 갱신.
     ///   사용자가 취소하거나 로드/저장이 실패하면 상태 유지.
     fn handle_add_workspace(&mut self, cx: &mut Context<Self>) {
@@ -188,15 +251,20 @@ impl Render for RootView {
                 )
             })
             .collect();
-        // Phase 3 MS-1 T7 (SPEC-V3-003): pane_splitter View 를 main_body 에 전달.
-        let pane_splitter = self.pane_splitter.clone();
+        // SPEC-V3-004 T2: tab_container Entity 를 main_body 에 전달.
+        let tab_container = self.tab_container.clone();
+        // SPEC-V3-004 T5: RootView 가 key 이벤트를 수신하여 tab command 로 dispatch.
+        // REQ-R-031: keystroke_to_tab_key → dispatch_tab_key 순서로 변환.
         div()
             .flex()
             .flex_col()
             .size_full()
             .bg(rgb(tokens::BG_BASE))
+            .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _window, cx| {
+                this.handle_key_event(ev, cx);
+            }))
             .child(title_bar(self.title_label()))
-            .child(main_body(&self.workspaces, rows, new_ws_btn, pane_splitter))
+            .child(main_body(&self.workspaces, rows, new_ws_btn, tab_container))
             .child(status_bar())
     }
 }
@@ -295,7 +363,7 @@ fn main_body(
     workspaces: &[Workspace],
     rows: Vec<gpui::Stateful<gpui::Div>>,
     new_ws_btn: impl IntoElement,
-    pane_splitter: Option<Entity<terminal::TerminalSurface>>,
+    tab_container: Option<Entity<TabContainer>>,
 ) -> impl IntoElement {
     let is_empty = workspaces.is_empty();
     div()
@@ -304,7 +372,7 @@ fn main_body(
         .flex_grow()
         .w_full()
         .child(sidebar(is_empty, rows, new_ws_btn))
-        .child(content_area(is_empty, pane_splitter))
+        .child(content_area(is_empty, tab_container))
 }
 
 /// Sidebar 260pt — WORKSPACE + GIT WORKTREES + SPECs 섹션 + 하단 인터랙티브 "+ New Workspace".
@@ -409,17 +477,15 @@ fn workspace_row(ws: &Workspace, is_active: bool) -> gpui::Stateful<gpui::Div> {
         .child(div().text_sm().text_color(rgb(fg)).child(ws.name.clone()))
 }
 
-/// 컨텐츠 영역 — SPEC-V3-002 T4 분기 → SPEC-V3-003 MS-1 T7 pane_splitter 렌더.
+/// 컨텐츠 영역 — SPEC-V3-004 T2: tab_container Entity 렌더.
 ///
-/// 우선순위 (SPEC-V3-002 RG-V3-002-4 AC-T-6, SPEC-V3-003 AC-P-24):
-///   1. pane_splitter 가 Some 이면 활성 TerminalSurface 렌더 (MS-1: 단일 pane)
-///   2. show_empty_state 이면 Empty State CTA 렌더
-///   3. 그 외 (workspace 선택 but pane_splitter 없음) 플레이스홀더 렌더
-///
-/// // @MX:TODO(T8): MS-2 T8 에서 TabContainer 로 교체 + 다중 pane divider 시각화 추가
+/// 우선순위 (SPEC-V3-004 REQ-R-001 ~ REQ-R-005):
+///   1. tab_container 가 Some 이면 TabContainer 렌더 (MS-1+: 탭 바 + PaneTree)
+///   2. show_empty_state 이면 Empty State CTA 렌더 (SPEC-V3-001 carry)
+///   3. 그 외 (workspace 선택 but tab_container 없음) 플레이스홀더 렌더
 fn content_area(
     show_empty_state: bool,
-    pane_splitter: Option<Entity<terminal::TerminalSurface>>,
+    tab_container: Option<Entity<TabContainer>>,
 ) -> impl IntoElement {
     let mut area = div()
         .flex()
@@ -428,9 +494,9 @@ fn content_area(
         .h_full()
         .bg(rgb(tokens::BG_BASE));
 
-    if let Some(t) = pane_splitter {
-        // AC-T-6 / AC-P-24: pane_splitter 존재 시 TerminalSurface 렌더 (MS-1 단일 pane).
-        area = area.child(t);
+    if let Some(tc) = tab_container {
+        // REQ-R-001/002: tab_container 존재 시 TabContainer 렌더.
+        area = area.child(tc);
     } else if show_empty_state {
         area = area
             .justify_center()
@@ -442,12 +508,12 @@ fn content_area(
             .child(empty_state_secondary_cta_row())
             .child(empty_state_tip());
     } else {
-        // workspace 선택 but TerminalSurface 미생성 — Phase 2 전환 대기 상태.
+        // workspace 선택 but TabContainer 미생성 — 초기화 대기 상태.
         area = area.justify_center().items_center().child(
             div()
                 .text_sm()
                 .text_color(rgb(tokens::FG_MUTED))
-                .child("Workspace selected — terminal/editor coming in Phase 2"),
+                .child("Workspace selected — tab container initializing"),
         );
     }
     area
@@ -713,18 +779,18 @@ mod tests {
     // --- Phase 2 (SPEC-V3-002 T4) 추가 테스트 ---
 
     #[test]
-    fn root_view_pane_splitter_is_none_by_default() {
-        // AC-T-6: 초기 상태에서 pane_splitter 는 None (empty state 렌더).
-        // T7 rename: terminal → pane_splitter (MS-2 T8 에서 TabContainer 로 업그레이드 예정)
+    fn tab_container_is_none_by_default() {
+        // AC-R-1 (partial): 초기 상태에서 tab_container 는 None (empty state 렌더).
+        // SPEC-V3-004 T2: pane_splitter → tab_container 필드 교체.
         let view = RootView::new(vec![], dummy_path());
-        assert!(view.pane_splitter.is_none());
+        assert!(view.tab_container.is_none());
     }
 
     #[test]
-    fn root_view_with_workspaces_pane_splitter_still_none() {
-        // 워크스페이스 존재해도 pane_splitter 는 명시 생성 전까지 None
+    fn root_view_with_workspaces_tab_container_still_none() {
+        // 워크스페이스 존재해도 tab_container 는 명시 생성 전까지 None
         let ws = make_ws("proj", "1", 1_000);
         let view = RootView::new(vec![ws], dummy_path());
-        assert!(view.pane_splitter.is_none());
+        assert!(view.tab_container.is_none());
     }
 }
