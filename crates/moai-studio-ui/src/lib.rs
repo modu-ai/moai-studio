@@ -238,11 +238,11 @@ impl RootView {
     /// SPEC-V3-005 의 `OpenFileEvent` 를 소비하여:
     /// 1. 바이너리 파일 → 무시 (log 만).
     /// 2. Markdown → `Entity<MarkdownViewer>` 생성 후 `LeafKind::Markdown` 으로 저장.
-    /// 3. Code / 그 외 → `LeafKind::Code` 로 저장 (MS-2 CodeViewer 교체 예정).
+    /// 3. Code / 그 외 → `Entity<CodeViewer>` 생성 후 `LeafKind::Code` 로 저장 (MS-2).
     ///
-    /// MS-1 에서는 `leaf_payloads` HashMap 에 저장한다.
-    /// MS-2 에서 `PaneTree<LeafKind>` 교체 시 `pane_tree.set_leaf_payload` 로 전환.
+    /// MS-2 에서 tree-sitter CodeViewer 가 활성화되었다.
     pub fn handle_open_file(&mut self, ev: &viewer::OpenFileEvent, cx: &mut Context<Self>) {
+        use viewer::code::CodeViewer;
         use viewer::markdown::MarkdownViewer;
         use viewer::{EventResolution, SurfaceHint, resolve_event};
 
@@ -283,8 +283,22 @@ impl RootView {
                 cx.notify();
             }
             EventResolution::Open(_) => {
-                // Code / Terminal — MS-2 까지는 LeafKind::Code placeholder
-                self.leaf_payloads.insert(leaf_id, LeafKind::Code);
+                // MS-2: tree-sitter CodeViewer 생성
+                let path = ev.path.clone();
+                let entity = cx.new(|_cx| CodeViewer::new(path.clone()));
+                match viewer::read_file_for_viewer(&path) {
+                    Ok(src) => {
+                        entity.update(cx, |viewer: &mut CodeViewer, cx| {
+                            viewer.load(src.source, cx);
+                        });
+                    }
+                    Err(e) => {
+                        entity.update(cx, |viewer: &mut CodeViewer, cx| {
+                            viewer.set_error(e.to_string(), cx);
+                        });
+                    }
+                }
+                self.leaf_payloads.insert(leaf_id, LeafKind::Code(entity));
                 cx.notify();
             }
         }

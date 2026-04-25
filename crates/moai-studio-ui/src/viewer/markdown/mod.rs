@@ -12,7 +12,8 @@ pub mod parser;
 //   MarkdownViewer 의 lifecycle 진입점이다.
 //   fan_in >= 3: MarkdownViewer::open, impl Render, unit tests.
 
-use gpui::{Context, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb};
+use crate::viewer::code::highlight::{HighlightedLine, scope_to_color};
+use gpui::{AnyElement, Context, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb};
 use parser::{MarkdownBlock, parse_markdown};
 use std::path::PathBuf;
 
@@ -198,7 +199,7 @@ fn render_fallback_banner() -> impl IntoElement {
         .child("수식/다이어그램 렌더 비활성화 (USER-DECISION c: MS-3 에서 WebView 활성화 예정)")
 }
 
-fn render_block(block: &MarkdownBlock) -> impl IntoElement {
+fn render_block(block: &MarkdownBlock) -> AnyElement {
     match block {
         MarkdownBlock::Heading { level, text } => {
             let size_px = heading_size_px(*level);
@@ -207,22 +208,34 @@ fn render_block(block: &MarkdownBlock) -> impl IntoElement {
                 .text_size(px(size_px))
                 .mb(px(4.))
                 .child(text.clone())
+                .into_any_element()
         }
         MarkdownBlock::Paragraph(text) => div()
             .text_color(rgb(0xb5b5bb))
             .text_size(px(14.))
             .mb(px(4.))
-            .child(text.clone()),
-        MarkdownBlock::CodeBlock { lang, code } => {
+            .child(text.clone())
+            .into_any_element(),
+        MarkdownBlock::CodeBlock {
+            lang,
+            code,
+            highlighted,
+        } => {
             let label = lang.as_deref().unwrap_or("plain");
-            div()
-                .p(px(8.))
-                .mb(px(4.))
-                .bg(rgb(0x252526))
-                .rounded_md()
-                .text_color(rgb(0xd4d4d4))
-                .text_size(px(12.))
-                .child(format!("[{}]\n{}", label, code))
+            // T13: highlight 결과가 있으면 색상 span 렌더, 없으면 plain text
+            if let Some(hl_lines) = highlighted {
+                render_highlighted_code(hl_lines, label).into_any_element()
+            } else {
+                div()
+                    .p(px(8.))
+                    .mb(px(4.))
+                    .bg(rgb(0x252526))
+                    .rounded_md()
+                    .text_color(rgb(0xd4d4d4))
+                    .text_size(px(12.))
+                    .child(format!("[{}]\n{}", label, code))
+                    .into_any_element()
+            }
         }
         MarkdownBlock::InlineCode(code) => div()
             .bg(rgb(0x252526))
@@ -230,7 +243,8 @@ fn render_block(block: &MarkdownBlock) -> impl IntoElement {
             .px(px(4.))
             .text_color(rgb(0xce9178))
             .text_size(px(13.))
-            .child(format!("`{}`", code)),
+            .child(format!("`{}`", code))
+            .into_any_element(),
         MarkdownBlock::Math(math) => div()
             .p(px(8.))
             .mb(px(4.))
@@ -238,7 +252,8 @@ fn render_block(block: &MarkdownBlock) -> impl IntoElement {
             .rounded_md()
             .text_color(rgb(0xd4d4d4))
             .text_size(px(12.))
-            .child(format!("[math]\n{}", math)),
+            .child(format!("[math]\n{}", math))
+            .into_any_element(),
         MarkdownBlock::Mermaid(diagram) => div()
             .p(px(8.))
             .mb(px(4.))
@@ -246,7 +261,8 @@ fn render_block(block: &MarkdownBlock) -> impl IntoElement {
             .rounded_md()
             .text_color(rgb(0x9cdcfe))
             .text_size(px(12.))
-            .child(format!("[mermaid]\n{}", diagram)),
+            .child(format!("[mermaid]\n{}", diagram))
+            .into_any_element(),
         MarkdownBlock::List(items) => {
             let mut list = div().flex().flex_col().mb(px(4.));
             for item in items {
@@ -257,7 +273,7 @@ fn render_block(block: &MarkdownBlock) -> impl IntoElement {
                         .child(format!("• {}", item)),
                 );
             }
-            list
+            list.into_any_element()
         }
         MarkdownBlock::Quote(text) => div()
             .pl(px(12.))
@@ -266,9 +282,52 @@ fn render_block(block: &MarkdownBlock) -> impl IntoElement {
             .mb(px(4.))
             .text_color(rgb(0x888888))
             .text_size(px(14.))
-            .child(text.clone()),
-        MarkdownBlock::Rule => div().w_full().h(px(1.)).bg(rgb(0x3a3a40)).mb(px(8.)),
+            .child(text.clone())
+            .into_any_element(),
+        MarkdownBlock::Rule => div()
+            .w_full()
+            .h(px(1.))
+            .bg(rgb(0x3a3a40))
+            .mb(px(8.))
+            .into_any_element(),
     }
+}
+
+/// T13: tree-sitter highlight 된 코드 블록을 렌더한다.
+fn render_highlighted_code(lines: &[HighlightedLine], label: &str) -> impl IntoElement {
+    let mut container = div()
+        .p(px(8.))
+        .mb(px(4.))
+        .bg(rgb(0x252526))
+        .rounded_md()
+        .text_size(px(12.))
+        .flex()
+        .flex_col();
+
+    // 언어 레이블
+    container = container.child(
+        div()
+            .text_color(rgb(0x555566))
+            .text_size(px(10.))
+            .mb(px(4.))
+            .child(format!("[{}]", label)),
+    );
+
+    for line in lines {
+        let mut row = div().flex().flex_row();
+        for span in &line.spans {
+            let color = span
+                .scope
+                .as_ref()
+                .map(scope_to_color)
+                .map(|[r, g, b]| (r as u32) << 16 | (g as u32) << 8 | b as u32)
+                .unwrap_or(0xd4d4d4);
+            row = row.child(div().text_color(rgb(color)).child(span.text.clone()));
+        }
+        container = container.child(row);
+    }
+
+    container
 }
 
 fn heading_size_px(level: u8) -> f32 {
