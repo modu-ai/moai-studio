@@ -294,3 +294,94 @@ Bench (T11):
 - S4 USER-DECISION 기록 (progress.md + 이 contract §10.6 결과 업데이트)
 - contract.md v1.0.2 revision 추가 (MS-3 sprint contract)
 - progress.md MS-2 complete 섹션 기록
+
+---
+
+## 11. MS-3 Sprint Contract — v1.0.2 revision (2026-04-25)
+
+Source: spec.md §8 MS-3 + tasks.md T12-T14 + MS-2 carry-over (AC-P-4, AC-P-5).
+Sprint scope: MS-3 Persistence (T12, T13) + CI workflow (T14) + MS-2 carry-over 해소.
+
+### 11.1 Sprint Scope
+
+포함:
+- T12: Persistence schema `moai-studio/panes-v1` + atomic write + cwd fallback to $HOME (REQ-P-050~056)
+- T13: Persistence e2e (shutdown hook → save_panes, app main → restore_panes, tests/integration_persistence.rs)
+- T14: CI regression gate `.github/workflows/ci-v3-pane.yml` (5 job × macos-14/ubuntu-22.04 matrix + tmux/Zig setup)
+- MS-2 carry-over 해소: AC-P-4 (TabContainer ↔ divider render 통합), AC-P-5 (gpui test-support feature 채택 재평가)
+
+미포함:
+- Shell session 복원, scrollback 복원, 실시간 checkpoint (spec.md §8 MS-3 제외 항목)
+- 탭 reordering, 탭 이름 편집
+
+### 11.2 Acceptance Checklist
+
+MS-3 primary (5 AC + 2 carry-over):
+
+| AC | Mapped Task | Test Type | Platform |
+|----|-------------|-----------|----------|
+| AC-P-12 | T12 + T13 | Unit + Integration (round-trip) | both |
+| AC-P-13 | T12 | Unit (atomic write tempfile rename) | both |
+| AC-P-13a | T12 | Unit (schema version check on read) | both |
+| AC-P-14 | T12 | Unit (cwd fallback to $HOME) | both |
+| AC-P-15 | T12 | Unit (corrupted JSON safe-fail) | both |
+| AC-P-4 (MS-2 carry) | T13 인근 | TabContainer divider render integration | both |
+| AC-P-5 (MS-2 carry) | T11 후속 평가 | gpui test-support 재평가 — 채택 시 headless resize unit | both |
+
+T14 자체에는 AC 없음 (regression gate).
+
+### 11.3 Priority Dimensions (4-dim eval, MS-3)
+
+| Dimension | Weight | MS-3 focus |
+|-----------|--------|-------------|
+| Functionality | 30% | AC-P-12/13/13a/14 (저장-복원 round-trip 정확성) |
+| Security | 30% | AC-P-15 (corrupted JSON safe-fail), atomic write race-free, cwd path traversal 방지 |
+| Craft | 20% | MX:ANCHOR(persist-schema-v1, restore-on-startup), coverage ≥ 85% |
+| Consistency | 20% | workspace persistence 패턴 차용, 기존 generate_id pattern 재사용 |
+
+### 11.4 Test Scenario 계약
+
+Unit (T12):
+- `persistence::tests::round_trip_panes_v1_preserves_structure` (AC-P-12)
+- `persistence::tests::atomic_write_uses_tempfile_rename` (AC-P-13)
+- `persistence::tests::reject_unknown_schema_version` (AC-P-13a)
+- `persistence::tests::missing_cwd_falls_back_to_home` (AC-P-14)
+- `persistence::tests::corrupted_json_returns_default_layout` (AC-P-15)
+
+Integration (T13):
+- `tests/integration_persistence.rs::shutdown_save_then_restart_restores_layout` (AC-P-12 e2e)
+- `tests/integration_persistence.rs::cwd_deleted_between_runs_falls_back_to_home` (AC-P-14 e2e)
+
+CI (T14):
+- `.github/workflows/ci-v3-pane.yml` — macos-14 + ubuntu-22.04 matrix
+  - Jobs: cargo fmt --check, cargo clippy -D warnings, cargo test --all-targets, cargo test (with tmux), cargo bench --test
+  - Zig 0.15.2 setup for SPEC-V3-002 FFI link path
+  - tmux setup: `brew install tmux` / `apt-get install -y tmux`
+
+### 11.5 Hard Thresholds (sprint exit)
+
+- [ ] Coverage ≥ 85% per commit (persistence.rs target ≥ 90% for safe-fail paths)
+- [ ] LSP `max_errors: 0`, `max_type_errors: 0`, `max_lint_errors: 0`
+- [ ] `cargo clippy --workspace --all-targets -- -D warnings` — 0 warning
+- [ ] `cargo fmt --all -- --check` — pass
+- [ ] SPEC-V3-002 regression 0 + MS-1/MS-2 AC 전원 regression 0
+- [ ] 신규 MS-3 test ≥ 5 unit + 2 integration
+- [ ] MX tags: persist-schema-v1, restore-on-startup ANCHOR 추가
+- [ ] CI workflow ci-v3-pane.yml 동작 확인 (billing 해소 후 1회 실행 GREEN)
+
+### 11.6 Escalation Protocol
+
+- AC-P-5 carry-over 재평가: T11 시점에 DEFER 결정. MS-3 진입 시 다시 [USER-DECISION-REQUIRED: test-support-feature-adoption]. default: DEFER (필수 아님, AC-P-5 자체 재후순)
+- AC-P-4 carry-over: TabContainer 가 GPUI render 시 divider 가 실제 layout 에 포함되는지 integration 검증. render layer 도입 어려우면 logic-level assertion 으로 대체.
+- corrupted JSON 감지 시 default layout 반환 + warn log (panic 금지)
+- atomic write 실패 시 기존 파일 보존 (tempfile 만 폐기)
+
+### 11.7 Sprint Exit Criteria (MS-3 → SPEC complete gate)
+
+- 5 MS-3 primary AC 전원 GREEN
+- MS-2 carry-over: AC-P-4 FULL (또는 logic-level alternative), AC-P-5 FULL or 명시적 정책 deferral 종결
+- Hard thresholds 전원 통과
+- T14 CI workflow committed (실행 GREEN 은 billing 해소 의존)
+- progress.md MS-3 complete + SPEC-V3-003 종결 기록
+- contract.md v1.0.3 (선택 — SPEC complete 기록)
+
