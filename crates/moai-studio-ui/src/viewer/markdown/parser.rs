@@ -18,15 +18,23 @@ use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, T
 /// pulldown-cmark 이벤트를 변환한 마크다운 블록.
 ///
 /// MS-1 에서 지원하는 block 종류만 정의한다.
-/// MS-2/MS-3 에서 Image, Table, TaskItem 등이 추가될 예정이다.
+/// MS-2 에서 CodeBlock 에 `highlighted` 필드가 추가되었다.
+/// MS-3 에서 Image, Table, TaskItem 등이 추가될 예정이다.
 #[derive(Debug, Clone, PartialEq)]
 pub enum MarkdownBlock {
     /// 헤딩 (H1 ~ H6)
     Heading { level: u8, text: String },
     /// 일반 단락 텍스트
     Paragraph(String),
-    /// 펜스 코드 블록 (lang 은 `rust`, `python` 등, None = 언어 미지정)
-    CodeBlock { lang: Option<String>, code: String },
+    /// 펜스 코드 블록 (lang 은 `rust`, `python` 등, None = 언어 미지정).
+    ///
+    /// MS-2: `highlighted` 는 SupportedLang 에 해당하면 Some, 미지원이면 None.
+    CodeBlock {
+        lang: Option<String>,
+        code: String,
+        /// tree-sitter highlight 결과 (MS-2 T13). None 이면 plain text 렌더.
+        highlighted: Option<Vec<crate::viewer::code::highlight::HighlightedLine>>,
+    },
     /// 인라인 코드
     InlineCode(String),
     /// 수식 (USER-DECISION c: text fallback)
@@ -114,7 +122,13 @@ pub fn parse_markdown(input: &str) -> Vec<MarkdownBlock> {
                     if lang.as_deref() == Some("mermaid") {
                         blocks.push(MarkdownBlock::Mermaid(code));
                     } else {
-                        blocks.push(MarkdownBlock::CodeBlock { lang, code });
+                        // T13: SupportedLang 에 해당하면 tree-sitter highlight 적용
+                        let highlighted = maybe_highlight_code_block(lang.as_deref(), &code);
+                        blocks.push(MarkdownBlock::CodeBlock {
+                            lang,
+                            code,
+                            highlighted,
+                        });
                     }
                 }
             }
@@ -199,6 +213,38 @@ pub fn parse_markdown(input: &str) -> Vec<MarkdownBlock> {
     blocks
 }
 
+// ============================================================
+// maybe_highlight_code_block — T13
+// ============================================================
+
+/// 펜스 코드 블록에 tree-sitter highlight 를 적용한다.
+///
+/// `lang` 이 `SupportedLang` 에 해당하면 `highlight_source` 를 호출하고
+/// `Some(lines)` 를 반환한다. 미지원 언어이면 `None` 을 반환한다.
+///
+/// T14 (USER-DECISION c): `mermaid` 와 `math` 는 호출 전에 별도 처리되므로
+/// 이 함수에 도달하지 않는다.
+pub fn maybe_highlight_code_block(
+    lang: Option<&str>,
+    code: &str,
+) -> Option<Vec<crate::viewer::code::highlight::HighlightedLine>> {
+    use crate::viewer::code::highlight::highlight_source;
+    use crate::viewer::code::languages::detect_lang_from_extension;
+
+    let lang_str = lang?;
+    // 언어 문자열 → 확장자 매핑 (펜스 코드 블록 lang 은 확장자처럼 동작)
+    let ext = match lang_str.to_ascii_lowercase().as_str() {
+        "rust" | "rs" => "rs",
+        "go" | "golang" => "go",
+        "python" | "py" => "py",
+        "typescript" | "ts" | "tsx" => "ts",
+        _ => return None, // 미지원 언어
+    };
+
+    let supported_lang = detect_lang_from_extension(ext)?;
+    Some(highlight_source(code, supported_lang))
+}
+
 /// `HeadingLevel` → 1-based u8 변환
 fn heading_level_to_u8(level: HeadingLevel) -> u8 {
     match level {
@@ -264,7 +310,7 @@ mod tests {
         let code_blocks: Vec<_> = blocks
             .iter()
             .filter_map(|b| {
-                if let MarkdownBlock::CodeBlock { lang, code } = b {
+                if let MarkdownBlock::CodeBlock { lang, code, .. } = b {
                     Some((lang.clone(), code.clone()))
                 } else {
                     None
@@ -352,6 +398,44 @@ mod tests {
         assert!(
             blocks.contains(&MarkdownBlock::Rule),
             "수평선 블록이 있어야 한다"
+        );
+    }
+
+    #[test]
+    fn markdown_fenced_code_uses_tree_sitter() {
+        // AC-MV-2 추가: Markdown fenced code block 도 tree-sitter highlight 적용 (T13)
+        let input = "```rust\nfn main() {}\n```\n";
+        let blocks = parse_markdown(input);
+        let highlighted_lines = blocks.iter().find_map(|b| {
+            if let MarkdownBlock::CodeBlock { highlighted, .. } = b {
+                highlighted.as_ref()
+            } else {
+                None
+            }
+        });
+        assert!(
+            highlighted_lines.is_some(),
+            "Rust fenced code block 은 highlighted 가 Some 이어야 한다"
+        );
+        let lines = highlighted_lines.unwrap();
+        assert!(!lines.is_empty(), "highlight 결과가 비어있지 않아야 한다");
+    }
+
+    #[test]
+    fn markdown_fenced_code_unsupported_lang_has_no_highlight() {
+        // 미지원 언어 (java) 는 highlighted = None 이어야 한다
+        let input = "```java\npublic class Main {}\n```\n";
+        let blocks = parse_markdown(input);
+        let has_none_highlight = blocks.iter().any(|b| {
+            if let MarkdownBlock::CodeBlock { highlighted, .. } = b {
+                highlighted.is_none()
+            } else {
+                false
+            }
+        });
+        assert!(
+            has_none_highlight,
+            "미지원 언어는 highlighted = None 이어야 한다"
         );
     }
 
