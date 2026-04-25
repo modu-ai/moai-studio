@@ -1,107 +1,161 @@
 # Visual Identity — MoAI Studio
 
-> **Source**: `.moai/design/tokens.json` (canonical machine-readable) + 모두의AI 브랜드 정체성 + agentic coding IDE 모범 사례 (Zed / VS Code / Cursor) + cross-platform GPUI 0.2.2.
-> **Status**: v1.0.0 baseline (2026-04-25). Notion 모두의AI 디자인 문서 미접근 — 후속 PR 로 갱신 가능.
-> **Theme**: Dark-first (developer-friendly, terminal-dominant), light alternative.
+> **Source**: `.moai/design/tokens.json` v2.0.0 (canonical) + `.moai/design/from-claude-design/` (Claude Design 핸드오프 번들, 2026-04-25 import) + 모두의AI Notion MoAI SNS Ver 1.0 디자인 시스템.
+> **Status**: v2.0.0 (2026-04-25) — v1.0.0 폐기. **모두의AI 공식 브랜드 (`#144a46` 딥 틸 청록)** 적용 완료.
+> **Theme**: Dark-first (terminal-dominant), light alternative.
+> **Language**: 영어 우선 (글로벌 IDE 톤, VS Code 스타일), 한글 Pretendard fallback.
 
 ---
 
-## 0. 디자인 철학
+## 0. 브랜드 핵심 자산 (FROZEN — 변경 금지)
 
-- **Agentic coding IDE**: 터미널 + 코드 에디터 + AI 진행 상황을 한 화면에서 본다.
-- **Cross-platform 일관성**: macOS / Linux / Windows 동일 토큰 (네이티브 OS 차이는 component-level 만).
-- **Bilingual**: 한국어 (Pretendard) + 영문 (Inter) 동등 우선.
-- **Keyboard-first**: 마우스 보다 키보드 단축키 (Cmd/Ctrl 일관성, vim/emacs 친화).
-- **Density**: VS Code 보다 컴팩트, Cursor 와 유사. 터미널 14px 기본.
+### 0.1 Primary Color
+- **`#144a46`** — 어두운 청록 (딥 틸). 모두의AI 공식 브랜드 색.
+- 다크 모드 대응: `#22938a` (라이트 청록 — 대비 확보)
+- Hover: `#0e3835`, Active: `#0a2825`
+
+### 0.2 Signature Gradient (코어 자산)
+```css
+linear-gradient(135deg, #144a46 0%, #09110f 100%)
+```
+hero CTA, 마스코트 영역, agent pill 등에 사용. 절대 분해 / 색상 변경 금지.
+
+### 0.3 Pretendard Self-hosted (9 weight)
+모두의AI 공식 폰트. `.moai/design/from-claude-design/project/fonts/` 에 9 weight `.otf` 자산 보존.
+- Thin 100, ExtraLight 200, Light 300, Regular 400, Medium 500, SemiBold 600, Bold 700, ExtraBold 800, Black 900
+
+### 0.4 Mascot (모아이 로고)
+- `.moai/design/from-claude-design/project/assets/`
+- `moai-logo-1.png` (primary)
+- `moai-logo-3.png` (마스코트 — 헤더/사이드바 22-64px)
+- `moai-logo-4.png` / `moai-logo-4-WH.png` (wordmark + dark variant)
 
 ---
 
 ## 1. Color Palette
 
 ### 1.1 Brand
-- **Primary**: `#2563EB` (moai blue) — CTA, active state, focus ring
-- **Secondary**: `#8B5CF6` (AI violet) — agent activity, AI-generated content
-- **Accent**: `#06B6D4` (cyan) — link, terminal highlight
+- Primary `#144a46` / Hover `#0e3835` / Active `#0a2825`
+- Primary (dark mode) `#22938a` / Hover `#2bafa3`
+- Ink `#09110f` (#000 대체) / Bg `#f3f3f3` (#fff 사용 금지)
+- Surface `#ffffff`
 
-### 1.2 Neutrals (Zinc 스케일, 50→950)
-`#FFFFFF / #FAFAFA / #F4F4F5 / #E4E4E7 / #D4D4D8 / #A1A1AA / #71717A / #52525B / #3F3F46 / #27272A / #18181B / #09090B`
+### 1.2 Neutral Scale (모두의AI 그레이)
+50 `#f3f3f3` / 100 `#eaeaea` / 200 `#d4d4d4` / 300 `#bcbcbc` / 400 `#959595` / 500 `#6e6e6e` / 600 `#4c4c4c` / 700 `#2e2e2e` / 800 `#1a1f1d` / 900 `#0e1513` / 950 `#09110f`
 
 ### 1.3 Semantic
-- success `#10B981`, warning `#F59E0B`, error `#EF4444`, info `#3B82F6`
+- success `#1c7c70` (mint, 청록 계열)
+- warning `#c47b2a` (amber)
+- danger `#c44a3a` (crimson)
+- info `#2a8a8c` (cyan)
 
-### 1.4 Theme Mappings (Dark / Light)
+### 1.4 IDE Surface Accents (tweakable)
+**default = teal `#144a46`** (브랜드 정합 우선). 사용자 toggle 시 blue/violet/cyan 가능.
+
+### 1.5 Theme — Dark / Light
 
 | 용도 | Dark | Light |
 |------|------|-------|
-| App background | neutral.950 | neutral.0 |
-| Panel | neutral.900 | neutral.50 |
-| Surface | neutral.800 | neutral.100 |
-| Text primary | neutral.50 | neutral.950 |
-| Text secondary | neutral.300 | neutral.700 |
-| Border default | neutral.700 | neutral.200 |
-| Focus ring | primary.500 | primary.500 |
-| Tab active bg | neutral.800 | neutral.0 |
+| App background | `#0a100e` | `#f3f3f3` |
+| Panel | `#0e1513` | `#ffffff` |
+| Surface | `#131c19` | `#fafaf9` |
+| Elevated | `#182320` | `#ffffff` |
+| Text primary | `#e6ebe9` | `#09110f` |
+| Text secondary | `#98a09d` | `#4c4c4c` |
+| Text tertiary | `#6b7370` | `#8a908e` |
+| Border subtle | rgba(255,255,255,0.06) | `#eaeaea` |
+| Border default | rgba(255,255,255,0.07) | `#e6e6e3` |
+| Border strong | rgba(255,255,255,0.14) | `#d4d4d0` |
+| Accent base | `#22938a` | `#144a46` |
+| Accent soft | rgba(20,74,70,0.14) | rgba(20,74,70,0.14) |
 
-### 1.5 Syntax (tree-sitter scope) — `tokens.json` color.syntax 참조
+### 1.6 Syntax Highlight (tree-sitter, dark/light 분기)
 
-keyword `#C792EA` / string `#C3E88D` / number `#F78C6C` / comment `#546E7A` / function `#82AAFF` / type `#FFCB6B` / variable `#EEFFFF` / operator `#89DDFF`
+| Scope | Dark | Light |
+|-------|------|-------|
+| keyword | `#c792ea` | `#5e3bb0` |
+| string | `#88b780` | `#1c7c70` |
+| number | `#c47b2a` | (동일) |
+| comment | `#6b7370` (italic) | (동일) |
+| function | `#4f9fce` | `#155b8a` |
+| type | `#d4a45c` | (동일) |
+| operator | `#6fc2c2` | (동일) |
+| variable | `#e6ebe9` | (theme text-primary) |
+| constant / tag | `#c44a3a` | (동일) |
+| attribute | `#d4a45c` | (동일) |
 
 ---
 
 ## 2. Typography
 
-- **Sans (UI)**: Pretendard → Inter → system-ui (한글 우선)
-- **Mono (Code/Terminal)**: JetBrains Mono → Fira Code → SF Mono → Menlo (ligatures)
-- **Serif (Markdown 옵션)**: Charter → Iowan Old Style → Georgia
+### 2.1 Font Family
+- **Sans (Brand)**: `Pretendard` self-hosted 9 weight → system-ui fallback
+- **Latin**: `Inter` (lang=en 영문 전용 보완)
+- **Mono**: `JetBrains Mono` → SF Mono / Menlo / Consolas
 
-Scale: 11/12/**14**/16/18/20/24/30/36/48 px (default UI base = 14)
-Weight: 400/500/600/700
-Line height: 1.2 (tight) / 1.5 (normal) / 1.75 (relaxed)
+### 2.2 Letter-Spacing (한글 자간 — 필수)
+Pretendard 한글은 음수 자간 적용 필수:
+- display.tight `-7.5%` (히어로)
+- display `-5.0%` (메인 타이틀)
+- heading `-5.0%`
+- body `-2.5%` (기본)
+- body.tight `-5.0%`
+- caption `0%`
+
+### 2.3 Scale (rem)
+xs 0.75 (12px caption) / sm 0.875 (14px) / **base 1.0 (16px body)** / lg 1.125 / xl 1.25 / 2xl 1.5 (h3) / 3xl 1.875 (h2) / 4xl 2.25 (h1) / 5xl 3 / 6xl 3.75 / display `clamp(2.25rem, 4.5vw, 4rem)`
+
+### 2.4 Weight + Line Height
+weights: 100/200/300/400/500/600/700/800/900
+line-heights: tight 1.05 (display) / snug 1.25 / **normal 1.5** / relaxed 1.75 (markdown)
 
 ---
 
-## 3. Spacing (4-base)
-`0 / 4 / 8 / 12 / 16 / 20 / 24 / 32 / 40 / 48 / 64 / 80 / 96 px`
+## 3. Spacing — 4-base (Notion)
+0 / 4 / 8 / 12 / 16 / 20 / 24 / 32 / 40 / 48 / 64 / 80 / 96 / 128 px
+
+---
 
 ## 4. Radius
-sm 4 / **md 6 (default)** / lg 8 / xl 12 / 2xl 16 / full 9999
-
-## 5. Shadow (Dark, alpha 30~50%)
-0 none / 1 subtle / 2 card / 3 dropdown / 4 modal / 5 hero
-
-## 6. Motion
-- Duration: 0 / 120 / 200 / 320 ms
-- Easing: easeOut (default) / spring (탭/패널)
-- prefers-reduced-motion 시 모두 0ms (WCAG 2.1)
+none 0 / sm 4 / **md 8 (default)** / lg 16 / xl 24 / pill 32 / full 9999
 
 ---
 
-## 7. Component Tokens (highlights)
+## 5. Shadow (절제 — alpha 0.04~0.20)
+xs `0 1px 2px ink/0.04` / sm `0 2px 4px ink/0.06` / md `0 4px 12px ink/0.08` / lg `0 8px 24px ink/0.10` / xl `0 16px 48px ink/0.12` / **signature `0 8px 32px primary/0.20`** (hover only — 청록 글로우)
 
-| Component | 핵심 |
-|-----------|------|
-| Button | padding 12/8, radius md, weight medium |
-| Input | padding 12/8, radius md, border 1px |
-| Tab | height 32, padding-x 12, radius sm, active=semibold |
-| Pane | min 240×120, divider 4px, hover=primary.500 |
-| Sidebar | width 240, min 180, max 480 |
-| Explorer | indent 16, icon 16, row 24 |
-| Terminal | mono 14, line-height 1.4 |
-| Markdown viewer | md 16, relaxed, max-w 780 |
+---
 
-자세한 토큰: `.moai/design/tokens.json`
+## 6. Motion
+- duration: instant 75 / fast 150 / normal 250 / slow 400 / page 600 ms
+- easing: default `cubic-bezier(0.4,0,0.2,1)` / bounce `cubic-bezier(0.34,1.56,0.64,1)` / smooth `cubic-bezier(0.16,1,0.3,1)`
+- prefers-reduced-motion 시 모든 transition/animation 1ms (WCAG 2.1)
+
+---
+
+## 7. IDE Layout (moai-studio.html 시안 정합)
+
+| 영역 | 크기 |
+|------|------|
+| Topbar | 38px (traffic lights + cmdbar + agent pill) |
+| Tab strip | 36px |
+| Status bar | 24px (mono font) |
+| Sidebar | 240px (compact 56px) |
+| Pane head | 28px |
+| Row height | 26px (comfortable) / 22px (compact) |
+| Code gutter | 44px |
+| Markdown max-width | 780px |
+| Agent dashboard cols | 200 / flex / 280 |
 
 ---
 
 ## 8. /moai design Workflow 통합
 
-본 토큰 = **canonical input**.
+본 토큰 = **canonical input** for `/moai design`:
 
-- **Path A (Claude Design import)**: `tokens.json` 의 `claude_design_handoff` 섹션 → claude.ai/design 에 입력 → bundle import
-- **Path B (code-based)**: `moai-domain-brand-design` skill 이 `tokens.json` 직접 읽기
-- **Implementation**: `expert-frontend` 가 token 값 → GPUI Rust 상수 변환
-
-token 변경 시 본 visual-identity.md 동기화 필요 (canonical = JSON, doc = view).
+1. **Path A (Claude Design import)**: `.moai/design/from-claude-design/` 가 baseline 산출. `tokens.json` 의 `claude_design_handoff` 메타로 기록.
+2. **Path B (code-based)**: `moai-domain-brand-design` skill 이 `tokens.json` 직접 읽기.
+3. **Implementation**: `expert-frontend` 가 토큰 → GPUI Rust 상수 변환 (참조: `.moai/design/from-claude-design/IMPLEMENTATION-NOTES.md`).
 
 ---
 
@@ -110,21 +164,28 @@ token 변경 시 본 visual-identity.md 동기화 필요 (canonical = JSON, doc 
 | 영역 | 정책 |
 |------|------|
 | 색상 / typography / spacing / radius / shadow | 100% 동일 |
-| 키 modifier | macOS=Cmd, Linux/Windows=Ctrl (component-level) |
-| 시스템 폰트 fallback | OS system-ui 마지막 fallback |
+| 키 modifier | macOS=Cmd, Linux/Windows=Ctrl |
+| 시스템 폰트 fallback | Pretendard 우선 → OS system-ui |
 | 메뉴 위치 | macOS=상단 메뉴바, Linux/Windows=윈도우 내부 |
-| 네이티브 widget | OS 네이티브 (rfd crate file picker 등) |
+| 네이티브 widget | OS 네이티브 (rfd) |
 
 ---
 
-## 10. Brand Mark / Logo (Pending)
+## 10. v1.0.0 → v2.0.0 변경 사항
 
-- moai 로고는 모두의AI 메인 브랜드 가이드 의존
-- moai-studio sub-mark = wordmark + "Studio" suffix 권장
-- 상세 가이드 = Notion 모두의AI 디자인 문서 (접근 가능 시 후속 갱신)
+| 항목 | v1.0.0 (폐기) | v2.0.0 (현재) |
+|------|--------------|--------------|
+| Primary | `#2563EB` Tailwind blue | **`#144a46` 딥 틸 청록** |
+| Neutral | Zinc | 모두의AI 그레이 |
+| Background light | `#fff` | `#f3f3f3` (강제) |
+| Pretendard | npm/CDN | self-hosted .otf 9 weight |
+| Signature gradient | (없음) | `135deg, #144a46 → #09110f` |
+| 한글 자간 | 미정의 | display -7.5%, body -2.5% |
+| Mascot | (없음) | moai-logo-3.png 헤더/사이드바 |
 
 ---
 
-Version: 1.0.0
+Version: 2.0.0
 Last Updated: 2026-04-25
-Pending: 모두의AI Notion 디자인 문서 정합 (접근 시 PR)
+Bundle: `.moai/design/from-claude-design/` (Claude Design handoff, 14MB — Pretendard fonts + logos + JSX components + chat transcript)
+Canonical tokens: `.moai/design/tokens.json` v2.0.0
