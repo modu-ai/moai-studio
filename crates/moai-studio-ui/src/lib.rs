@@ -13,6 +13,7 @@
 //! - Empty state CTA 는 workspaces 가 비었을 때만 body 에 표시
 //! - TerminalSurface 가 Some 이면 content_area 는 빈 상태 대신 터미널을 렌더한다.
 
+pub mod explorer;
 pub mod panes;
 pub mod tabs;
 pub mod terminal;
@@ -82,6 +83,13 @@ pub struct RootView {
     /// SPEC-V3-004 MS-1: content_area 렌더 진입점 (TabContainer Entity).
     /// None 이면 Empty State CTA 렌더 (REQ-R-005).
     pub tab_container: Option<Entity<TabContainer>>,
+    // @MX:ANCHOR: [AUTO] root-view-file-explorer-binding
+    // @MX:REASON: [AUTO] SPEC-V3-005 RG-FE-1. file_explorer 는 sidebar 좌측 영역의 진입점이며
+    //   워크스페이스 활성 변경 시 재바인딩된다.
+    //   fan_in >= 3: T4 init, MS-2 watch event, MS-3 git_status refresh.
+    /// SPEC-V3-005 MS-1: sidebar 파일 탐색기 Entity.
+    /// None 이면 기존 workspace 리스트 렌더 유지.
+    pub file_explorer: Option<Entity<explorer::FileExplorer>>,
 }
 
 impl RootView {
@@ -96,6 +104,7 @@ impl RootView {
             active_id,
             storage_path,
             tab_container: None,
+            file_explorer: None,
         }
     }
 

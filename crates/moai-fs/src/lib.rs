@@ -7,7 +7,9 @@
 
 pub mod tree_watcher;
 pub mod watcher;
+pub mod workspace_watcher;
 pub use watcher::{FsEventBus, WorkspaceEvent, WorkspaceKey};
+pub use workspace_watcher::WorkspaceWatcher;
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc as std_mpsc;
