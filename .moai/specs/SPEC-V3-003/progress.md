@@ -648,3 +648,67 @@ Working tree: 본 commit 후 clean
   - `lib.rs` `pane_splitter: Option<Entity<TerminalSurface>>` 필드 (MS-2 T8 에서 `Entity<TabContainer>` 로 교체)
   - `tests/integration_pane_core.rs` 2 AC-P-1/2 integration tests
 
+
+---
+
+## MS-2 Sprint Exit Record — 2026-04-25
+
+Branch: `feature/SPEC-V3-003-ms2` (from develop `a6b6fe8`) — CLAUDE.local.md §7.3 권장 경로 (B).
+
+### MS-2 Commits (5)
+
+| OID | Subject |
+|-----|---------|
+| `9a33998` | feat(tabs): T8 TabContainer — new_tab/switch_tab/close_tab + last_focused restore (AC-P-8/10/11/25) |
+| `28aae11` | feat(tabs): T9 MS-2 keybindings + tmux — Cmd/Ctrl+T/1-9/\/Shift+\/{} (AC-P-9a/9b/26, S4 default-a) |
+| `c63d8a2` | feat(tabs): T10 TabBar state + toolbar token (AC-P-24/27) |
+| `2cafb5b` | fix(ids): TabId/PaneId/SplitNodeId 병렬 테스트 충돌 방지 — AtomicU64 suffix 보강 |
+| `90f2ccb` | feat(tabs): T11 criterion bench — tab_switch 50-cycle (AC-P-19, criterion adopted, test-support deferred) |
+
+### USER-DECISION Resolutions (Auto mode — contract §10.6 defaults)
+
+| Gate | Resolution | Rationale |
+|------|-----------|-----------|
+| spike-4-linux-shell-path | **(a) Ctrl 유지** | 크로스플랫폼 일관성. Win/Linux 동일 non-mac 경로 |
+| criterion-adoption | **ADD** criterion 0.5 dev-dep | AC-P-19 충족 불가 without criterion |
+| test-support-feature-adoption | **DEFER to MS-3** | Scope creep 방지. AC-P-5 carry-over MS-3 재승계 |
+
+### AC 통과 상태 (MS-2 primary + carry-over)
+
+| AC | 상태 | 근거 |
+|----|------|------|
+| AC-P-8 | FULL | `tabs::container::tests::new_tab_creates_leaf_one_pane_tree` |
+| AC-P-9a (full) | FULL | `macos_ms2_cmd_t` + Cmd+1-9 + Cmd+\ + Cmd+Shift+\ + Cmd+{} |
+| AC-P-9b (full, S4-a) | FULL | `linux_ms2_ctrl_t` + Ctrl+1-9 + Ctrl+\ + Ctrl+Shift+\ + Ctrl+{} |
+| AC-P-10 | FULL | `close_last_tab_is_noop` + `close_middle_tab_promotes_neighbor` |
+| AC-P-11 | FULL | `switch_tab_restores_last_focused_pane` |
+| AC-P-19 | FULL | criterion bench `tab_switch` — mean 3.92µs / 50-cycle (SLA 50ms, 12,700배 여유) |
+| AC-P-24 (완전) | FULL | `bar_enumerates_tabs_in_order` + `bar_shows_all_tabs_with_labels_via_container` |
+| AC-P-25 | FULL | `tab_index_monotonic_on_create` |
+| AC-P-26 | FULL (단위) / CI-pending (tmux e2e) | `ctrl_b_not_consumed` × 2 + `ctrl_b_passes_through_to_nested_tmux` (`#[ignore]`, CI only) |
+| AC-P-27 | FULL | `active_indicator_is_bold` + `inactive_uses_toolbar_background_token` |
+| AC-P-4 (MS-1 carry) | DEFER-MS-3 | TabContainer 내부 로직 FULL, divider drag UI 통합은 렌더링 레이어 수반 → MS-3 로 재승계 |
+| AC-P-5 (MS-1 carry) | DEFER-MS-3 | gpui test-support feature 도입 보류 결정으로 MS-3 재승계 (contract §10.7 허용) |
+
+### Hard Thresholds (§10.5)
+
+- [x] `cargo test -p moai-studio-ui --all-targets` — 148 tests 0 failures
+- [x] `cargo test -p moai-studio-terminal --all-targets` — 13 tests 0 failures (SPEC-V3-002 regression 0)
+- [x] `cargo clippy -p moai-studio-ui --all-targets -- -D warnings` — 0 warnings
+- [x] `cargo fmt --package moai-studio-ui -- --check` — PASS
+- [x] 신규 MS-2 test: 15 tabs::keys unit + 4 tabs::bar unit + 5 tabs::container unit + 7 integration_key_bindings (MS-2 부분) + 3 tmux = 33+ (요구 ≥ 7 unit + 2 integration + 1 bench)
+- [x] MX tags: `tab-create-api`, `tab-switch-invariant`, `tab-key-dispatch`, `bar-active-indicator` ANCHOR 추가 + NOTE 3 (last-focused, toolbar-token-constants, bench-tab-switch)
+
+### Sprint Exit 판정
+
+**PASS (조건부)** — 10 MS-2 primary AC 전원 GREEN + regression 0 + AC-P-4/AC-P-5 MS-3 재승계 기록. contract §10.7 Sprint Exit Criteria 전원 충족 (AC-P-4 MS-3 재승계는 §10.7 "조건부 또는 MS-3 재승계" 허용 조항 준수).
+
+MS-3 진입 허용 — 후속 contract.md v1.0.2 revision (MS-3 Persistence + CI workflow) 은 MS-3 run phase 진입 시 추가.
+
+### Next Session Resume — MS-3 진입
+
+1. feature/SPEC-V3-003-ms2 → develop squash merge (본 run 세션 후 PR)
+2. develop 에서 feature/SPEC-V3-003-ms3 신규 분기 (CLAUDE.local.md §1.3 명명)
+3. MS-3 scope: T12 persistence JSON (`pane-layout.json`), T13 restore-on-startup, T14 ci-v3-pane workflow + Spike 2 (조건부 무효 — S1 PASS 확정)
+4. MS-3 carry-over 승계: AC-P-4 (TabContainer ↔ divider render 통합), AC-P-5 (test-support feature 채택 재평가)
+
