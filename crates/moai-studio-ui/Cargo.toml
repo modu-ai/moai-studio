@@ -34,6 +34,14 @@ moai-studio-agent = { path = "../moai-studio-agent" }
 # SPEC-V3-006 MS-1: Markdown 파싱 (RG-MV-1, pulldown-cmark)
 pulldown-cmark = "0.13"
 
+# SPEC-V3-006 MS-2 T10: tree-sitter syntax highlight (RG-MV-3)
+# USER-DECISION OD-MV2: Rust / Go / Python / TypeScript 4개 언어 우선 지원
+tree-sitter = "0.25"
+tree-sitter-rust = "0.24"
+tree-sitter-go = "0.25"
+tree-sitter-python = "0.25"
+tree-sitter-typescript = "0.23"
+
 [dev-dependencies]
 # T11 (SPEC-V3-003 MS-2 AC-P-19): tab_switch 50-cycle bench.
 # criterion 0.5 는 harness=false 로 동작하며 --test 모드로 smoke-run 가능.
