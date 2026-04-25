@@ -4,11 +4,8 @@
 //! AC-P-14 e2e: cwd_deleted_between_runs_falls_back_to_home
 
 use moai_studio_workspace::persistence::{
-    load_panes, resolve_cwd_with_fallback, save_panes, PaneLayoutV1, PaneTreeSnapshotV1,
-    TabSnapshotV1, SCHEMA_VERSION,
-};
-use moai_studio_workspace::panes_convert::{
-    layout_v1_to_tab_inputs, tab_container_to_layout_v1, PaneTreeInput, TabSnapshotInput,
+    PaneLayoutV1, PaneTreeSnapshotV1, SCHEMA_VERSION, TabSnapshotV1, load_panes,
+    resolve_cwd_with_fallback, save_panes,
 };
 use std::path::PathBuf;
 
@@ -175,10 +172,7 @@ fn cwd_deleted_between_runs_falls_back_to_home() {
 
     // resolve_cwd_with_fallback 적용 — 삭제된 경로면 $HOME 반환
     let resolved = resolve_cwd_with_fallback(pane_c1_cwd.as_deref());
-    assert_eq!(
-        resolved, expected_home,
-        "삭제된 cwd → $HOME fallback 확인"
-    );
+    assert_eq!(resolved, expected_home, "삭제된 cwd → $HOME fallback 확인");
 
     // pane-c2 (cwd=None) 도 $HOME fallback
     let pane_c2_resolved = resolve_cwd_with_fallback(None);
