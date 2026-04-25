@@ -13,6 +13,7 @@
 //! - Empty state CTA 는 workspaces 가 비었을 때만 body 에 표시
 //! - TerminalSurface 가 Some 이면 content_area 는 빈 상태 대신 터미널을 렌더한다.
 
+pub mod agent;
 pub mod explorer;
 pub mod panes;
 pub mod tabs;
@@ -90,6 +91,10 @@ pub struct RootView {
     /// SPEC-V3-005 MS-1: sidebar 파일 탐색기 Entity.
     /// None 이면 기존 workspace 리스트 렌더 유지.
     pub file_explorer: Option<Entity<explorer::FileExplorer>>,
+    // @MX:TODO(MS-2-dashboard-wire): AgentDashboardView 를 content_area 에 배선 (MS-2 담당)
+    /// SPEC-V3-010 MS-1: agent progress dashboard Entity (선택적).
+    /// None 이면 tab_container 렌더 유지.
+    pub agent_dashboard: Option<Entity<agent::dashboard_view::AgentDashboardView>>,
 }
 
 impl RootView {
@@ -105,6 +110,7 @@ impl RootView {
             storage_path,
             tab_container: None,
             file_explorer: None,
+            agent_dashboard: None,
         }
     }
 
