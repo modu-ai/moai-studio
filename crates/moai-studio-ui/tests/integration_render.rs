@@ -341,7 +341,10 @@ fn three_level_split_produces_three_dividers() {
     });
 
     // AC-R-7: 3 split 노드 → divider 3 개, leaf 4 개
-    assert_eq!(splits, 3, "AC-R-7: 3-level split → split 노드 3 (= divider 3)");
+    assert_eq!(
+        splits, 3,
+        "AC-R-7: 3-level split → split 노드 3 (= divider 3)"
+    );
     assert_eq!(leaves, 4, "AC-R-7: 3-level split → leaf 4");
 }
 

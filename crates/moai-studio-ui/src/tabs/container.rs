@@ -7,9 +7,14 @@
 //!
 //! T9 완료: 키 바인딩 dispatcher (`tabs::keys::dispatch_tab_key`) + integration_tmux_nested.rs 통합 테스트.
 //! SPEC-V3-004 MS-1 T3: impl Render for TabContainer 추가 (placeholder render).
+//! SPEC-V3-004 MS-3 T7: DividerDragState + render_pane_tree_cx + mouse handler 배선.
 
-use crate::panes::{PaneId, PaneTree, render_pane_tree};
-use gpui::{Context, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb};
+use crate::panes::{GpuiDivider, PaneId, PaneTree, ResizableDivider, SplitDirection, SplitNodeId};
+use gpui::{
+    Context, CursorStyle, Div, ElementId, InteractiveElement, IntoElement, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Render, SharedString,
+    StyleRefinement, Styled, Window, div, px, rgb,
+};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -113,6 +118,35 @@ pub enum SwitchTabError {
 }
 
 // ============================================================
+// DividerDragState — MS-3 T7 (REQ-R-020 ~ REQ-R-024)
+// ============================================================
+
+/// divider drag 진행 중 상태 (REQ-R-020, REQ-R-024).
+///
+/// @MX:NOTE: [AUTO] divider-drag-lifecycle
+/// mouse_down → drag_state = Some(DividerDragState { ... }) (REQ-R-020)
+/// mouse_move → GpuiDivider::on_drag → PaneTree::set_ratio (REQ-R-021)
+/// mouse_up   → drag_state = None, cx.notify() (REQ-R-023)
+/// drag 진행 중 다른 이벤트는 drag_state.is_some() 검사로 억제 가능 (REQ-R-024).
+#[derive(Debug, Clone)]
+pub struct DividerDragState {
+    /// 드래그 대상 split 노드 ID.
+    pub split_node_id: SplitNodeId,
+    /// 분할 방향 (Horizontal / Vertical).
+    pub orientation: SplitDirection,
+    /// drag 시작 좌표 (x, y) 픽셀.
+    pub start_xy: (f32, f32),
+    /// 초기 ratio (drag 시작 시 기록).
+    pub initial_ratio: f32,
+    /// 두 sibling 합산 전체 픽셀 크기 (clamp 계산용).
+    pub total_px: f32,
+    /// 열 당 픽셀 크기 (Horizontal min_px 계산).
+    pub px_per_col: f32,
+    /// 행 당 픽셀 크기 (Vertical min_px 계산).
+    pub px_per_row: f32,
+}
+
+// ============================================================
 // TabContainer
 // ============================================================
 
@@ -128,6 +162,8 @@ pub struct TabContainer {
     pub tabs: Vec<Tab>,
     /// 현재 활성 탭 인덱스.
     pub active_tab_idx: usize,
+    /// 활성 divider drag 상태 (None 이면 idle, REQ-R-024).
+    pub drag_state: Option<DividerDragState>,
 }
 
 impl TabContainer {
@@ -137,6 +173,7 @@ impl TabContainer {
         Self {
             tabs: vec![first_tab],
             active_tab_idx: 0,
+            drag_state: None,
         }
     }
 
@@ -241,6 +278,87 @@ impl TabContainer {
             tab.last_focused_pane = Some(pane_id);
         }
     }
+
+    // ----------------------------------------------------------
+    // MS-3 T7: divider drag 처리 (REQ-R-020 ~ REQ-R-023)
+    // ----------------------------------------------------------
+
+    // @MX:ANCHOR: [AUTO] divider-drag-handler
+    // @MX:REASON: [AUTO] SPEC-V3-004 REQ-R-020~023. GPUI mouse event → PaneTree.set_ratio 불변.
+    //   fan_in >= 3: render_pane_tree_cx split 분기, on_mouse_down listener, on_mouse_move listener.
+    //   RootView wire-up 의 mutation target.
+
+    /// mouse_down 시 drag state 를 초기화한다 (REQ-R-020).
+    ///
+    /// `start_xy`: mouse_down 좌표.
+    /// `split_node_id`: 드래그 대상 split 노드.
+    /// `orientation`: 분할 방향.
+    /// `total_px`: 두 sibling 합산 픽셀 크기 (window 가용 공간 기반 추정).
+    /// `px_per_col` / `px_per_row`: min_px 계산 파라미터.
+    #[allow(clippy::too_many_arguments)]
+    pub fn begin_drag(
+        &mut self,
+        start_xy: (f32, f32),
+        split_node_id: SplitNodeId,
+        orientation: SplitDirection,
+        initial_ratio: f32,
+        total_px: f32,
+        px_per_col: f32,
+        px_per_row: f32,
+    ) {
+        self.drag_state = Some(DividerDragState {
+            split_node_id,
+            orientation,
+            start_xy,
+            initial_ratio,
+            total_px,
+            px_per_col,
+            px_per_row,
+        });
+    }
+
+    /// mouse_move 시 drag delta 를 계산하고 ratio 를 갱신한다 (REQ-R-021).
+    ///
+    /// drag_state 가 None 이면 no-op.
+    /// GpuiDivider::on_drag 로 clamp 된 ratio 를 PaneTree::set_ratio 에 반영.
+    /// clamp 발생 시 `tracing::debug!` 로그 1 건 (REQ-R-022).
+    pub fn on_drag_move(&mut self, current_xy: (f32, f32)) {
+        let Some(ds) = self.drag_state.clone() else {
+            return;
+        };
+        let delta_px = match ds.orientation {
+            SplitDirection::Horizontal => current_xy.0 - ds.start_xy.0,
+            SplitDirection::Vertical => current_xy.1 - ds.start_xy.1,
+        };
+
+        let mut divider = GpuiDivider::new(
+            ds.orientation,
+            ds.initial_ratio,
+            ds.px_per_col,
+            ds.px_per_row,
+        );
+        let raw_ratio = (ds.initial_ratio * ds.total_px + delta_px) / ds.total_px;
+        let clamped = divider.on_drag(delta_px, ds.total_px);
+
+        // REQ-R-022: clamp 발생 시 tracing::debug 로그.
+        if (raw_ratio - clamped).abs() > 1e-4 {
+            tracing::debug!(
+                "divider drag clamped: raw={:.4} → clamped={:.4} (node_id={})",
+                raw_ratio,
+                clamped,
+                ds.split_node_id.0
+            );
+        }
+
+        if let Some(tab) = self.tabs.get_mut(self.active_tab_idx) {
+            let _ = tab.pane_tree.set_ratio(&ds.split_node_id, clamped);
+        }
+    }
+
+    /// mouse_up 시 drag state 를 종료한다 (REQ-R-023).
+    pub fn end_drag(&mut self) {
+        self.drag_state = None;
+    }
 }
 
 impl Default for TabContainer {
@@ -250,7 +368,7 @@ impl Default for TabContainer {
 }
 
 // ============================================================
-// GPUI Render 구현 (SPEC-V3-004 MS-1 T3)
+// GPUI Render 구현 (SPEC-V3-004 MS-1 T3, MS-3 T7)
 // ============================================================
 
 // 탭 바 색상 토큰 (SPEC-V3-003 design token carry)
@@ -259,6 +377,199 @@ const TAB_INACTIVE_BG: u32 = 0x131315;
 const TAB_FG_ACTIVE: u32 = 0xf4f4f5;
 const TAB_FG_INACTIVE: u32 = 0xb5b5bb;
 const CONTENT_BG: u32 = 0x0a0a0b;
+
+/// `Styled::style()` 은 `&mut self` 를 받아 체이닝 불가 — 이 헬퍼로 임의 flex_grow 값 설정.
+fn set_flex_grow(mut d: Div, v: f32) -> Div {
+    d.style().flex_grow = Some(v);
+    d
+}
+
+/// PaneTree → GPUI element tree 재귀 변환 (interactive divider 버전, MS-3 T7).
+///
+/// @MX:NOTE: [AUTO] render-pane-tree-cx-gpui-pattern
+/// GPUI 0.2.2 에서 on_mouse_down/up 핸들러는 StatefulInteractiveElement (div.id()) 필요.
+/// render_pane_tree (render.rs) 는 context-free 순수 함수이므로 mouse handler 를 붙일 수 없다.
+/// 본 함수는 TabContainer Entity 의 Context 를 통해 cx.listener 를 생성하여
+/// divider element 에 on_mouse_down / on_mouse_move / on_mouse_up 핸들러를 배선한다.
+/// REQ-R-020: drag 시작 좌표 저장, REQ-R-021: on_drag_move, REQ-R-023: end_drag.
+///
+/// `total_px`: 분할 영역 전체 픽셀 크기 추정값 (GPUI layout 완료 전이므로 추정).
+///   SPEC-V3-004 §7.3 의 아키텍처와 동일하게 split 노드 id 기반 lookup 대신
+///   단순 default 값(1600px) 을 사용한다. 실제 크기 연동은 SPEC-V3-005 범위.
+fn render_pane_tree_cx(
+    tree: &PaneTree<String>,
+    cx: &mut Context<TabContainer>,
+) -> impl IntoElement {
+    match tree {
+        PaneTree::Leaf(leaf) => {
+            // leaf payload 를 placeholder 텍스트로 렌더.
+            div()
+                .flex()
+                .flex_col()
+                .flex_grow()
+                .bg(rgb(CONTENT_BG))
+                .text_sm()
+                .text_color(rgb(0x6b6b73))
+                .p_2()
+                .child(leaf.payload.clone())
+        }
+        PaneTree::Split {
+            direction,
+            ratio,
+            first,
+            second,
+            id: node_id,
+        } => {
+            let node_id = node_id.clone();
+            let ratio = *ratio;
+
+            // divider 크기 계산: 비율 기반 flex를 사용하므로 total_px 는 추정값.
+            let total_px_default = 1600.0_f32;
+
+            match direction {
+                SplitDirection::Horizontal => {
+                    // 수직 divider (좌/우 분할)
+                    let nid = node_id.clone();
+                    let divider = div()
+                        .id(ElementId::Name(SharedString::from(format!(
+                            "div-v-{}",
+                            node_id.0
+                        ))))
+                        .w(px(4.0))
+                        .h_full()
+                        .flex_shrink_0()
+                        .bg(rgb(0x2a2a2e))
+                        .hover(|s: StyleRefinement| {
+                            let mut s = s;
+                            s.background = Some(rgb(0x3a3a40).into());
+                            s
+                        })
+                        .cursor(CursorStyle::ResizeLeftRight)
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(move |this, ev: &MouseDownEvent, _window, cx| {
+                                let pos = ev.position;
+                                let r = this.active_tab().pane_tree.get_ratio(&nid).unwrap_or(0.5);
+                                this.begin_drag(
+                                    (f32::from(pos.x), f32::from(pos.y)),
+                                    nid.clone(),
+                                    SplitDirection::Horizontal,
+                                    r,
+                                    total_px_default,
+                                    8.0,
+                                    16.0,
+                                );
+                                cx.notify();
+                            }),
+                        )
+                        .on_mouse_move(cx.listener(
+                            move |this, ev: &MouseMoveEvent, _window, cx| {
+                                if this.drag_state.is_some() {
+                                    this.on_drag_move((
+                                        f32::from(ev.position.x),
+                                        f32::from(ev.position.y),
+                                    ));
+                                    cx.notify();
+                                }
+                            },
+                        ))
+                        .on_mouse_up(
+                            MouseButton::Left,
+                            cx.listener(move |this, _ev: &MouseUpEvent, _window, cx| {
+                                this.end_drag();
+                                cx.notify();
+                            }),
+                        );
+                    // 비율 기반 flex: first = ratio, second = 1 - ratio
+                    let first_flex = ratio * 100.0;
+                    let second_flex = (1.0 - ratio) * 100.0;
+                    let first_child =
+                        set_flex_grow(div().flex().flex_col().flex_grow().w(px(0.0)), first_flex)
+                            .child(render_pane_tree_cx(first.as_ref(), cx));
+                    let second_child =
+                        set_flex_grow(div().flex().flex_col().flex_grow().w(px(0.0)), second_flex)
+                            .child(render_pane_tree_cx(second.as_ref(), cx));
+                    div()
+                        .flex()
+                        .flex_row()
+                        .flex_grow()
+                        .child(first_child)
+                        .child(divider)
+                        .child(second_child)
+                }
+                SplitDirection::Vertical => {
+                    // 수평 divider (상/하 분할)
+                    let nid = node_id.clone();
+                    let divider = div()
+                        .id(ElementId::Name(SharedString::from(format!(
+                            "div-h-{}",
+                            node_id.0
+                        ))))
+                        .h(px(4.0))
+                        .w_full()
+                        .flex_shrink_0()
+                        .bg(rgb(0x2a2a2e))
+                        .hover(|s: StyleRefinement| {
+                            let mut s = s;
+                            s.background = Some(rgb(0x3a3a40).into());
+                            s
+                        })
+                        .cursor(CursorStyle::ResizeUpDown)
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(move |this, ev: &MouseDownEvent, _window, cx| {
+                                let pos = ev.position;
+                                let r = this.active_tab().pane_tree.get_ratio(&nid).unwrap_or(0.5);
+                                this.begin_drag(
+                                    (f32::from(pos.x), f32::from(pos.y)),
+                                    nid.clone(),
+                                    SplitDirection::Vertical,
+                                    r,
+                                    total_px_default,
+                                    8.0,
+                                    16.0,
+                                );
+                                cx.notify();
+                            }),
+                        )
+                        .on_mouse_move(cx.listener(
+                            move |this, ev: &MouseMoveEvent, _window, cx| {
+                                if this.drag_state.is_some() {
+                                    this.on_drag_move((
+                                        f32::from(ev.position.x),
+                                        f32::from(ev.position.y),
+                                    ));
+                                    cx.notify();
+                                }
+                            },
+                        ))
+                        .on_mouse_up(
+                            MouseButton::Left,
+                            cx.listener(move |this, _ev: &MouseUpEvent, _window, cx| {
+                                this.end_drag();
+                                cx.notify();
+                            }),
+                        );
+                    let first_flex = ratio * 100.0;
+                    let second_flex = (1.0 - ratio) * 100.0;
+                    let first_child =
+                        set_flex_grow(div().flex().flex_col().flex_grow().h(px(0.0)), first_flex)
+                            .child(render_pane_tree_cx(first.as_ref(), cx));
+                    let second_child =
+                        set_flex_grow(div().flex().flex_col().flex_grow().h(px(0.0)), second_flex)
+                            .child(render_pane_tree_cx(second.as_ref(), cx));
+                    div()
+                        .flex()
+                        .flex_col()
+                        .flex_grow()
+                        .child(first_child)
+                        .child(divider)
+                        .child(second_child)
+                }
+            }
+        }
+    }
+}
 
 // @MX:ANCHOR: [AUTO] tab-container-render
 // @MX:REASON: [AUTO] SPEC-V3-004 REQ-R-001/002/003/005. TabContainer render 진입점.
@@ -314,21 +625,17 @@ impl Render for TabContainer {
             );
         }
 
-        // MS-2 T4: render_pane_tree 로 활성 탭 PaneTree 렌더 (REQ-R-002b).
+        // MS-3 T7: render_pane_tree_cx 로 활성 탭 PaneTree 렌더 (interactive divider, REQ-R-002b).
         // @MX:NOTE: [AUTO] tab-container-body-render
-        // 활성 탭의 PaneTree<String> 을 render_pane_tree 로 변환.
-        // String 은 IntoElement + Clone 을 구현하므로 제약 충족.
+        // 활성 탭의 PaneTree<String> 을 render_pane_tree_cx 로 변환 (mouse handler 포함).
         // AC-R-2: horizontal split 시 divider_vertical 1 개 생성.
+        // AC-R-5: drag clamp (GpuiDivider::on_drag).
         let body = div()
             .flex()
             .flex_col()
             .flex_grow()
             .bg(rgb(CONTENT_BG))
-            .child(render_pane_tree(&self.tabs[active_idx].pane_tree));
-
-        // cx.notify() 는 상태 변경 시 호출. render 는 순수 읽기.
-        // REQ-R-003: new_tab/switch_tab/close_tab 이 cx.notify() 를 호출한다 (해당 메서드에서 처리).
-        let _ = cx; // render 에서 notify 불필요
+            .child(render_pane_tree_cx(&self.tabs[active_idx].pane_tree, cx));
 
         div()
             .flex()
