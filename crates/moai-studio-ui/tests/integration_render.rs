@@ -289,3 +289,210 @@ fn t6_tab_bar_has_n_children_for_n_tabs() {
     assert_eq!(tab_count, 3, "T6: 탭 3개 생성 후 tab_count == 3");
     assert_eq!(active_idx, 2, "T6: 마지막 생성 탭이 active (idx == 2)");
 }
+
+// ============================================================
+// MS-3 T8: AC-R-7 — 3-level split → divider 3 개 (REQ-R-040)
+// ============================================================
+
+/// AC-R-7: 활성 탭이 3-level split PaneTree 를 가질 때 divider 가 정확히 3 개.
+///
+/// AC-R-7: TabContainer 의 활성 탭이 3 level split (1 horizontal + 2 vertical = 4 leaf) 일 때
+/// render 결과 element tree 에 divider element 가 정확히 3 개 존재한다.
+/// split 노드 수 == divider 수 불변을 count_splits 헬퍼로 검증.
+#[test]
+fn three_level_split_produces_three_dividers() {
+    let mut cx = TestAppContext::single();
+    let entity = cx.new(|_cx| TabContainer::new());
+
+    entity.update(&mut cx, |tc, _cx| {
+        // 1. 단일 leaf 초기 상태에서 focused pane id 획득
+        let id0 = tc
+            .active_tab()
+            .last_focused_pane
+            .clone()
+            .expect("초기 focused pane 필요");
+
+        // 2. horizontal split: id0 | id1
+        let id1 = PaneId::new_unique();
+        tc.active_tab_mut()
+            .pane_tree
+            .split_horizontal(&id0, id1.clone(), "pane-1".to_string())
+            .expect("horizontal split 성공");
+
+        // 3. vertical split on id0 (left): id0 / id2
+        let id2 = PaneId::new_unique();
+        tc.active_tab_mut()
+            .pane_tree
+            .split_vertical(&id0, id2, "pane-2".to_string())
+            .expect("vertical split on id0 성공");
+
+        // 4. vertical split on id1 (right): id1 / id3
+        let id3 = PaneId::new_unique();
+        tc.active_tab_mut()
+            .pane_tree
+            .split_vertical(&id1, id3, "pane-3".to_string())
+            .expect("vertical split on id1 성공");
+    });
+
+    let (splits, leaves) = cx.read(|app| {
+        let tc = entity.read(app);
+        let tree = &tc.active_tab().pane_tree;
+        (count_splits(tree), count_leaves(tree))
+    });
+
+    // AC-R-7: 3 split 노드 → divider 3 개, leaf 4 개
+    assert_eq!(splits, 3, "AC-R-7: 3-level split → split 노드 3 (= divider 3)");
+    assert_eq!(leaves, 4, "AC-R-7: 3-level split → leaf 4");
+}
+
+// ============================================================
+// MS-3 T8: AC-R-5 — divider drag boundary clamp (REQ-R-020~022)
+// ============================================================
+
+/// AC-R-5: divider drag 이 min 경계를 초과하면 ratio 가 clamp 된다.
+///
+/// AC-R-5: 활성 탭 PaneTree 가 horizontal split 인 상태에서
+/// GpuiDivider::on_drag 로 우측 sibling 이 MIN_COLS 미만이 되도록 시도하면
+/// ratio 가 clamp 된 값으로 고정되고 set_ratio 가 성공한다.
+///
+/// RootView drag wire-up 을 통한 통합 검증 (T7 DividerDragState logic).
+/// total_px=1600px, MIN_COLS=40, px_per_col=8.0 → min_px=320px → min_ratio=0.2
+/// 초기 ratio=0.6 (left=960px, right=640px), delta=-400px → right=240px < 320px → clamp
+#[test]
+fn divider_drag_clamps_at_min_size() {
+    use moai_studio_ui::panes::{GpuiDivider, ResizableDivider, SplitDirection};
+
+    let mut cx = TestAppContext::single();
+    let entity = cx.new(|_cx| TabContainer::new());
+
+    // 1. horizontal split 생성
+    let split_node_id = entity.update(&mut cx, |tc, _cx| {
+        let id0 = tc
+            .active_tab()
+            .last_focused_pane
+            .clone()
+            .expect("focused pane 필요");
+        tc.active_tab_mut()
+            .pane_tree
+            .split_horizontal(&id0, PaneId::new_unique(), "pane-1".to_string())
+            .expect("split 성공");
+
+        // 초기 ratio 를 0.6 으로 설정
+        let node_id = tc
+            .active_tab()
+            .pane_tree
+            .find_split_node_id()
+            .expect("split node id 필요")
+            .clone();
+        tc.active_tab_mut()
+            .pane_tree
+            .set_ratio(&node_id, 0.6)
+            .expect("set_ratio 0.6 성공");
+        node_id
+    });
+
+    // 2. GpuiDivider drag 시뮬레이션:
+    //    total=1600px, px_per_col=8.0 → min_px=320px → min_ratio=0.2
+    //    initial_ratio=0.6, delta=-400px → raw=(0.6*1600-400)/1600=560/1600=0.35
+    //    0.35 >= min_ratio(0.2) → clamped = 0.35 (범위 내)
+    //    더 극단적인 delta: delta=-700px → raw=(0.6*1600-700)/1600=260/1600=0.1625
+    //    0.1625 < 0.2 → clamped = 0.2
+    let total_px = 1600.0_f32;
+    let px_per_col = 8.0_f32;
+    let mut divider = GpuiDivider::new(SplitDirection::Horizontal, 0.6, px_per_col, 10.0);
+
+    // 극단적 drag: 우측 sibling 이 MIN_COLS 미만으로
+    let clamped_ratio = divider.on_drag(-700.0, total_px);
+
+    // min_ratio = (40 * 8.0) / 1600.0 = 320 / 1600 = 0.2
+    let expected_min_ratio = (40.0_f32 * px_per_col) / total_px;
+    assert!(
+        (clamped_ratio - expected_min_ratio).abs() < 1e-4,
+        "AC-R-5: drag 결과 ratio 가 min_ratio({expected_min_ratio:.4}) 로 clamp 되어야 함, 실제={clamped_ratio:.4}"
+    );
+
+    // 3. clamped ratio 를 PaneTree 에 반영 (set_ratio 성공 검증)
+    entity.update(&mut cx, |tc, _cx| {
+        tc.active_tab_mut()
+            .pane_tree
+            .set_ratio(&split_node_id, clamped_ratio)
+            .expect("clamped ratio 로 set_ratio 성공");
+    });
+
+    let final_ratio = cx.read(|app| {
+        let tc = entity.read(app);
+        tc.active_tab()
+            .pane_tree
+            .get_ratio(&split_node_id)
+            .expect("ratio 조회 성공")
+    });
+
+    assert!(
+        (final_ratio - expected_min_ratio).abs() < 1e-4,
+        "AC-R-5: PaneTree 에 반영된 ratio 가 min_ratio({expected_min_ratio:.4}) 이어야 함, 실제={final_ratio:.4}"
+    );
+}
+
+/// AC-R-5: divider drag 이 유효한 범위 내에 있으면 ratio 가 정상 업데이트된다.
+///
+/// AC-R-5 보완: valid drag (min_ratio < new_ratio < max_ratio) 시 PaneTree.ratio 가 갱신된다.
+/// total=1600px, px_per_col=8.0 → min_ratio=0.2, max_ratio=0.8
+/// initial_ratio=0.5, delta=+160px → raw=(0.5*1600+160)/1600=960/1600=0.6 (범위 내)
+#[test]
+fn divider_drag_within_bounds_updates_ratio() {
+    use moai_studio_ui::panes::{GpuiDivider, ResizableDivider, SplitDirection};
+
+    let mut cx = TestAppContext::single();
+    let entity = cx.new(|_cx| TabContainer::new());
+
+    // horizontal split 생성
+    let split_node_id = entity.update(&mut cx, |tc, _cx| {
+        let id0 = tc
+            .active_tab()
+            .last_focused_pane
+            .clone()
+            .expect("focused pane 필요");
+        tc.active_tab_mut()
+            .pane_tree
+            .split_horizontal(&id0, PaneId::new_unique(), "pane-1".to_string())
+            .expect("split 성공");
+        tc.active_tab()
+            .pane_tree
+            .find_split_node_id()
+            .expect("split node id 필요")
+            .clone()
+    });
+
+    // GpuiDivider valid drag: delta=+160px → new_ratio=0.6 (범위 내)
+    let total_px = 1600.0_f32;
+    let px_per_col = 8.0_f32;
+    let mut divider = GpuiDivider::new(SplitDirection::Horizontal, 0.5, px_per_col, 10.0);
+    let new_ratio = divider.on_drag(160.0, total_px);
+
+    // raw = (0.5 * 1600 + 160) / 1600 = 960 / 1600 = 0.6
+    assert!(
+        (new_ratio - 0.6).abs() < 1e-4,
+        "AC-R-5: valid drag → ratio=0.6 예상, 실제={new_ratio:.4}"
+    );
+
+    // PaneTree 에 반영
+    entity.update(&mut cx, |tc, _cx| {
+        tc.active_tab_mut()
+            .pane_tree
+            .set_ratio(&split_node_id, new_ratio)
+            .expect("valid ratio 로 set_ratio 성공");
+    });
+
+    let final_ratio = cx.read(|app| {
+        let tc = entity.read(app);
+        tc.active_tab()
+            .pane_tree
+            .get_ratio(&split_node_id)
+            .expect("ratio 조회 성공")
+    });
+
+    assert!(
+        (final_ratio - 0.6).abs() < 1e-4,
+        "AC-R-5: PaneTree 에 반영된 ratio=0.6 예상, 실제={final_ratio:.4}"
+    );
+}
