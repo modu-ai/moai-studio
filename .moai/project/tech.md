@@ -1,8 +1,67 @@
 # tech.md — MoAI Studio
 
-> **출처**: DESIGN.v4.md §0, §4, §7, §11
-> **상태**: Stack 확정. 일부 항목은 Pre-M0 spike 검증 후 fix.
+> **출처**: SPEC-V3-001/002/003, Cargo.toml workspace, .claude/rules/moai/core/lsp-client.md
+> **상태**: v3 Rust/GPUI 크로스플랫폼 — Rust 1.93 + Zig 0.15.2 + GPUI 0.2.2 (v2 Swift baseline 폐기)
 > **브랜드**: MoAI Studio (확정)
+
+---
+
+## 0. v3 Tech Stack (2026-04-25 기준)
+
+| 계층 | 기술 | 버전 | SPEC 출처 |
+|------|------|------|-----------|
+| **언어 (UI/Core)** | Rust | 1.93 (edition 2024, resolver 2) | SPEC-V3-001 |
+| **언어 (FFI)** | Zig | 0.15.2 | SPEC-V3-002 |
+| **UI 프레임워크** | GPUI | 0.2.2 (crates.io 안정) | SPEC-V3-001 RG-V3-2 |
+| **Terminal VT** | libghostty-vt | git submodule | SPEC-V3-002 |
+| **PTY** | rustix-openpty / portable-pty | workspace | SPEC-V3-002 |
+| **Async runtime** | tokio | 1.x (workspace) | SPEC-V3-001 |
+| **직렬화** | serde + serde_json | workspace | SPEC-V3-003 MS-3 |
+| **에러** | thiserror | workspace | 전체 |
+| **로깅** | tracing | workspace | 전체 |
+| **벤치** | criterion | 0.5 (dev-deps) | SPEC-V3-003 T11 |
+| **클립보드** | arboard | 3.0 | SPEC-V3-002 T4/T5 |
+| **파일 picker** | rfd | 0.15 | SPEC-V3-001 |
+| **LSP client** | charmbracelet/x/powernap | 0.1.4 pinned | SPEC-LSP-CORE-002 |
+
+### 0.1 빌드 / 품질 게이트
+
+- `cargo fmt --all -- --check`
+- `cargo clippy --workspace --all-targets -- -D warnings`
+- `cargo test --workspace --all-targets` — **411 tests / 0 fail / 8 ignored** (cfg-gated, tmux-dep)
+- `cargo bench -p moai-studio-ui --bench tab_switch -- --test`
+- LSP gate: `max_errors=0`, `max_type_errors=0`, `max_lint_errors=0` (quality.yaml)
+
+### 0.2 CI 매트릭스
+
+- **macOS 14** (Apple Silicon) + **Ubuntu 22.04** matrix
+- **Windows**: GPUI Windows GA 후 활성 (SPEC-V3-001 Exclusions 보류)
+- 워크플로: `ci-rust.yml` (V3-001/002 회귀) + **`ci-v3-pane.yml`** (V3-003 5 job × matrix)
+- Zig 0.15.2 via `mlugg/setup-zig@v2.2.1`
+
+### 0.3 v3 코드베이스 규모 (2026-04-25 기준)
+
+| 지표 | 값 |
+|------|-----|
+| Cargo workspace crate | 18 |
+| 워크스페이스 전체 테스트 | 411 / 0 fail / 8 ignored |
+| `moai-studio-ui` 테스트 | 148 (panes + tabs + integration) |
+| `moai-studio-workspace` 테스트 | 19 (persistence + panes_convert + e2e) |
+| `moai-studio-terminal` 테스트 | 13 (SPEC-V3-002 locked) |
+| MX ANCHOR 태그 | 16+ (pane/tab/persist 핵심 invariants) |
+| 벤치 SLA | tab_switch ≤ 50ms (실측 3.92µs, **12,700배 여유**) |
+
+### 0.4 의존성 정책
+
+- 외부 crate 추가는 SPEC 수준 + USER-DECISION 게이트 (예: criterion = SPEC-V3-003 §10.6)
+- workspace dependency 우선 (개별 crate 추가 금지)
+- LSP client 는 powernap 단일 진입점
+
+---
+
+## 1. (v2 legacy) 기술 스택 — 영구 폐기
+
+> v2 Swift/macOS 단계 baseline. v3 정합 정보는 §0.x 참조.
 > **패키지 식별자**: `moai-studio`
 > **작성일**: 2026-04-11
 

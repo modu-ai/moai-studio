@@ -1,10 +1,84 @@
 # structure.md — MoAI Studio
 
-> **출처**: README.md, DESIGN.v4.md §3, §8, REFERENCES.md
-> **상태**: M1 Complete — 12 Rust crates + SwiftUI app + GhosttyKit + 186 tests
+> **출처**: README.md, SPEC-V3-001/002/003, Cargo workspace
+> **상태**: SPEC-V3-003 complete — **18 Rust crates** (workspace) + **411 tests / 0 fail / 8 ignored**
 > **브랜드**: MoAI Studio (확정)
 > **패키지 식별자**: `moai-studio`
-> **작성일**: 2026-04-11
+> **작성일**: 2026-04-11 (v2 baseline) → 2026-04-25 (v3 Pivot)
+
+---
+
+## 0. v3 Crate Topology (2026-04-25 기준)
+
+Cargo workspace 18개 crate. v2 SwiftUI 앱은 폐기, v3 Rust + GPUI 로 전환.
+
+### 0.1 v3 Studio crate (4)
+
+| Crate | 역할 | 상태 |
+|-------|------|------|
+| `moai-studio-app` | Application 진입점 (main.rs) — restore_panes/save_panes lifecycle hook stub 포함 | active |
+| `moai-studio-ui` | GPUI 컴포넌트 (panes, tabs, terminal, sidebar, toolbar) — 148 tests | active |
+| `moai-studio-terminal` | libghostty-vt + PTY + Shell 통합 (SPEC-V3-002, **변경 금지 zone**) | locked |
+| `moai-studio-workspace` | 멀티 프로젝트 + persistence (panes-v1 schema, atomic write, cwd fallback) | active |
+
+### 0.2 Plugin / extensibility (3)
+
+- `moai-studio-plugin-api` (plugin trait 정의)
+- `moai-studio-plugin-moai-adk` (moai-adk 플러그인 구현)
+- `moai-claude-host` (Claude Code subprocess 호스팅)
+
+### 0.3 Core utilities (10)
+
+- `moai-core`, `moai-store` (SQLite), `moai-fs`, `moai-git`, `moai-ffi`, `moai-hook-http`, `moai-ide-server`, `moai-stream-json`, `moai-supervisor`, `moai-plugin-installer`
+
+### 0.4 Integration tests (1)
+
+- `moai-integration-tests`
+
+### 0.5 v3 신규 모듈 분포 (SPEC-V3-003 완료 시점)
+
+```
+crates/moai-studio-ui/src/
+├── lib.rs                          # GPUI app shell + main_body + content_area
+├── terminal/                       # SPEC-V3-002 (locked)
+│   ├── mod.rs
+│   ├── clipboard.rs
+│   └── input.rs
+├── panes/                          # SPEC-V3-003 MS-1
+│   ├── mod.rs
+│   ├── tree.rs                     # PaneTree binary tree + split/close
+│   ├── splitter.rs                 # PaneSplitter trait
+│   ├── splitter_gpui_native.rs     # GpuiNativeSplitter
+│   ├── divider.rs                  # ResizableDivider drag
+│   ├── focus.rs                    # FocusRouter + 키 dispatch
+│   └── constraints.rs              # PaneConstraints 불변 상수
+└── tabs/                           # SPEC-V3-003 MS-2
+    ├── mod.rs
+    ├── container.rs                # TabContainer + Tab + last_focused_pane
+    ├── bar.rs                      # 탭 바 state + design token
+    └── keys.rs                     # MS-2 키바인딩 dispatch (Cmd/Ctrl+T/1-9/\)
+
+crates/moai-studio-ui/benches/
+└── tab_switch.rs                   # criterion bench (3.92µs / 50-cycle)
+
+crates/moai-studio-ui/tests/
+├── integration_pane_core.rs        # MS-1 splitter integration
+├── integration_key_bindings.rs     # MS-1 + MS-2 키 바인딩
+└── integration_tmux_nested.rs      # AC-P-26 tmux passthrough
+
+crates/moai-studio-workspace/src/
+├── lib.rs                          # WorkspacesStore (기존)
+├── persistence.rs                  # SPEC-V3-003 MS-3 — panes-v1 JSON I/O
+└── panes_convert.rs                # SPEC-V3-003 MS-3 — DTO + snapshot_path
+
+crates/moai-studio-workspace/tests/
+└── integration_persistence.rs      # AC-P-12/14 e2e
+
+.github/workflows/
+├── ci-rust.yml                     # 기존 SPEC-V3-001/002 regression gate
+├── ci-v3-pane.yml                  # SPEC-V3-003 MS-3 T14 (5 jobs × matrix)
+└── release-drafter.yml             # CHANGELOG 자동화
+```
 
 ---
 
