@@ -47,6 +47,9 @@ tree-sitter-typescript = "0.23"
 # criterion 0.5 는 harness=false 로 동작하며 --test 모드로 smoke-run 가능.
 criterion = "0.5"
 
+# V3-005/006 wiring integration test: 실제 파일 I/O 검증용 tempfile.
+tempfile = "3"
+
 # T1 (SPEC-V3-004 MS-1 AC-R-6): gpui test-support feature 채택.
 # USER-DECISION resolved: option (a) ADOPT. TestAppContext 기반 render integration test 활성화.
 # AC-P-5 carry-over (SPEC-V3-003) 해소.

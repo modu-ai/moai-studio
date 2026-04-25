@@ -11,5 +11,5 @@ pub mod watch;
 
 pub use config::FsConfig;
 pub use tree::{FsError, FsNode};
-pub use view::FileExplorer;
+pub use view::{FileExplorer, FileOpenEvent};
 pub use watch::{FsDelta, WatchDebouncer};
