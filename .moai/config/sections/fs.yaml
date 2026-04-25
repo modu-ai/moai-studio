@@ -1,0 +1,8 @@
+fs:
+  # SPEC-V3-005 MS-2 T6 — FsWatcher debounce + backpressure 설정
+  # AC-FE-5: 100ms debounce 윈도우
+  debounce_ms: 100
+  # REQ-FE-013: backpressure 임계값 — 초과 시 full rescan 권장
+  backpressure_buffer_max: 1000
+  # backpressure 발생 후 full rescan 수행 여부
+  rescan_after_backpressure: true

@@ -15,6 +15,7 @@ use super::path::normalize_for_display;
 #[cfg(test)]
 use super::tree::ChildState;
 use super::tree::FsNode;
+use super::watch::FsDelta;
 
 // ============================================================
 // FileExplorer struct
@@ -67,11 +68,67 @@ impl FileExplorer {
         // MS-2 에서 구현: ChildState::NotLoaded → Loading 전이 + 비동기 read_dir 시작
     }
 
+    // @MX:ANCHOR: [AUTO] fs-delta-apply
+    // @MX:REASON: [AUTO] tree state 변형의 단일 경로. fan_in >= 3: watch_loop, manual refresh,
+    //   통합 테스트. FsDelta 수신 후 영향받은 디렉토리 자식을 NotLoaded 로 초기화하고
+    //   cx.notify() 로 GPUI 재렌더를 트리거한다.
+    // @MX:SPEC: SPEC-V3-005
+    /// FsDelta 를 트리에 적용한다 (AC-FE-5/6).
+    ///
+    /// delta 내 경로의 부모 디렉토리를 ChildState::NotLoaded 로 초기화하여
+    /// 다음 expand 시 fresh read_dir 가 수행되도록 한다.
+    /// 변경이 있으면 cx.notify() 를 호출한다.
+    pub fn apply_delta(&mut self, delta: FsDelta, cx: &mut Context<Self>) {
+        if delta.is_empty() {
+            return;
+        }
+
+        // delta 내 모든 경로의 부모 집합을 수집
+        let affected_parents: std::collections::HashSet<std::path::PathBuf> = delta
+            .created
+            .iter()
+            .chain(delta.removed.iter())
+            .chain(delta.modified.iter())
+            .chain(delta.renamed.iter().flat_map(|(a, b)| [a, b]))
+            .filter_map(|p| p.parent().map(|par| par.to_path_buf()))
+            .collect();
+
+        // 트리를 순회하며 영향받은 디렉토리를 NotLoaded 로 초기화
+        invalidate_dirs(&mut self.tree, &affected_parents);
+
+        cx.notify();
+    }
+
     /// 파일 노드를 클릭했을 때 on_file_open 콜백을 호출한다.
     pub fn open_file(&self, rel_path: &PathBuf) {
         if let Some(cb) = &self.on_file_open {
             let abs_path = self.workspace_root.join(rel_path);
             cb(rel_path.clone(), abs_path);
+        }
+    }
+}
+
+// ============================================================
+// invalidate_dirs — delta 적용 헬퍼
+// ============================================================
+
+/// `node` 와 그 자손 중 `affected` 에 포함된 rel_path 를 가진 Dir 노드를
+/// ChildState::NotLoaded 로 초기화한다.
+fn invalidate_dirs(node: &mut FsNode, affected: &std::collections::HashSet<std::path::PathBuf>) {
+    if let FsNode::Dir {
+        rel_path, children, ..
+    } = node
+    {
+        if affected.contains(rel_path.as_path()) {
+            *children = super::tree::ChildState::NotLoaded;
+            // 자식을 NotLoaded 로 설정했으므로 더 이상 순회 불필요
+            return;
+        }
+
+        if let super::tree::ChildState::Loaded(kids) = children {
+            for kid in kids.iter_mut() {
+                invalidate_dirs(kid, affected);
+            }
         }
     }
 }

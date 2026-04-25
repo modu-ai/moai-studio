@@ -9,6 +9,8 @@ description = "MoAI Studio v3 — GPUI 컴포넌트 라이브러리 (Sidebar, To
 [dependencies]
 tracing = { workspace = true }
 thiserror = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
 
 # Phase 1.1 (SPEC-V3-001 RG-V3-2): GPUI 의존성 추가
 # crates.io 0.2.2 는 2025 년 배포. git main 은 core-foundation exact pin 충돌 발생.
