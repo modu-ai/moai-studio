@@ -6,8 +6,10 @@
 //! - spec.md §5 RG-P-4 REQ-P-034 (tmux 중첩 시 OS/GPUI 레벨 우선 — AC-P-26)
 //!
 //! T9 완료: 키 바인딩 dispatcher (`tabs::keys::dispatch_tab_key`) + integration_tmux_nested.rs 통합 테스트.
+//! SPEC-V3-004 MS-1 T3: impl Render for TabContainer 추가 (placeholder render).
 
 use crate::panes::{PaneId, PaneTree};
+use gpui::{Context, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -244,6 +246,100 @@ impl TabContainer {
 impl Default for TabContainer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// ============================================================
+// GPUI Render 구현 (SPEC-V3-004 MS-1 T3)
+// ============================================================
+
+// 탭 바 색상 토큰 (SPEC-V3-003 design token carry)
+const TAB_ACTIVE_BG: u32 = 0x232327;
+const TAB_INACTIVE_BG: u32 = 0x131315;
+const TAB_FG_ACTIVE: u32 = 0xf4f4f5;
+const TAB_FG_INACTIVE: u32 = 0xb5b5bb;
+const CONTENT_BG: u32 = 0x0a0a0b;
+
+// @MX:ANCHOR: [AUTO] tab-container-render
+// @MX:REASON: [AUTO] SPEC-V3-004 REQ-R-001/002/003/005. TabContainer render 진입점.
+//   MS-1 에서 placeholder, MS-2 에서 render_pane_tree 로 교체.
+//   fan_in >= 3: RootView.content_area, integration_render 테스트, 향후 MS-2 T4.
+impl Render for TabContainer {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // REQ-R-005: tabs.is_empty() 여도 panic 없이 fallback 렌더.
+        if self.tabs.is_empty() {
+            return div()
+                .flex()
+                .flex_col()
+                .size_full()
+                .bg(rgb(CONTENT_BG))
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(rgb(0x6b6b73))
+                        .child("MS-1 TabContainer placeholder — no tabs"),
+                );
+        }
+
+        // 탭 바 렌더 (REQ-R-002a)
+        let tab_count = self.tabs.len();
+        let active_idx = self.active_tab_idx;
+        let mut tab_bar = div()
+            .flex()
+            .flex_row()
+            .w_full()
+            .h(px(32.0))
+            .bg(rgb(TAB_INACTIVE_BG));
+
+        for (i, tab) in self.tabs.iter().enumerate() {
+            let is_active = i == active_idx;
+            let bg = if is_active {
+                TAB_ACTIVE_BG
+            } else {
+                TAB_INACTIVE_BG
+            };
+            let fg = if is_active {
+                TAB_FG_ACTIVE
+            } else {
+                TAB_FG_INACTIVE
+            };
+            let label = tab.title.clone();
+            tab_bar = tab_bar.child(
+                div()
+                    .px_3()
+                    .py_1()
+                    .bg(rgb(bg))
+                    .text_sm()
+                    .text_color(rgb(fg))
+                    .child(label),
+            );
+        }
+
+        // @MX:TODO: [AUTO] MS-2 T4 에서 render_pane_tree 호출로 교체.
+        // 현재 MS-1 placeholder: 탭 수 + "MS-1 TabContainer placeholder" 텍스트만 표시.
+        let body = div()
+            .flex()
+            .flex_col()
+            .flex_grow()
+            .size_full()
+            .bg(rgb(CONTENT_BG))
+            .justify_center()
+            .items_center()
+            .child(div().text_sm().text_color(rgb(0xb5b5bb)).child(format!(
+                "MS-1 TabContainer placeholder — {} tab(s)",
+                tab_count
+            )));
+
+        // cx.notify() 는 상태 변경 시 호출. render 는 순수 읽기.
+        // REQ-R-003: new_tab/switch_tab/close_tab 이 cx.notify() 를 호출한다 (해당 메서드에서 처리).
+        let _ = cx; // render 에서 notify 불필요
+
+        div()
+            .flex()
+            .flex_col()
+            .size_full()
+            .child(tab_bar)
+            .child(body)
     }
 }
 
