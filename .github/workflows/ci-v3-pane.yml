@@ -1,0 +1,377 @@
+name: Pane CI (SPEC-V3-003 regression gate)
+
+# SPEC-V3-003 §11.4 CI block — MS-3 T14 regression gate.
+# 5개 job × macos-14 + ubuntu-22.04 matrix.
+# NOTE: GREEN 실행은 GitHub Actions billing 해소 후 확인 가능 (contract.md §11.5).
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feature/SPEC-V3-003-**'
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/ci-v3-pane.yml'
+      - '.moai/specs/SPEC-V3-003/**'
+  pull_request:
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/ci-v3-pane.yml'
+      - '.moai/specs/SPEC-V3-003/**'
+  workflow_dispatch:
+
+# 동일 ref 의 이전 실행 취소 — 빠른 피드백 루프 확보
+concurrency:
+  group: ci-v3-pane-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: short
+
+# ============================================================
+# 공통 setup 스텝 — 각 job 에서 반복 사용
+# ============================================================
+# 1. actions/checkout@v4
+# 2. Free disk (Linux only) — ci-rust.yml 패턴 동일 적용
+# 3. dtolnay/rust-toolchain@stable (clippy + rustfmt 포함)
+# 4. Linux system deps (GPUI xcb/wayland/fontconfig 등)
+# 5. Swatinem/rust-cache@v2
+# 6. mlugg/setup-zig@v2.2.1 (SPEC-V3-002 FFI link path)
+# 7. actions/cache@v4 for Zig toolchain
+
+jobs:
+  # ============================================================
+  # Job 1: fmt — cargo fmt --all -- --check
+  # contract.md §11.4 / §11.5 hard threshold
+  # ============================================================
+  fmt:
+    name: fmt (${{ matrix.platform.name }})
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - { name: macOS,  runner: macos-14 }
+          - { name: Linux,  runner: ubuntu-22.04 }
+          # Windows 는 GPUI GA 이후 활성화 (SPEC-V3-001 Exclusions)
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # SPEC-V3-002 AC-T-7 패턴 동일 적용: Linux runner 디스크 청소 (~14GB 확보).
+      # Zig 0.15.2 + libghostty-vt + gpui + criterion 누적으로 기본 공간 부족.
+      - name: Free disk space (Linux)
+        if: matrix.platform.runner == 'ubuntu-22.04'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
+                      "$AGENT_TOOLSDIRECTORY/Ruby" "$AGENT_TOOLSDIRECTORY/Python" \
+                      /usr/local/.ghcup || true
+          sudo apt-get clean
+          df -h /
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Install Linux system deps (GPUI runtime)
+        if: matrix.platform.runner == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libwayland-dev libfontconfig1-dev \
+            libssl-dev pkg-config
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: v3-pane-fmt-${{ matrix.platform.name }}
+
+      - name: Install Zig 0.15.2
+        uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: 0.15.2
+
+      - name: Cache Zig toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/zig
+            ~/Library/Caches/zig
+          key: zig-0.15.2-${{ runner.os }}-${{ runner.arch }}
+
+      # contract.md §11.5 hard threshold: cargo fmt --all -- --check 통과
+      - name: Gate — cargo fmt
+        run: cargo fmt --all -- --check
+
+  # ============================================================
+  # Job 2: clippy — cargo clippy --workspace --all-targets -D warnings
+  # contract.md §11.4 / §11.5 hard threshold (0 warning)
+  # ============================================================
+  clippy:
+    name: clippy (${{ matrix.platform.name }})
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - { name: macOS,  runner: macos-14 }
+          - { name: Linux,  runner: ubuntu-22.04 }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space (Linux)
+        if: matrix.platform.runner == 'ubuntu-22.04'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
+                      "$AGENT_TOOLSDIRECTORY/Ruby" "$AGENT_TOOLSDIRECTORY/Python" \
+                      /usr/local/.ghcup || true
+          sudo apt-get clean
+          df -h /
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Install Linux system deps (GPUI runtime)
+        if: matrix.platform.runner == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libwayland-dev libfontconfig1-dev \
+            libssl-dev pkg-config
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: v3-pane-clippy-${{ matrix.platform.name }}
+
+      - name: Install Zig 0.15.2
+        uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: 0.15.2
+
+      - name: Cache Zig toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/zig
+            ~/Library/Caches/zig
+          key: zig-0.15.2-${{ runner.os }}-${{ runner.arch }}
+
+      # contract.md §11.5: -D warnings → 0 warning 강제
+      - name: Gate — cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  # ============================================================
+  # Job 3: test — cargo test --workspace --all-targets
+  # tmux 의존 테스트는 #[ignore] 처리되므로 --ignored 없이 실행
+  # AC-P-16: SPEC-V3-002 regression 0 포함
+  # ============================================================
+  test:
+    name: test (${{ matrix.platform.name }})
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - { name: macOS,  runner: macos-14 }
+          - { name: Linux,  runner: ubuntu-22.04 }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space (Linux)
+        if: matrix.platform.runner == 'ubuntu-22.04'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
+                      "$AGENT_TOOLSDIRECTORY/Ruby" "$AGENT_TOOLSDIRECTORY/Python" \
+                      /usr/local/.ghcup || true
+          sudo apt-get clean
+          df -h /
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux system deps (GPUI runtime)
+        if: matrix.platform.runner == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libwayland-dev libfontconfig1-dev \
+            libssl-dev pkg-config
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: v3-pane-test-${{ matrix.platform.name }}
+
+      - name: Install Zig 0.15.2
+        uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: 0.15.2
+
+      - name: Cache Zig toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/zig
+            ~/Library/Caches/zig
+          key: zig-0.15.2-${{ runner.os }}-${{ runner.arch }}
+
+      # tmux 의존 테스트(#[ignore])는 tmux-test job 에서 별도 실행
+      - name: Gate — cargo test (non-tmux)
+        run: cargo test --workspace --all-targets
+
+  # ============================================================
+  # Job 4: tmux-test — cargo test --workspace --all-targets -- --ignored
+  # tmux 설치 후 #[ignore] 처리된 integration_tmux_nested 등 실행
+  # AC-P-26: ctrl_b_passes_through_to_nested_tmux
+  # ============================================================
+  tmux-test:
+    name: tmux-test (${{ matrix.platform.name }})
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - { name: macOS,  runner: macos-14 }
+          - { name: Linux,  runner: ubuntu-22.04 }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space (Linux)
+        if: matrix.platform.runner == 'ubuntu-22.04'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
+                      "$AGENT_TOOLSDIRECTORY/Ruby" "$AGENT_TOOLSDIRECTORY/Python" \
+                      /usr/local/.ghcup || true
+          sudo apt-get clean
+          df -h /
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux system deps (GPUI runtime)
+        if: matrix.platform.runner == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libwayland-dev libfontconfig1-dev \
+            libssl-dev pkg-config
+
+      # tmux 설치 — macOS: brew, Linux: apt-get
+      - name: Install tmux (macOS)
+        if: matrix.platform.runner == 'macos-14'
+        run: brew install tmux
+
+      - name: Install tmux (Linux)
+        if: matrix.platform.runner == 'ubuntu-22.04'
+        run: sudo apt-get install -y tmux
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: v3-pane-tmux-${{ matrix.platform.name }}
+
+      - name: Install Zig 0.15.2
+        uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: 0.15.2
+
+      - name: Cache Zig toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/zig
+            ~/Library/Caches/zig
+          key: zig-0.15.2-${{ runner.os }}-${{ runner.arch }}
+
+      # --ignored: #[ignore] 마킹된 tmux 의존 테스트만 실행
+      - name: Gate — cargo test (tmux-dependent, --ignored)
+        run: cargo test --workspace --all-targets -- --ignored
+
+  # ============================================================
+  # Job 5: bench-smoke — criterion bench --test (wall-clock 검증)
+  # AC-P-19: cycle_nine_tabs_fifty_times avg ≤ 50ms
+  # --test 플래그: criterion 을 1회 실행하여 panic/error 검출
+  # ============================================================
+  bench-smoke:
+    name: bench-smoke (${{ matrix.platform.name }})
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - { name: macOS,  runner: macos-14 }
+          - { name: Linux,  runner: ubuntu-22.04 }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space (Linux)
+        if: matrix.platform.runner == 'ubuntu-22.04'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
+                      "$AGENT_TOOLSDIRECTORY/Ruby" "$AGENT_TOOLSDIRECTORY/Python" \
+                      /usr/local/.ghcup || true
+          sudo apt-get clean
+          df -h /
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux system deps (GPUI runtime)
+        if: matrix.platform.runner == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libwayland-dev libfontconfig1-dev \
+            libssl-dev pkg-config
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: v3-pane-bench-${{ matrix.platform.name }}
+
+      - name: Install Zig 0.15.2
+        uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: 0.15.2
+
+      - name: Cache Zig toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/zig
+            ~/Library/Caches/zig
+          key: zig-0.15.2-${{ runner.os }}-${{ runner.arch }}
+
+      # --test: criterion 을 테스트 모드로 실행 (벤치마크 측정값 검증 없이 실행 성공만 확인)
+      # tab_switch bench — AC-P-19 cycle_nine_tabs_fifty_times smoke
+      - name: Gate — bench smoke (tab_switch)
+        run: cargo bench -p moai-studio-ui --bench tab_switch -- --test
