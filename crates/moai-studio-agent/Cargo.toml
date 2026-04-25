@@ -1,0 +1,27 @@
+[package]
+name = "moai-studio-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "MoAI Studio Agent crate — stream-json + hook-http SSE 수신, ring buffer, EventTimelineView 골격"
+
+[dependencies]
+# stream-json 디코더 재사용 (REQ-AD-002)
+moai-stream-json = { path = "../moai-stream-json" }
+
+# serde
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# 비동기 런타임
+tokio = { workspace = true, features = ["sync", "rt", "macros", "io-util"] }
+
+# 에러 처리
+thiserror = { workspace = true }
+
+# 로깅
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros", "rt-multi-thread"] }

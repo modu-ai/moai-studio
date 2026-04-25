@@ -26,6 +26,9 @@ moai-studio-terminal = { path = "../moai-studio-terminal" }
 # (macOS NSPasteboard / Linux X11·Wayland, SPEC-V3-002 RG-V3-002-4).
 arboard = "3.0"
 
+# SPEC-V3-010 MS-1: agent dashboard domain crate
+moai-studio-agent = { path = "../moai-studio-agent" }
+
 [dev-dependencies]
 # T11 (SPEC-V3-003 MS-2 AC-P-19): tab_switch 50-cycle bench.
 # criterion 0.5 는 harness=false 로 동작하며 --test 모드로 smoke-run 가능.
