@@ -233,6 +233,39 @@ impl RootView {
         });
     }
 
+    // @MX:ANCHOR: [AUTO] file-open-pipeline
+    // @MX:REASON: [AUTO] FileExplorer → RootView → viewer 단일 진입점.
+    //   fan_in >= 3: explorer callback (AC-WIRE-1), 미래 Cmd+P (V3-005 MS-3),
+    //   LSP go-to-definition (V3-006 MS-3).
+    //   이 메서드는 모든 "파일 열기" 요청의 escape hatch 이다.
+    /// FileExplorer 의 파일 열기 이벤트를 구독하여 handle_open_file 로 dispatch 한다.
+    ///
+    /// `file_explorer` 가 Some 일 때 GPUI EventEmitter 구독을 설정한다.
+    /// FileExplorer 가 `emit_open_file` 을 호출하면 RootView::handle_open_file 이 트리거된다.
+    ///
+    /// @MX:NOTE: [AUTO] viewer-mount-async-strategy
+    /// read_file_for_viewer 는 동기 std::fs::read 로 구현되어 있다 (MS-1/2 임시).
+    /// TooLarge / NotUtf8 오류는 viewer.set_error 로 표시된다.
+    /// MS-3 에서 cx.background_spawn 비동기로 전환 예정.
+    pub fn wire_file_explorer_callback(&mut self, cx: &mut Context<Self>) {
+        let Some(fe) = self.file_explorer.as_ref() else {
+            return;
+        };
+
+        // @MX:NOTE: Subscription 을 저장하지 않으면 즉시 drop 되므로
+        // 현재는 _subscription 을 local 에 두어 RootView 생존 기간 동안 유지.
+        // MS-3 에서 RootView 필드 (Vec<Subscription>) 로 이관 예정.
+        let _subscription = cx.subscribe(fe, |this, _fe, ev: &explorer::FileOpenEvent, cx| {
+            let open_ev = viewer::OpenFileEvent {
+                path: ev.abs_path.clone(),
+                surface_hint: None,
+            };
+            this.handle_open_file(&open_ev, cx);
+        });
+        // Subscription 을 forget 하여 RootView 생존 기간 동안 활성 유지
+        _subscription.detach();
+    }
+
     /// 파일 열기 이벤트를 처리한다 (REQ-MV-080).
     ///
     /// SPEC-V3-005 의 `OpenFileEvent` 를 소비하여:

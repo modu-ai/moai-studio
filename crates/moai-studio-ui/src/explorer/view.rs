@@ -9,13 +9,32 @@
 
 use std::path::PathBuf;
 
-use gpui::{Context, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb};
+use gpui::{
+    Context, EventEmitter, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb,
+};
 
 use super::path::normalize_for_display;
 #[cfg(test)]
 use super::tree::ChildState;
 use super::tree::FsNode;
 use super::watch::FsDelta;
+
+// ============================================================
+// FileOpenEvent — 파일 열기 이벤트 (GPUI EventEmitter 패턴)
+// ============================================================
+
+/// FileExplorer 가 파일 열기를 요청할 때 emit 하는 이벤트.
+///
+/// SPEC-V3-005 → SPEC-V3-006 wiring: RootView 가 subscribe 하여
+/// handle_open_file 을 트리거한다 (AC-WIRE-1).
+#[derive(Debug, Clone)]
+pub struct FileOpenEvent {
+    /// 열 파일의 절대 경로
+    pub abs_path: PathBuf,
+}
+
+/// FileExplorer 는 FileOpenEvent 를 emit 한다.
+impl EventEmitter<FileOpenEvent> for FileExplorer {}
 
 // ============================================================
 // FileExplorer struct
@@ -105,6 +124,15 @@ impl FileExplorer {
             let abs_path = self.workspace_root.join(rel_path);
             cb(rel_path.clone(), abs_path);
         }
+    }
+
+    /// 파일 열기 이벤트를 GPUI EventEmitter 로 emit 한다 (AC-WIRE-1).
+    ///
+    /// `wire_file_explorer_callback` 으로 RootView 가 subscribe 하며,
+    /// 기존 `on_file_open` 콜백과 독립적으로 동작한다.
+    pub fn emit_open_file(&mut self, rel_path: &PathBuf, cx: &mut Context<Self>) {
+        let abs_path = self.workspace_root.join(rel_path);
+        cx.emit(FileOpenEvent { abs_path });
     }
 }
 
