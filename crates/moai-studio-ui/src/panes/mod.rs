@@ -25,3 +25,8 @@ pub mod focus;
 pub use focus::{
     FocusCommand, FocusRouter, KeyCode, KeyModifiers, PLATFORM_MOD, PlatformMod, dispatch_key,
 };
+
+pub mod render;
+pub use render::{
+    count_leaves, count_splits, divider_horizontal, divider_vertical, render_pane_tree,
+};

@@ -18,8 +18,8 @@ pub mod tabs;
 pub mod terminal;
 
 use gpui::{
-    App, Application, Context, Entity, IntoElement, MouseButton, ParentElement, Render, Styled,
-    Window, WindowOptions, div, prelude::*, px, rgb, size,
+    App, Application, Context, Entity, IntoElement, KeyDownEvent, MouseButton, ParentElement,
+    Render, Styled, Window, WindowOptions, div, prelude::*, px, rgb, size,
 };
 use moai_studio_workspace::{Workspace, WorkspacesStore};
 use std::path::PathBuf;
@@ -146,6 +146,68 @@ impl RootView {
         cx.notify();
     }
 
+    /// GPUI 키 이벤트를 탭 명령으로 변환하여 TabContainer 에 전달한다 (REQ-R-031).
+    ///
+    /// @MX:NOTE: [AUTO] rootview-key-dispatch-ac-r-3
+    /// RootView 의 on_key_down 핸들러. keystroke_to_tab_key → dispatch_tab_key 순서로 변환.
+    /// Some(TabCommand) 시에만 tab_container.update 호출 (REQ-R-031).
+    /// None 이면 RootView 가 keystroke 를 소비하지 않아 활성 leaf 로 자동 forward (REQ-R-035).
+    fn handle_key_event(&mut self, ev: &KeyDownEvent, cx: &mut Context<Self>) {
+        let (mods, code) = tabs::keys::keystroke_to_tab_key(&ev.keystroke);
+        let Some(cmd) = tabs::keys::dispatch_tab_key(mods, code) else {
+            return; // REQ-R-035: passthrough
+        };
+        let Some(tc) = self.tab_container.as_ref() else {
+            return;
+        };
+        let tc = tc.clone();
+        tc.update(cx, |tc, cx| {
+            use crate::panes::PaneId;
+            use tabs::keys::TabCommand;
+            match cmd {
+                TabCommand::NewTab => {
+                    tc.new_tab(None);
+                }
+                TabCommand::SwitchToTab(idx) => {
+                    // REQ-R-033: IndexOutOfBounds 는 무시.
+                    let _ = tc.switch_tab(idx);
+                }
+                TabCommand::SplitVertical => {
+                    // REQ-R-034: SplitVertical → split_horizontal (좌우 분할).
+                    if let Some(focused) = tc.active_tab().last_focused_pane.clone() {
+                        let _ = tc.active_tab_mut().pane_tree.split_horizontal(
+                            &focused,
+                            PaneId::new_unique(),
+                            "new-pane".to_string(),
+                        );
+                    }
+                }
+                TabCommand::SplitHorizontal => {
+                    // REQ-R-034: SplitHorizontal → split_vertical (상하 분할).
+                    if let Some(focused) = tc.active_tab().last_focused_pane.clone() {
+                        let _ = tc.active_tab_mut().pane_tree.split_vertical(
+                            &focused,
+                            PaneId::new_unique(),
+                            "new-pane".to_string(),
+                        );
+                    }
+                }
+                TabCommand::PrevTab => {
+                    if tc.active_tab_idx > 0 {
+                        let _ = tc.switch_tab(tc.active_tab_idx - 1);
+                    }
+                }
+                TabCommand::NextTab => {
+                    let next = tc.active_tab_idx + 1;
+                    if next < tc.tabs.len() {
+                        let _ = tc.switch_tab(next);
+                    }
+                }
+            }
+            cx.notify();
+        });
+    }
+
     /// + New Workspace 버튼 클릭 처리 — store 재로드, 네이티브 picker, 상태 갱신.
     ///   사용자가 취소하거나 로드/저장이 실패하면 상태 유지.
     fn handle_add_workspace(&mut self, cx: &mut Context<Self>) {
@@ -191,11 +253,16 @@ impl Render for RootView {
             .collect();
         // SPEC-V3-004 T2: tab_container Entity 를 main_body 에 전달.
         let tab_container = self.tab_container.clone();
+        // SPEC-V3-004 T5: RootView 가 key 이벤트를 수신하여 tab command 로 dispatch.
+        // REQ-R-031: keystroke_to_tab_key → dispatch_tab_key 순서로 변환.
         div()
             .flex()
             .flex_col()
             .size_full()
             .bg(rgb(tokens::BG_BASE))
+            .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _window, cx| {
+                this.handle_key_event(ev, cx);
+            }))
             .child(title_bar(self.title_label()))
             .child(main_body(&self.workspaces, rows, new_ws_btn, tab_container))
             .child(status_bar())

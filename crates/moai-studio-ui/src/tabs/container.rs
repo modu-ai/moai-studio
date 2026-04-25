@@ -8,7 +8,7 @@
 //! T9 완료: 키 바인딩 dispatcher (`tabs::keys::dispatch_tab_key`) + integration_tmux_nested.rs 통합 테스트.
 //! SPEC-V3-004 MS-1 T3: impl Render for TabContainer 추가 (placeholder render).
 
-use crate::panes::{PaneId, PaneTree};
+use crate::panes::{PaneId, PaneTree, render_pane_tree};
 use gpui::{Context, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -282,7 +282,6 @@ impl Render for TabContainer {
         }
 
         // 탭 바 렌더 (REQ-R-002a)
-        let tab_count = self.tabs.len();
         let active_idx = self.active_tab_idx;
         let mut tab_bar = div()
             .flex()
@@ -315,20 +314,17 @@ impl Render for TabContainer {
             );
         }
 
-        // @MX:TODO: [AUTO] MS-2 T4 에서 render_pane_tree 호출로 교체.
-        // 현재 MS-1 placeholder: 탭 수 + "MS-1 TabContainer placeholder" 텍스트만 표시.
+        // MS-2 T4: render_pane_tree 로 활성 탭 PaneTree 렌더 (REQ-R-002b).
+        // @MX:NOTE: [AUTO] tab-container-body-render
+        // 활성 탭의 PaneTree<String> 을 render_pane_tree 로 변환.
+        // String 은 IntoElement + Clone 을 구현하므로 제약 충족.
+        // AC-R-2: horizontal split 시 divider_vertical 1 개 생성.
         let body = div()
             .flex()
             .flex_col()
             .flex_grow()
-            .size_full()
             .bg(rgb(CONTENT_BG))
-            .justify_center()
-            .items_center()
-            .child(div().text_sm().text_color(rgb(0xb5b5bb)).child(format!(
-                "MS-1 TabContainer placeholder — {} tab(s)",
-                tab_count
-            )));
+            .child(render_pane_tree(&self.tabs[active_idx].pane_tree));
 
         // cx.notify() 는 상태 변경 시 호출. render 는 순수 읽기.
         // REQ-R-003: new_tab/switch_tab/close_tab 이 cx.notify() 를 호출한다 (해당 메서드에서 처리).

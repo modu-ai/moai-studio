@@ -15,6 +15,7 @@
 //! dispatch_tab_key 에서 None 반환 → OS/GPUI 레벨로 전달됨 (REQ-P-034).
 
 use crate::panes::focus::{KeyModifiers, PLATFORM_MOD, PlatformMod};
+use gpui::Keystroke;
 
 // ============================================================
 // TabKeyCode — MS-2 확장 키 코드
@@ -58,6 +59,58 @@ pub enum TabCommand {
     PrevTab,
     /// 다음 탭으로 이동 (Cmd/Ctrl+}).
     NextTab,
+}
+
+// ============================================================
+// keystroke_to_tab_key — GPUI Keystroke → (KeyModifiers, TabKeyCode) 변환
+// ============================================================
+
+// @MX:ANCHOR: [AUTO] keystroke-bridge
+// @MX:REASON: [AUTO] SPEC-V3-004 REQ-R-030. GPUI Keystroke → (KeyModifiers, TabKeyCode) 변환 진입점.
+//   fan_in >= 3: RootView::on_key_down 핸들러 (T5), integration_render 테스트 (AC-R-3), 향후 shortcut manager.
+//   macOS: Keystroke.modifiers.platform == Cmd. Linux/Windows: Keystroke.modifiers.control == Ctrl.
+// @MX:NOTE: [AUTO] gpui-keystroke-modifiers-mapping
+// gpui 0.2.2 의 Modifiers 필드: control, alt, shift, platform (macOS=Cmd, Linux/Win=Super).
+// macOS 에서 Cmd 는 Keystroke.modifiers.platform == true.
+// 기존 KeyModifiers.cmd 와의 매핑: platform → cmd (macOS), control → ctrl.
+/// GPUI [`Keystroke`] 를 [`KeyModifiers`] + [`TabKeyCode`] 쌍으로 변환한다.
+///
+/// SPEC-V3-004 REQ-R-030: RootView::on_key_down 의 단독 호출자.
+///
+/// ## GPUI modifiers 매핑
+///
+/// | GPUI field             | KeyModifiers field | 비고                        |
+/// |------------------------|--------------------|-----------------------------|
+/// | `modifiers.platform`   | `cmd`              | macOS=Cmd, Linux/Win=Super  |
+/// | `modifiers.control`    | `ctrl`             |                             |
+/// | `modifiers.shift`      | `shift`            |                             |
+/// | `modifiers.alt`        | `alt`              |                             |
+pub fn keystroke_to_tab_key(ks: &Keystroke) -> (KeyModifiers, TabKeyCode) {
+    let mods = KeyModifiers {
+        // macOS: Keystroke.modifiers.platform == Cmd key.
+        // Linux/Windows: control 로 처리, platform (Super) 는 cmd 에 포함하지 않음.
+        cmd: ks.modifiers.platform,
+        ctrl: ks.modifiers.control,
+        shift: ks.modifiers.shift,
+        alt: ks.modifiers.alt,
+    };
+    let code = match ks.key.as_str() {
+        "t" | "T" => TabKeyCode::T,
+        "1" => TabKeyCode::Digit(1),
+        "2" => TabKeyCode::Digit(2),
+        "3" => TabKeyCode::Digit(3),
+        "4" => TabKeyCode::Digit(4),
+        "5" => TabKeyCode::Digit(5),
+        "6" => TabKeyCode::Digit(6),
+        "7" => TabKeyCode::Digit(7),
+        "8" => TabKeyCode::Digit(8),
+        "9" => TabKeyCode::Digit(9),
+        "\\" => TabKeyCode::Backslash,
+        "{" => TabKeyCode::BraceOpen,
+        "}" => TabKeyCode::BraceClose,
+        _ => TabKeyCode::Other,
+    };
+    (mods, code)
 }
 
 // ============================================================
@@ -505,5 +558,181 @@ mod tests {
             container.switch_tab(prev_idx).unwrap();
         }
         assert_eq!(container.active_tab_idx, 2);
+    }
+
+    // -------------------------------------------------------
+    // T5 AC-R-3: keystroke_to_tab_key 단위 테스트
+    // -------------------------------------------------------
+
+    /// macOS: platform modifier(=Cmd) + "t" → (cmd=true, T).
+    ///
+    /// AC-R-3 관련: keystroke_to_tab_key 가 올바르게 변환해야 dispatch_tab_key → NewTab.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn keystroke_cmd_t_on_macos_returns_t_keycode() {
+        let ks = Keystroke {
+            modifiers: gpui::Modifiers {
+                platform: true,
+                control: false,
+                shift: false,
+                alt: false,
+                function: false,
+            },
+            key: "t".to_string(),
+            key_char: Some("t".to_string()),
+        };
+        let (mods, code) = keystroke_to_tab_key(&ks);
+        assert!(mods.cmd, "macOS platform modifier → cmd=true");
+        assert!(!mods.ctrl, "ctrl=false");
+        assert_eq!(code, TabKeyCode::T);
+        // dispatch_tab_key 까지 연결 확인
+        assert_eq!(dispatch_tab_key(mods, code), Some(TabCommand::NewTab));
+    }
+
+    /// Linux: control + "t" → (ctrl=true, T).
+    ///
+    /// AC-R-3 관련: Ctrl+T → NewTab.
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn keystroke_ctrl_t_on_linux_returns_t_keycode() {
+        let ks = Keystroke {
+            modifiers: gpui::Modifiers {
+                platform: false,
+                control: true,
+                shift: false,
+                alt: false,
+                function: false,
+            },
+            key: "t".to_string(),
+            key_char: Some("t".to_string()),
+        };
+        let (mods, code) = keystroke_to_tab_key(&ks);
+        assert!(!mods.cmd, "Linux: cmd=false");
+        assert!(mods.ctrl, "Linux: ctrl=true");
+        assert_eq!(code, TabKeyCode::T);
+        assert_eq!(dispatch_tab_key(mods, code), Some(TabCommand::NewTab));
+    }
+
+    /// backslash 키 → TabKeyCode::Backslash.
+    #[test]
+    fn keystroke_backslash_returns_backslash_keycode() {
+        let ks = Keystroke {
+            modifiers: gpui::Modifiers::default(),
+            key: "\\".to_string(),
+            key_char: None,
+        };
+        let (_, code) = keystroke_to_tab_key(&ks);
+        assert_eq!(code, TabKeyCode::Backslash);
+    }
+
+    /// 숫자 1 키 → TabKeyCode::Digit(1).
+    #[test]
+    fn keystroke_digit_1_returns_digit_1_keycode() {
+        let ks = Keystroke {
+            modifiers: gpui::Modifiers::default(),
+            key: "1".to_string(),
+            key_char: Some("1".to_string()),
+        };
+        let (_, code) = keystroke_to_tab_key(&ks);
+        assert_eq!(code, TabKeyCode::Digit(1));
+    }
+
+    /// 알 수 없는 키 → TabKeyCode::Other.
+    #[test]
+    fn keystroke_unknown_key_returns_other() {
+        let ks = Keystroke {
+            modifiers: gpui::Modifiers::default(),
+            key: "q".to_string(),
+            key_char: Some("q".to_string()),
+        };
+        let (_, code) = keystroke_to_tab_key(&ks);
+        assert_eq!(code, TabKeyCode::Other);
+    }
+
+    // -------------------------------------------------------
+    // T5 AC-R-3/AC-R-4: handle_tab_command logic-level 통합 검증
+    // -------------------------------------------------------
+
+    /// NewTab 명령 → TabContainer.tabs.len() == 2 (AC-R-3 logic-level).
+    #[test]
+    fn new_tab_via_keystroke_increments_tab_count() {
+        use crate::tabs::TabContainer;
+
+        let platform_ks = Keystroke {
+            modifiers: gpui::Modifiers {
+                #[cfg(target_os = "macos")]
+                platform: true,
+                #[cfg(not(target_os = "macos"))]
+                control: true,
+                ..gpui::Modifiers::default()
+            },
+            key: "t".to_string(),
+            key_char: Some("t".to_string()),
+        };
+
+        let (mods, code) = keystroke_to_tab_key(&platform_ks);
+        let cmd = dispatch_tab_key(mods, code);
+        assert_eq!(cmd, Some(TabCommand::NewTab), "Cmd/Ctrl+T → NewTab");
+
+        let mut tc = TabContainer::new();
+        assert_eq!(tc.tab_count(), 1);
+        if let Some(TabCommand::NewTab) = cmd {
+            tc.new_tab(None);
+        }
+        assert_eq!(tc.tab_count(), 2, "AC-R-3: NewTab 후 tabs.len() == 2");
+    }
+
+    /// SplitVertical 명령 → 활성 탭 PaneTree 가 Split 으로 교체 (AC-R-4 logic-level).
+    #[test]
+    fn split_vertical_via_keystroke_changes_pane_tree_to_split() {
+        use crate::panes::{PaneId, PaneTree};
+        use crate::tabs::TabContainer;
+
+        let platform_ks = Keystroke {
+            modifiers: gpui::Modifiers {
+                #[cfg(target_os = "macos")]
+                platform: true,
+                #[cfg(not(target_os = "macos"))]
+                control: true,
+                ..gpui::Modifiers::default()
+            },
+            key: "\\".to_string(),
+            key_char: None,
+        };
+
+        let (mods, code) = keystroke_to_tab_key(&platform_ks);
+        let cmd = dispatch_tab_key(mods, code);
+        assert_eq!(
+            cmd,
+            Some(TabCommand::SplitVertical),
+            "Cmd/Ctrl+\\ → SplitVertical"
+        );
+
+        let mut tc = TabContainer::new();
+        // 활성 탭의 focused leaf ID 획득
+        let focused_id = tc
+            .active_tab()
+            .last_focused_pane
+            .clone()
+            .expect("초기 focused pane 있어야 함");
+
+        if let Some(TabCommand::SplitVertical) = cmd {
+            // SplitVertical → split_horizontal (좌우 분할) 호출
+            tc.active_tab_mut()
+                .pane_tree
+                .split_horizontal(&focused_id, PaneId::new_unique(), "new-pane".to_string())
+                .expect("split_horizontal 성공");
+        }
+
+        // AC-R-4: PaneTree 가 Split 으로 교체되었는지 확인
+        assert!(
+            matches!(tc.active_tab().pane_tree, PaneTree::Split { .. }),
+            "AC-R-4: SplitVertical 후 PaneTree 는 Split 이어야 한다"
+        );
+
+        // render 관점: split 1 개, divider 1 개
+        use crate::panes::render::{count_leaves, count_splits};
+        assert_eq!(count_splits(&tc.active_tab().pane_tree), 1, "split 1 개");
+        assert_eq!(count_leaves(&tc.active_tab().pane_tree), 2, "leaf 2 개");
     }
 }
