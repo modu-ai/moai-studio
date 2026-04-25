@@ -5,7 +5,7 @@
 //! - spec.md §5 RG-P-3 REQ-P-023 (탭 전환 시 last_focused_pane 복원)
 //! - spec.md §5 RG-P-4 REQ-P-034 (tmux 중첩 시 OS/GPUI 레벨 우선 — AC-P-26)
 //!
-//! @MX:TODO(T9): 키 바인딩 dispatcher (platform_mod 재사용) + tests/integration_tmux_nested.rs 통합 테스트.
+//! T9 완료: 키 바인딩 dispatcher (`tabs::keys::dispatch_tab_key`) + integration_tmux_nested.rs 통합 테스트.
 
 use crate::panes::{PaneId, PaneTree};
 use std::path::PathBuf;
