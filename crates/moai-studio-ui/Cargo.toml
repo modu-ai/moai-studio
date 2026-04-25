@@ -31,6 +31,11 @@ arboard = "3.0"
 # criterion 0.5 는 harness=false 로 동작하며 --test 모드로 smoke-run 가능.
 criterion = "0.5"
 
+# T1 (SPEC-V3-004 MS-1 AC-R-6): gpui test-support feature 채택.
+# USER-DECISION resolved: option (a) ADOPT. TestAppContext 기반 render integration test 활성화.
+# AC-P-5 carry-over (SPEC-V3-003) 해소.
+gpui = { version = "0.2", features = ["test-support"] }
+
 [[example]]
 name = "ghostty-spike"
 path = "examples/ghostty_spike.rs"
