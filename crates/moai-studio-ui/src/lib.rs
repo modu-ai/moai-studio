@@ -18,15 +18,20 @@ pub mod explorer;
 pub mod panes;
 pub mod tabs;
 pub mod terminal;
+// SPEC-V3-006 MS-1: viewer surface 모듈
+pub mod viewer;
 
 use gpui::{
     App, Application, Context, Entity, IntoElement, KeyDownEvent, MouseButton, ParentElement,
     Render, Styled, Window, WindowOptions, div, prelude::*, px, rgb, size,
 };
 use moai_studio_workspace::{Workspace, WorkspacesStore};
+use panes::PaneId;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use tabs::TabContainer;
 use tracing::{error, info};
+use viewer::LeafKind;
 
 // ============================================================
 // Design tokens — `system.md` §4 dark primary.
@@ -95,6 +100,10 @@ pub struct RootView {
     /// SPEC-V3-010 MS-1: agent progress dashboard Entity (선택적).
     /// None 이면 tab_container 렌더 유지.
     pub agent_dashboard: Option<Entity<agent::dashboard_view::AgentDashboardView>>,
+    // @MX:TODO(MS-2-pane-tree-leafkind): MS-2 에서 TabContainer 의 PaneTree<String> 을
+    //   PaneTree<LeafKind> 로 교체하면 이 HashMap 은 제거되고 pane_tree.set_leaf_payload 로 직접 교체.
+    /// SPEC-V3-006 MS-1: PaneId → LeafKind 매핑 (MS-2 에서 PaneTree<LeafKind> 교체 전 임시).
+    pub leaf_payloads: HashMap<PaneId, LeafKind>,
 }
 
 impl RootView {
@@ -111,6 +120,7 @@ impl RootView {
             tab_container: None,
             file_explorer: None,
             agent_dashboard: None,
+            leaf_payloads: HashMap::new(),
         }
     }
 
@@ -221,6 +231,63 @@ impl RootView {
             }
             cx.notify();
         });
+    }
+
+    /// 파일 열기 이벤트를 처리한다 (REQ-MV-080).
+    ///
+    /// SPEC-V3-005 의 `OpenFileEvent` 를 소비하여:
+    /// 1. 바이너리 파일 → 무시 (log 만).
+    /// 2. Markdown → `Entity<MarkdownViewer>` 생성 후 `LeafKind::Markdown` 으로 저장.
+    /// 3. Code / 그 외 → `LeafKind::Code` 로 저장 (MS-2 CodeViewer 교체 예정).
+    ///
+    /// MS-1 에서는 `leaf_payloads` HashMap 에 저장한다.
+    /// MS-2 에서 `PaneTree<LeafKind>` 교체 시 `pane_tree.set_leaf_payload` 로 전환.
+    pub fn handle_open_file(&mut self, ev: &viewer::OpenFileEvent, cx: &mut Context<Self>) {
+        use viewer::markdown::MarkdownViewer;
+        use viewer::{EventResolution, SurfaceHint, resolve_event};
+
+        // 활성 탭의 focused pane id 를 구한다.
+        let leaf_id = self
+            .tab_container
+            .as_ref()
+            .and_then(|tc| tc.read(cx).active_tab().last_focused_pane.clone());
+
+        let Some(leaf_id) = leaf_id else {
+            // tab_container 없음 또는 focused pane 없음 — 무시
+            return;
+        };
+
+        match resolve_event(ev) {
+            EventResolution::Binary => {
+                // AC-MV-11: binary 파일은 viewer 마운트 없이 무시
+                info!("handle_open_file: binary 파일 무시 ({:?})", ev.path);
+            }
+            EventResolution::Open(SurfaceHint::Markdown) => {
+                let path = ev.path.clone();
+                let entity = cx.new(|_cx| MarkdownViewer::new(path.clone()));
+                // MS-1: sync read → load
+                match viewer::read_file_for_viewer(&path) {
+                    Ok(src) => {
+                        entity.update(cx, |viewer: &mut MarkdownViewer, cx| {
+                            viewer.load(src.source, cx);
+                        });
+                    }
+                    Err(e) => {
+                        entity.update(cx, |viewer: &mut MarkdownViewer, cx| {
+                            viewer.set_error(e.to_string(), cx);
+                        });
+                    }
+                }
+                self.leaf_payloads
+                    .insert(leaf_id, LeafKind::Markdown(entity));
+                cx.notify();
+            }
+            EventResolution::Open(_) => {
+                // Code / Terminal — MS-2 까지는 LeafKind::Code placeholder
+                self.leaf_payloads.insert(leaf_id, LeafKind::Code);
+                cx.notify();
+            }
+        }
     }
 
     /// + New Workspace 버튼 클릭 처리 — store 재로드, 네이티브 picker, 상태 갱신.
@@ -807,5 +874,62 @@ mod tests {
         let ws = make_ws("proj", "1", 1_000);
         let view = RootView::new(vec![ws], dummy_path());
         assert!(view.tab_container.is_none());
+    }
+
+    // ── T2: handle_open_file (AC-MV-1 / AC-MV-11) ──
+
+    #[test]
+    fn leaf_payloads_is_empty_on_new_root_view() {
+        // 초기 상태에서 leaf_payloads 는 비어있어야 한다
+        let view = RootView::new(vec![], dummy_path());
+        assert!(
+            view.leaf_payloads.is_empty(),
+            "초기 leaf_payloads 는 비어있어야 한다"
+        );
+    }
+
+    #[test]
+    fn handle_open_file_no_tab_container_early_returns_without_panic() {
+        // tab_container 없으면 early return — panic 없어야 한다 (AC-MV-1 전제)
+        use gpui::{AppContext, TestAppContext};
+        use viewer::{OpenFileEvent, SurfaceHint};
+
+        let mut cx = TestAppContext::single();
+        let ev = OpenFileEvent {
+            path: std::path::PathBuf::from("docs/README.md"),
+            surface_hint: Some(SurfaceHint::Markdown),
+        };
+        let root_entity = cx.new(|_cx| RootView::new(vec![], dummy_path()));
+        cx.update(|app| {
+            root_entity.update(app, |view: &mut RootView, cx| {
+                view.handle_open_file(&ev, cx);
+            });
+        });
+        let leaf_count = cx.read(|app| root_entity.read(app).leaf_payloads.len());
+        assert_eq!(
+            leaf_count, 0,
+            "tab_container 없으면 early return, leaf_payloads 변경 없음"
+        );
+    }
+
+    #[test]
+    fn handle_open_file_binary_no_tab_container_does_not_panic() {
+        // AC-MV-11: binary 파일 이벤트 → panic 없이 무시
+        use gpui::{AppContext, TestAppContext};
+        use viewer::OpenFileEvent;
+
+        let mut cx = TestAppContext::single();
+        let png_ev = OpenFileEvent {
+            path: std::path::PathBuf::from("photo.png"),
+            surface_hint: None,
+        };
+        let root_entity = cx.new(|_cx| RootView::new(vec![], dummy_path()));
+        cx.update(|app| {
+            root_entity.update(app, |view: &mut RootView, cx| {
+                view.handle_open_file(&png_ev, cx);
+            });
+        });
+        let leaf_count = cx.read(|app| root_entity.read(app).leaf_payloads.len());
+        assert_eq!(leaf_count, 0, "binary 파일은 leaf_payloads 에 영향 없음");
     }
 }

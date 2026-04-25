@@ -412,6 +412,29 @@ impl<L: Clone> PaneTree<L> {
             PaneTree::Split { id, .. } => Some(id),
         }
     }
+
+    /// target_id leaf 의 payload 를 new_payload 로 교체한다 (REQ-MV-080).
+    ///
+    /// target 이 존재하면 `true`, 존재하지 않으면 `false` 를 반환한다.
+    pub fn set_leaf_payload(&mut self, target_id: &PaneId, new_payload: L) -> bool {
+        match self {
+            PaneTree::Leaf(leaf) => {
+                if &leaf.id == target_id {
+                    leaf.payload = new_payload;
+                    true
+                } else {
+                    false
+                }
+            }
+            PaneTree::Split { first, second, .. } => {
+                if first.set_leaf_payload(target_id, new_payload.clone()) {
+                    true
+                } else {
+                    second.set_leaf_payload(target_id, new_payload)
+                }
+            }
+        }
+    }
 }
 
 // ============================================================
