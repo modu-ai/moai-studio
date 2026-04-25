@@ -1,12 +1,13 @@
 //! SPEC-V3-006: 4-surface Viewer 통합 진입점.
 //!
 //! `LeafKind` enum 이 SPEC-V3-004 의 generic L 자리에 들어가 Pane leaf 의
-//! 다형성을 제공한다. MS-1 에서는 Terminal / Markdown / Binary 가 구현되며,
-//! Code 는 MS-2 전까지 컴파일 전용 placeholder 이다.
+//! 다형성을 제공한다. MS-2 에서 tree-sitter CodeViewer 가 구현되어
+//! `Code(Entity<CodeViewer>)` 로 활성화됩니다.
 //!
 //! @MX:TODO(MS-3-lsp): LSP client / server_registry 모듈은 MS-3 에서 추가된다
 //!   (RG-MV-4 async-lsp + lsp-types 통합).
 
+pub mod code;
 pub mod markdown;
 pub mod scroll;
 
@@ -14,9 +15,8 @@ pub mod scroll;
 // @MX:REASON: [AUTO] SPEC-V3-006 RG-MV-?. LeafKind 는 4-surface 다형성 진입점이다.
 //   fan_in >= 3: render_pane_tree<LeafKind>, RootView::handle_open_file,
 //   integration 테스트, MS-2 CodeViewer 배선.
-// @MX:TODO(MS-2-tree-sitter): CodeViewer (Code variant) 는 MS-2 에서 구현된다.
-//   현재는 컴파일 전용 placeholder (Render impl = Empty).
 
+use code::CodeViewer;
 use gpui::{Context, Div, Entity, IntoElement, ParentElement, Render, Styled, Window, div};
 use markdown::MarkdownViewer;
 use std::path::{Path, PathBuf};
@@ -72,10 +72,9 @@ pub enum LeafKind {
     Terminal(Entity<crate::terminal::TerminalSurface>),
     /// SPEC-V3-006 MS-1: CommonMark + GFM markdown viewer.
     Markdown(Entity<MarkdownViewer>),
-    /// SPEC-V3-006 MS-2 이후: tree-sitter syntax highlight + LSP 진단.
-    // @MX:TODO(MS-2-tree-sitter): CodeViewer struct 는 MS-2 T11 에서 구현.
-    //   현재 Entity 대신 placeholder div 를 렌더한다.
-    Code,
+    /// SPEC-V3-006 MS-2: tree-sitter syntax highlight CodeViewer.
+    // @MX:TODO(MS-3-lsp-diagnostic): LSP 진단 (squiggly underline) 은 MS-3 에서 추가.
+    Code(Entity<CodeViewer>),
     /// SPEC-V3-007 carry-over: Web viewer (컴파일 전용 placeholder).
     Web,
     /// Binary 파일 — viewer 마운트 없이 안내 메시지 표시.
@@ -92,7 +91,7 @@ impl Render for LeafKind {
             LeafKind::Empty => leaf_placeholder("Empty leaf").into_any_element(),
             LeafKind::Terminal(e) => e.clone().into_any_element(),
             LeafKind::Markdown(e) => e.clone().into_any_element(),
-            LeafKind::Code => leaf_placeholder("Code viewer — MS-2 미구현").into_any_element(),
+            LeafKind::Code(e) => e.clone().into_any_element(),
             LeafKind::Web => leaf_placeholder("Web viewer — SPEC-V3-007 예정").into_any_element(),
             LeafKind::Binary(k) => {
                 let msg = format!("바이너리 파일 ({:?}) — viewer 열 수 없음", k);
