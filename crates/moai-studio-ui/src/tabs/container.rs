@@ -22,13 +22,20 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub struct TabId(pub String);
 
 impl TabId {
-    /// 나노초 기반 고유 TabId 생성.
+    /// 나노초 + 프로세스-모노톤 카운터 기반 고유 TabId 생성.
+    ///
+    /// 나노초만으로는 병렬 테스트 (`cargo test` 다중 쓰레드)에서 동일 틱 충돌이 관측되어
+    /// (T8 `close_middle_tab_promotes_neighbor` 간헐 실패), `AtomicU64` suffix 로 보강.
+    /// Spike 3 `tab-{:x}` 패턴은 prefix 부분에서 유지되어 workspace ID regex 호환.
     pub fn new_unique() -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        Self(format!("tab-{:x}", nanos))
+        let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
+        Self(format!("tab-{:x}-{:x}", nanos, seq))
     }
 
     /// 지정 문자열로 TabId 생성 (테스트 전용 편의 메서드).

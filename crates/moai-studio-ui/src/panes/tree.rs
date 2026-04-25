@@ -33,13 +33,19 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub struct PaneId(pub String);
 
 impl PaneId {
-    /// 나노초 기반 고유 PaneId 생성.
+    /// 나노초 + 프로세스-모노톤 카운터 기반 고유 PaneId 생성.
+    ///
+    /// 병렬 테스트에서 동일 틱 충돌 방지를 위해 `AtomicU64` suffix 로 보강.
+    /// Spike 3 `pane-{:x}` 패턴은 prefix 부분에서 유지.
     pub fn new_unique() -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        Self(format!("pane-{:x}", nanos))
+        let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
+        Self(format!("pane-{:x}-{:x}", nanos, seq))
     }
 
     /// 지정 문자열로 PaneId 생성 (테스트 전용 편의 메서드).
@@ -61,13 +67,18 @@ impl std::fmt::Display for PaneId {
 pub struct SplitNodeId(pub String);
 
 impl SplitNodeId {
-    /// 나노초 기반 고유 SplitNodeId 생성.
+    /// 나노초 + 프로세스-모노톤 카운터 기반 고유 SplitNodeId 생성.
+    ///
+    /// 병렬 테스트 충돌 방지, Spike 3 `split-{:x}` prefix 유지.
     pub fn new_unique() -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        Self(format!("split-{:x}", nanos))
+        let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
+        Self(format!("split-{:x}-{:x}", nanos, seq))
     }
 }
 
