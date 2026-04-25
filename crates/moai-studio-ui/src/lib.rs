@@ -14,6 +14,7 @@
 //! - TerminalSurface 가 Some 이면 content_area 는 빈 상태 대신 터미널을 렌더한다.
 
 pub mod panes;
+pub mod tabs;
 pub mod terminal;
 
 use gpui::{
