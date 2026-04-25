@@ -15,6 +15,8 @@
 //! - 사이드바 스위처, 최근 사용, 글로벌 검색
 //! - 드래그앤드롭 폴더 추가
 
+pub mod persistence;
+
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
