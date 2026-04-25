@@ -1,15 +1,67 @@
 # product.md — MoAI Studio
 
-> **출처**: README.md, DESIGN.v4.md (현 기준), NEXT-STEPS.md, REFERENCES.md
-> **상태**: M1 Complete (Conditional GO) — Working Shell 구현 완료
-> **버전**: 0.2.0 (M1 Working Shell)
-> **브랜드**: MoAI Studio (확정 — DESIGN.v4 §14 O6 RESOLVED, 2026-04-11)
+> **출처**: README.md, SPEC-V3-001/002/003 (현 기준), CLAUDE.local.md (Enhanced GitHub Flow)
+> **상태**: SPEC-V3-003 functionally complete — 3 milestones × 29 AC GREEN
+> **버전**: 0.0.x pre-release (v0.1.0 release/ 분기 candidate)
+> **브랜드**: MoAI Studio (확정)
 > **패키지 식별자**: `moai-studio`
-> **작성일**: 2026-04-11
+> **작성일**: 2026-04-11 (v2 baseline) → 2026-04-25 (v3 Pivot 반영)
 
 ---
 
-## 1. 한 줄 정의
+## 0. v3 Pivot Notice (2026-04-25)
+
+본 문서는 **v2 Swift/macOS 단독** 설계 기준으로 작성되었으며, **v3 Rust/GPUI 크로스플랫폼** 피벗이 단계적으로 반영되는 중이다. v3 정합 섹션은 §0.x 와 §0.y 로 별도 표시한다. v2 Swift 관련 SPEC (SPEC-M0/M1/M2) 은 모두 ARCHIVED 마킹 완료.
+
+### 0.1 v3 한 줄 정의
+
+**MoAI Studio v3** 는 **moai-adk (Agentic Development Kit) 의 크로스플랫폼 (macOS / Linux / Windows) Agentic Coding IDE** 다.
+
+moai-adk 는 Claude Code · Codex CLI 환경에서 동작하는 AI 하네스이며, MoAI Studio 는 그 위에 **터미널 · 마크다운/코드 뷰어 · 웹 브라우저 · 파일 탐색기 · git 관리 · SPEC 관리 · 에이전트 진행 상황** 통합 GUI 를 제공한다.
+
+### 0.2 v3 정체성
+
+| 항목 | v3 내용 |
+|---|---|
+| 카테고리 | 크로스플랫폼 GPU-가속 Agentic Coding IDE |
+| 본체 | [modu-ai/moai-adk](https://github.com/modu-ai/moai-adk) (Go CLI) |
+| 호스트 대상 | Claude Code CLI + Codex CLI + 향후 추가 agent harness |
+| 플랫폼 | **macOS 14+ + Ubuntu 22.04+ + Windows (GPUI GA 후 활성)** |
+| 언어 | Rust 1.93 (UI + Core) + Zig 0.15.2 (libghostty-vt FFI) |
+| UI 프레임워크 | GPUI 0.2.2 (Zed) |
+| 라이선스 | MIT |
+| 릴리스 모델 | Enhanced GitHub Flow (main / release/* / develop / feature/*) — CLAUDE.local.md §1 |
+
+### 0.3 v3 SPEC 진행 현황 (2026-04-25 기준)
+
+| SPEC | 범위 | 상태 |
+|------|------|------|
+| SPEC-V3-001 | GPUI 스캐폴드 + Rust core 통합 | ✅ Complete (develop 머지) |
+| SPEC-V3-002 | Terminal Core (libghostty-vt + PTY + Shell) | ✅ Complete (74 tests, 변경 금지 zone) |
+| SPEC-V3-003 | Pane + Tab + Persistence (3 MS × 29 AC) | ✅ Functionally complete (411 ws tests / 0 fail) |
+
+**남은 v0.1.0 release block**:
+- GitHub Actions billing 해소 후 ci-v3-pane.yml 첫 GREEN run
+- v0.1.0 release/ 분기 + tag
+
+### 0.4 v3 다음 단계 (SPEC backlog)
+
+비전 정합 우선순위 (사용자 결정 필요):
+
+| 후보 SPEC | 비전 정합 영역 | 우선도 추천 |
+|-----------|----------------|------------|
+| **SPEC-V3-004 Render Layer Integration** | TabContainer ↔ GPUI 실제 렌더 (AC-P-4 deferred 해소) | P1 — 사용자에게 보이는 첫 번째 escape hatch |
+| **SPEC-V3-005 File Explorer** | 파일 탐색기 (vision 핵심) | P1 — 비전 4대 surface 중 1 |
+| **SPEC-V3-006 Markdown/Code Viewer** | 마크다운 + 코드 뷰어 + syntax highlighting | P1 — 비전 4대 surface 중 2 |
+| **SPEC-V3-007 Embedded Web Browser** | WKWebView equivalent 크로스플랫폼 | P2 — 비전 4대 surface 중 3 |
+| **SPEC-V3-008 Git Management UI** | git status / diff / commit / branch UI | P1 — 비전 핵심 영역 |
+| **SPEC-V3-009 SPEC Management UI** | .moai/specs/ 시각화 + 상태 추적 | P1 — moai-adk 통합 핵심 |
+| **SPEC-V3-010 Agent Progress Dashboard** | hook event stream + cost + instructions graph | P1 — agentic 본질 영역 |
+| **SPEC-V3-011 Cross-platform Packaging** | dmg / deb / msi 자동 빌드 + 자동 업데이트 | P2 — release 도달 후 |
+
+---
+
+## 1. (v2 legacy) 한 줄 정의
 
 **MoAI Studio** 는 **moai-adk 의 공식 macOS 네이티브 Agent IDE** 다.
 Claude Code 를 subprocess 로 호스트하여 **27개 hook 이벤트 + 26 전문 에이전트 + TRUST 5 품질 게이트 + @MX 태그 시스템 + Kanban/SPEC 워크플로우** 를 한 화면에서 시각화 · 조작한다.
