@@ -1,9 +1,9 @@
 ---
 id: SPEC-V3-010
-version: 1.0.0
-status: draft
+version: 1.0.1
+status: implemented
 created_at: 2026-04-25
-updated_at: 2026-04-25
+updated_at: 2026-04-26
 author: MoAI (manager-spec)
 priority: High
 issue_number: 0
@@ -23,6 +23,7 @@ revision: v1.0.0 (initial draft, agentic essence 시각화 SPEC)
 | 버전 | 날짜 | 변경 |
 |------|------|------|
 | 1.0.0-draft | 2026-04-25 | 초안 작성. moai-studio 의 agentic essence 영역 정의. 데이터 소스 3 (stream-json + hook-http + supervisor) → UI 6 view (timeline + cost + instructions + control + detail + dashboard). RG-AD-1 ~ RG-AD-6, AC-AD-1 ~ AC-AD-12, MS-1/MS-2/MS-3, USER-DECISION 4 게이트 (A: 영속화 / B: cost source / C: control IPC / D: hook ingestion). SPEC-V3-004 선행, V3-009 병행 (AgentRunId 공유), V3-006 선택적 통합. terminal/panes/tabs core 무변경 (RG-P-7 carry from V3-002/003). |
+| 1.0.1-implemented | 2026-04-26 | MS-1 (#11), MS-2 (#35), MS-3 구현 완료. status draft → implemented. AC-AD-1~11 통과, AC-AD-12 (terminal/panes/tabs core git diff = 0) 검증 PASS. 도메인 14 + UI 23 = 37개 신규 테스트. follow-up 보류: REQ-AD-032 markdown 렌더 (V3-006 통합), USER-DECISION-AD-A2 SQLite 영속화, multi-agent dashboard. |
 
 ---
 
