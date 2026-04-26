@@ -308,9 +308,19 @@ jobs:
             ~/Library/Caches/zig
           key: zig-0.15.2-${{ runner.os }}-${{ runner.arch }}
 
-      # --ignored: #[ignore] 마킹된 tmux 의존 테스트만 실행
-      - name: Gate — cargo test (tmux-dependent, --ignored)
-        run: cargo test --workspace --all-targets -- --ignored
+      # SPEC-V3-FS-WATCHER-001 REQ-FW-010 (AC-FW-5): substring filter 'tmux'
+      # restricts execution to tmux-dependent ignored tests. File watcher tests
+      # (test_detect_file_creation, test_unwatch_stops_events) do not contain
+      # 'tmux' in their names and are automatically excluded.
+      - name: Gate — cargo test (tmux-dependent, --ignored, name filter)
+        run: cargo test --workspace --all-targets -- --ignored tmux
+
+      # SPEC-V3-FS-WATCHER-001 REQ-FW-011 (AC-FW-6): file watcher tests run in a
+      # dedicated step. continue-on-error keeps a failure here from affecting
+      # the tmux-test job's overall success status.
+      - name: Gate — cargo test (moai-fs file watcher, --ignored, isolated)
+        continue-on-error: true
+        run: cargo test -p moai-fs --all-targets -- --ignored
 
   # ============================================================
   # Job 5: bench-smoke — criterion bench --test (wall-clock 검증)

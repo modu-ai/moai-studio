@@ -157,78 +157,86 @@ mod tests {
         assert!(result.is_ok(), "감시 등록 실패: {:?}", result.err());
     }
 
-    /// 파일 생성 이벤트 감지 테스트
+    /// File creation event detection.
     ///
-    /// 파일 시스템 이벤트는 타이밍에 민감하여 CI에서 불안정할 수 있습니다.
+    /// SPEC-V3-FS-WATCHER-001 REQ-FW-001: A3 polling pattern with a 5-second
+    /// deterministic upper bound and 100 ms polling slice. The target file is
+    /// re-touched on every slice to mitigate notify watcher-init races.
     #[tokio::test]
     #[ignore]
     async fn test_detect_file_creation() {
-        // Arrange: 임시 디렉토리 생성 및 감시 등록
+        // Arrange: create a temporary directory and register the watcher.
         let dir = tempdir().expect("임시 디렉토리 생성 실패");
         let dir_path = dir.path().to_path_buf();
         let (mut watcher, mut rx) = FsWatcher::new().expect("감시자 생성 실패");
         watcher.watch(&dir_path).expect("감시 등록 실패");
 
-        // 감시자 초기화 대기
-        tokio::time::sleep(Duration::from_millis(200)).await;
-
-        // Act: 파일 생성
         let new_file = dir_path.join("test_file.txt");
-        fs::write(&new_file, "테스트 내용").expect("파일 쓰기 실패");
 
-        // Assert: 이벤트 수신 (1초 타임아웃)
-        let received = timeout(Duration::from_secs(1), async {
-            loop {
-                if let Some(event) = rx.recv().await {
-                    match event {
-                        FsEvent::Created(path) | FsEvent::Modified(path) => {
-                            if path == new_file {
-                                return true;
-                            }
-                        }
-                        _ => continue,
-                    }
-                } else {
-                    return false;
+        // Act + Assert: poll within a 5-second bound, re-touching the file each
+        // slice; succeed on the first matching Created/Modified event. Match by
+        // file name only — on macOS, tempdir() returns `/var/...` paths but
+        // notify reports the canonicalized `/private/var/...` form, so a strict
+        // path equality check would always fail.
+        let target_name = new_file.file_name().expect("file name").to_owned();
+        let deadline = Duration::from_secs(5);
+        let start = std::time::Instant::now();
+        let mut matched = false;
+        while start.elapsed() < deadline {
+            let _ = fs::write(&new_file, "테스트 내용");
+            match timeout(Duration::from_millis(100), rx.recv()).await {
+                Ok(Some(FsEvent::Created(p))) | Ok(Some(FsEvent::Modified(p)))
+                    if p.file_name() == Some(target_name.as_os_str()) =>
+                {
+                    matched = true;
+                    break;
                 }
+                Ok(Some(_)) => continue, // unrelated event
+                Ok(None) => break,       // channel closed
+                Err(_) => continue,      // slice timeout, re-touch on next loop
             }
-        })
-        .await;
-
-        assert!(
-            received.is_ok(),
-            "타임아웃: 파일 생성 이벤트를 받지 못했습니다"
-        );
-        assert!(received.unwrap(), "파일 생성 이벤트 경로 불일치");
+        }
+        assert!(matched, "5초 데드라인 내 파일 생성 이벤트 미수신");
     }
 
-    /// 감시 해제 후 이벤트 중지 테스트
+    /// Unwatch stops further events.
     ///
-    /// 파일 시스템 이벤트는 타이밍에 민감하여 CI에서 불안정할 수 있습니다.
+    /// SPEC-V3-FS-WATCHER-001 REQ-FW-002: settle stage uses A3 polling. We first
+    /// confirm the watcher is live by polling a probe-file event within a 5-second
+    /// bound, then unwatch and verify no event arrives within a 500 ms window.
     #[tokio::test]
     #[ignore]
     async fn test_unwatch_stops_events() {
-        // Arrange: 임시 디렉토리 생성 및 감시 등록
+        // Arrange: create a temporary directory and register the watcher.
         let dir = tempdir().expect("임시 디렉토리 생성 실패");
         let dir_path = dir.path().to_path_buf();
         let (mut watcher, mut rx) = FsWatcher::new().expect("감시자 생성 실패");
         watcher.watch(&dir_path).expect("감시 등록 실패");
 
-        // 감시자 초기화 대기
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        // Confirm the watcher is live via a probe write (5s deterministic bound).
+        let probe = dir_path.join("__probe__.txt");
+        let init_deadline = Duration::from_secs(5);
+        let init_start = std::time::Instant::now();
+        let mut watcher_ready = false;
+        while init_start.elapsed() < init_deadline {
+            let _ = fs::write(&probe, "probe");
+            if let Ok(Some(_)) = timeout(Duration::from_millis(100), rx.recv()).await {
+                watcher_ready = true;
+                break;
+            }
+        }
+        assert!(watcher_ready, "감시자가 5초 내에 준비되지 않음");
+        // Drain any pending probe-related events so the post-unwatch window is clean.
+        while timeout(Duration::from_millis(50), rx.recv()).await.is_ok() {}
+        let _ = fs::remove_file(&probe);
+        while timeout(Duration::from_millis(50), rx.recv()).await.is_ok() {}
 
-        // Act: 감시 해제
-        let result = watcher.unwatch(&dir_path);
-        assert!(result.is_ok(), "감시 해제 실패: {:?}", result.err());
+        // Act: stop watching.
+        watcher.unwatch(&dir_path).expect("감시 해제 실패");
 
-        // 해제 처리 대기
-        tokio::time::sleep(Duration::from_millis(100)).await;
-
-        // 파일 생성 (이벤트가 오지 않아야 함)
+        // Assert: after unwatch, a fresh write must NOT trigger any event in 500 ms.
         let new_file = dir_path.join("after_unwatch.txt");
         fs::write(&new_file, "해제 후 파일").expect("파일 쓰기 실패");
-
-        // Assert: 500ms 내에 이벤트가 없어야 함
         let received = timeout(Duration::from_millis(500), rx.recv()).await;
         assert!(
             received.is_err(),
