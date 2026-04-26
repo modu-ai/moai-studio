@@ -104,6 +104,11 @@ pub struct RootView {
     //   PaneTree<LeafKind> 로 교체하면 이 HashMap 은 제거되고 pane_tree.set_leaf_payload 로 직접 교체.
     /// SPEC-V3-006 MS-1: PaneId → LeafKind 매핑 (MS-2 에서 PaneTree<LeafKind> 교체 전 임시).
     pub leaf_payloads: HashMap<PaneId, LeafKind>,
+    // ── MS-3 (SPEC-V3-012 AC-PL-14/15): palette overlay slot ──
+    /// Palette overlay 상태 관리자 (mutual exclusion, RG-PL-24).
+    pub palette: palette::PaletteOverlay,
+    /// Terminal pane 포커스 상태 — SlashBar trigger 조건 (RG-PL-23).
+    pub terminal_focused: bool,
 }
 
 impl RootView {
@@ -121,6 +126,8 @@ impl RootView {
             file_explorer: None,
             agent_dashboard: None,
             leaf_payloads: HashMap::new(),
+            palette: palette::PaletteOverlay::new(),
+            terminal_focused: false,
         }
     }
 
@@ -169,6 +176,48 @@ impl RootView {
             Err(e) => error!("WorkspacesStore::load (touch 시) 실패: {e}"),
         }
         cx.notify();
+    }
+
+    // ── MS-3: palette 글로벌 키바인딩 (AC-PL-14/15) ──
+
+    /// Palette 글로벌 키 이벤트 처리 (AC-PL-14/15).
+    ///
+    /// - Cmd+P: CmdPalette toggle (열려있으면 닫고, 아니면 열기)
+    /// - Cmd+Shift+P: CommandPalette toggle (mutual exclusion)
+    /// - Esc: 열려있는 palette dismiss
+    /// - "/": terminal pane focused 상태에서만 SlashBar open
+    ///
+    /// 반환값: 이 핸들러가 키 이벤트를 소비했으면 true (caller 가 tab 키 dispatch 스킵).
+    pub fn handle_palette_key_event(&mut self, ev: &KeyDownEvent) -> bool {
+        let k = &ev.keystroke;
+        // macOS: Cmd = modifiers.platform, Linux/Win: Ctrl = modifiers.control.
+        // tabs/keys.rs 패턴과 일치.
+        let cmd = k.modifiers.platform;
+        let shift = k.modifiers.shift;
+        let key = k.key.as_str();
+
+        if cmd && !shift && key == "p" {
+            self.palette.toggle(palette::PaletteVariant::CmdPalette);
+            return true;
+        }
+        if cmd && shift && key == "p" {
+            self.palette.toggle(palette::PaletteVariant::CommandPalette);
+            return true;
+        }
+        if !cmd && !shift && key == "escape" && self.palette.is_visible() {
+            self.palette.dismiss();
+            return true;
+        }
+        if !cmd && !shift && key == "/" && self.terminal_focused && !self.palette.is_visible() {
+            self.palette.open(palette::PaletteVariant::SlashBar);
+            return true;
+        }
+        false
+    }
+
+    /// Palette overlay 렌더 여부 — active palette variant 가 있을 때 true.
+    pub fn has_palette_overlay(&self) -> bool {
+        self.palette.is_visible()
     }
 
     /// GPUI 키 이벤트를 탭 명령으로 변환하여 TabContainer 에 전달한다 (REQ-R-031).
@@ -384,17 +433,23 @@ impl Render for RootView {
         let tab_container = self.tab_container.clone();
         // SPEC-V3-004 T5: RootView 가 key 이벤트를 수신하여 tab command 로 dispatch.
         // REQ-R-031: keystroke_to_tab_key → dispatch_tab_key 순서로 변환.
+        // MS-3: palette overlay slot — active palette 가 있을 때 overlay 렌더.
+        let active_palette = self.palette.active_variant;
         div()
             .flex()
             .flex_col()
             .size_full()
             .bg(rgb(tok::BG_APP))
             .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _window, cx| {
-                this.handle_key_event(ev, cx);
+                // MS-3: palette 키 먼저 처리 — 소비되면 tab 키 dispatch 스킵.
+                if !this.handle_palette_key_event(ev) {
+                    this.handle_key_event(ev, cx);
+                }
             }))
             .child(title_bar(self.title_label()))
             .child(main_body(&self.workspaces, rows, new_ws_btn, tab_container))
             .child(status_bar())
+            .children(active_palette.map(|_v| render_palette_overlay()))
     }
 }
 
@@ -731,6 +786,38 @@ fn empty_state_tip() -> impl IntoElement {
 }
 
 // ============================================================
+// MS-3: Palette overlay — Scrim + variant placeholder
+// ============================================================
+
+/// Palette overlay 렌더 — Scrim 위에 variant placeholder 를 표시한다 (AC-PL-14/15).
+///
+/// MS-3 에서는 Scrim (반투명 backdrop) + 중앙 정렬 컨테이너 placeholder 를 렌더한다.
+/// 실제 CmdPalette/CommandPalette/SlashBar variant 컴포넌트는 follow-up 에서 연결.
+fn render_palette_overlay() -> impl IntoElement {
+    div()
+        .absolute()
+        .inset_0()
+        .bg(gpui::rgba(0x08_0c_0b_8c)) // rgba(8,12,11,0.55) — scrim dark
+        .flex()
+        .flex_col()
+        .items_center()
+        .pt(px(80.))
+        .child(
+            div()
+                .w(px(palette::PALETTE_WIDTH))
+                .bg(rgb(crate::design::tokens::neutral::N900))
+                .rounded_lg()
+                .p_3()
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(rgb(tok::FG_SECONDARY))
+                        .child("palette"),
+                ),
+        )
+}
+
+// ============================================================
 // 3) StatusBar — 28pt 하단
 // ============================================================
 
@@ -956,6 +1043,167 @@ mod tests {
             leaf_count, 0,
             "tab_container 없으면 early return, leaf_payloads 변경 없음"
         );
+    }
+
+    // ── MS-3 테스트: palette 글로벌 키바인딩 (AC-PL-14/15) ──
+
+    fn make_key_event(key: &str, command: bool, shift: bool) -> KeyDownEvent {
+        // macOS: Cmd = platform modifier. tabs/keys.rs 패턴 참조.
+        KeyDownEvent {
+            keystroke: gpui::Keystroke {
+                modifiers: gpui::Modifiers {
+                    platform: command,
+                    shift,
+                    ..Default::default()
+                },
+                key: key.to_string(),
+                key_char: None,
+            },
+            is_held: false,
+        }
+    }
+
+    /// AC-PL-14: Cmd+P → CmdPalette 열림.
+    #[test]
+    fn cmd_p_opens_cmd_palette() {
+        let mut view = RootView::new(vec![], dummy_path());
+        assert!(view.palette.active_variant.is_none());
+        let ev = make_key_event("p", true, false);
+        let consumed = view.handle_palette_key_event(&ev);
+        assert!(consumed, "Cmd+P 는 소비되어야 함");
+        assert_eq!(
+            view.palette.active_variant,
+            Some(palette::PaletteVariant::CmdPalette)
+        );
+    }
+
+    /// AC-PL-14 (toggle): Cmd+P 두 번 → CmdPalette 닫힘 (VS Code toggle semantics).
+    #[test]
+    fn cmd_p_toggles_dismisses_cmd_palette() {
+        let mut view = RootView::new(vec![], dummy_path());
+        let ev = make_key_event("p", true, false);
+        view.handle_palette_key_event(&ev); // open
+        view.handle_palette_key_event(&ev); // toggle → close
+        assert!(
+            view.palette.active_variant.is_none(),
+            "두 번째 Cmd+P 는 CmdPalette 를 닫아야 함"
+        );
+    }
+
+    /// AC-PL-15 (mutual exclusion): CmdPalette 열린 상태에서 Cmd+Shift+P → CommandPalette 로 교체.
+    #[test]
+    fn cmd_shift_p_replaces_cmd_palette() {
+        let mut view = RootView::new(vec![], dummy_path());
+        let cmd_p = make_key_event("p", true, false);
+        let cmd_shift_p = make_key_event("p", true, true);
+        view.handle_palette_key_event(&cmd_p); // open CmdPalette
+        assert_eq!(
+            view.palette.active_variant,
+            Some(palette::PaletteVariant::CmdPalette)
+        );
+        let consumed = view.handle_palette_key_event(&cmd_shift_p); // switch to CommandPalette
+        assert!(consumed, "Cmd+Shift+P 는 소비되어야 함");
+        assert_eq!(
+            view.palette.active_variant,
+            Some(palette::PaletteVariant::CommandPalette),
+            "Cmd+Shift+P 후 CommandPalette 가 활성이어야 함"
+        );
+        assert_ne!(
+            view.palette.active_variant,
+            Some(palette::PaletteVariant::CmdPalette),
+            "CmdPalette 는 닫혀있어야 함"
+        );
+    }
+
+    /// Cmd+Shift+P → CommandPalette 열림 (초기 상태).
+    #[test]
+    fn cmd_shift_p_opens_command_palette() {
+        let mut view = RootView::new(vec![], dummy_path());
+        let ev = make_key_event("p", true, true);
+        let consumed = view.handle_palette_key_event(&ev);
+        assert!(consumed);
+        assert_eq!(
+            view.palette.active_variant,
+            Some(palette::PaletteVariant::CommandPalette)
+        );
+    }
+
+    /// Esc → 열려있는 palette dismiss.
+    #[test]
+    fn esc_dismisses_active_palette() {
+        let mut view = RootView::new(vec![], dummy_path());
+        view.palette.open(palette::PaletteVariant::CmdPalette);
+        let esc = make_key_event("escape", false, false);
+        let consumed = view.handle_palette_key_event(&esc);
+        assert!(consumed, "Esc 는 소비되어야 함 (palette 열려있을 때)");
+        assert!(
+            view.palette.active_variant.is_none(),
+            "Esc 후 palette 는 닫혀있어야 함"
+        );
+    }
+
+    /// Esc — palette 닫혀있으면 소비하지 않음.
+    #[test]
+    fn esc_no_op_when_palette_closed() {
+        let mut view = RootView::new(vec![], dummy_path());
+        let esc = make_key_event("escape", false, false);
+        let consumed = view.handle_palette_key_event(&esc);
+        assert!(!consumed, "palette 닫혀있을 때 Esc 는 소비하지 않아야 함");
+    }
+
+    /// "/" + terminal_focused=true → SlashBar 열림.
+    #[test]
+    fn slash_with_terminal_focused_opens_slash_bar() {
+        let mut view = RootView::new(vec![], dummy_path());
+        view.terminal_focused = true;
+        let slash = make_key_event("/", false, false);
+        let consumed = view.handle_palette_key_event(&slash);
+        assert!(consumed, "/ + terminal focused 는 소비되어야 함");
+        assert_eq!(
+            view.palette.active_variant,
+            Some(palette::PaletteVariant::SlashBar)
+        );
+    }
+
+    /// "/" + terminal_focused=false → no-op.
+    #[test]
+    fn slash_without_terminal_focus_is_noop() {
+        let mut view = RootView::new(vec![], dummy_path());
+        view.terminal_focused = false;
+        let slash = make_key_event("/", false, false);
+        let consumed = view.handle_palette_key_event(&slash);
+        assert!(!consumed, "terminal focus 없이 / 는 소비하지 않아야 함");
+        assert!(
+            view.palette.active_variant.is_none(),
+            "SlashBar 는 열리지 않아야 함"
+        );
+    }
+
+    /// "/" + palette 이미 열려있으면 SlashBar 열지 않음 (RG-PL-23: no palette visible).
+    #[test]
+    fn slash_no_op_when_palette_already_visible() {
+        let mut view = RootView::new(vec![], dummy_path());
+        view.terminal_focused = true;
+        view.palette.open(palette::PaletteVariant::CmdPalette);
+        let slash = make_key_event("/", false, false);
+        let consumed = view.handle_palette_key_event(&slash);
+        assert!(!consumed, "palette 열려있으면 / 는 소비하지 않아야 함");
+        assert_eq!(
+            view.palette.active_variant,
+            Some(palette::PaletteVariant::CmdPalette),
+            "기존 palette 는 유지되어야 함"
+        );
+    }
+
+    /// has_palette_overlay — active palette 있을 때 true.
+    #[test]
+    fn has_palette_overlay_returns_true_when_active() {
+        let mut view = RootView::new(vec![], dummy_path());
+        assert!(!view.has_palette_overlay());
+        view.palette.open(palette::PaletteVariant::CmdPalette);
+        assert!(view.has_palette_overlay());
+        view.palette.dismiss();
+        assert!(!view.has_palette_overlay());
     }
 
     #[test]
