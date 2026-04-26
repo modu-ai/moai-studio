@@ -9,8 +9,10 @@
 
 pub mod code;
 // SPEC-V3-006 MS-3a: Find/Replace (CodeViewer + MarkdownViewer 공통)
+// SPEC-V3-006 MS-3b: SearchMode::Regex 추가
 pub mod find_replace;
 // SPEC-V3-006 MS-3a: LSP Hover tooltip (mock diagnostic provider)
+// SPEC-V3-006 MS-3b: LSP spawn graceful degradation (AC-MV-5)
 pub mod lsp;
 pub mod markdown;
 // SPEC-V3-006 MS-3a: @MX gutter 아이콘 + popover (mock scanner)

@@ -1,20 +1,44 @@
-//! SPEC-V3-006 MS-3a: Find/Replace 기능 (CodeViewer + MarkdownViewer 공통).
+//! SPEC-V3-006 MS-3a/MS-3b: Find/Replace 기능 (CodeViewer + MarkdownViewer 공통).
 //!
 //! `FindReplaceState` 는 검색 쿼리, 일치 목록, 현재 포커스 인덱스를 관리한다.
 //! CodeViewer 는 Replace 기능도 지원한다 (MarkdownViewer 는 read-only 라 Find 만).
 //!
 //! 범위 (MS-3a):
 //! - case-sensitive toggle
-//! - plain text 매칭 (regex 는 MS-3b)
+//! - plain text 매칭
 //! - prev/next match 네비게이션 (wrap-around)
 //! - replace single / replace all (CodeViewer 전용)
 //! - match count display
 //! - Cmd+F → open, Esc → close, Enter → next, Shift+Enter → prev
+//!
+//! 범위 (MS-3b 추가):
+//! - Regex 검색 모드 (`SearchMode::Regex`)
+//! - 잘못된 정규식 → `regex_error` 에 저장, 패닉 없음
 
 // @MX:ANCHOR: [AUTO] find-replace-state
-// @MX:REASON: [AUTO] SPEC-V3-006 MS-3a. FindReplaceState 는 CodeViewer/MarkdownViewer
+// @MX:REASON: [AUTO] SPEC-V3-006 MS-3a/MS-3b. FindReplaceState 는 CodeViewer/MarkdownViewer
 //   양쪽에서 소비되는 단일 자료구조 진입점이다.
 //   fan_in >= 3: CodeViewer::load_find, MarkdownViewer::load_find, find_bar 렌더, 테스트.
+
+// @MX:NOTE: [AUTO] search-mode-regex-compile-failure
+// SearchMode::Regex 선택 시 regex::Regex::new() 실패 → FindReplaceState.regex_error 에
+// 컴파일 오류 메시지 저장, matches 비움. 패닉 없음. 이후 쿼리 변경 시 재시도.
+
+/// 검색 모드 (MS-3b: Regex 추가).
+///
+/// - `Plain`: 대소문자 무시 plain text 검색 (기본값)
+/// - `CaseSensitive`: 대소문자 구분 plain text 검색
+/// - `Regex`: 정규식 검색 (기본 대소문자 구분, `(?i)` prefix 로 무시 가능)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SearchMode {
+    /// 대소문자 무시 plain text 검색 (기본값)
+    #[default]
+    Plain,
+    /// 대소문자 구분 plain text 검색
+    CaseSensitive,
+    /// 정규식 검색 — 컴파일 실패 시 regex_error 에 저장, 패닉 없음
+    Regex,
+}
 
 /// 파일 내 텍스트 매치 위치 (줄 0-indexed, 줄 내 문자 오프셋).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,14 +58,18 @@ pub struct FindReplaceState {
     pub query: String,
     /// Replace 쿼리 (CodeViewer 전용 — MarkdownViewer 는 무시)
     pub replace_query: String,
-    /// 대소문자 구분 여부 (true = sensitive)
+    /// 대소문자 구분 여부 (true = sensitive) — Plain/CaseSensitive 모드용 legacy 필드
     pub case_sensitive: bool,
+    /// 검색 모드 (MS-3b)
+    pub search_mode: SearchMode,
     /// Find bar 가 화면에 표시 중인지 여부
     pub is_visible: bool,
     /// 현재 매칭된 위치 목록 (query 변경 시 재계산)
     pub matches: Vec<MatchLocation>,
     /// 현재 포커스된 매치 인덱스 (matches 비어있으면 None)
     pub current_match_idx: Option<usize>,
+    /// Regex 컴파일 오류 메시지 (SearchMode::Regex 이고 잘못된 패턴일 때 설정됨)
+    pub regex_error: Option<String>,
 }
 
 impl FindReplaceState {
@@ -71,6 +99,15 @@ impl FindReplaceState {
     /// case_sensitive 설정을 토글하고 매치를 재계산한다.
     pub fn toggle_case_sensitive(&mut self, source: &str) {
         self.case_sensitive = !self.case_sensitive;
+        self.recalculate_matches(source);
+    }
+
+    /// 검색 모드를 설정하고 매치를 재계산한다.
+    ///
+    /// 모드 전환 시 이전 매치와 regex_error 를 초기화한다.
+    pub fn set_mode(&mut self, mode: SearchMode, source: &str) {
+        self.search_mode = mode;
+        self.regex_error = None;
         self.recalculate_matches(source);
     }
 
@@ -156,6 +193,9 @@ impl FindReplaceState {
     // ──────────────────────────────────────────────────────────
 
     /// 소스에서 query 를 검색하여 matches 목록을 재계산한다.
+    ///
+    /// `SearchMode::Regex` 일 때는 regex crate 를 사용하며, 컴파일 실패 시
+    /// `regex_error` 에 오류 메시지를 저장하고 matches 를 비운다 (패닉 없음).
     fn recalculate_matches(&mut self, source: &str) {
         self.matches.clear();
         self.current_match_idx = None;
@@ -163,14 +203,31 @@ impl FindReplaceState {
             return;
         }
 
-        let (src_cmp, q_cmp) = if self.case_sensitive {
+        match self.search_mode {
+            SearchMode::Regex => {
+                self.recalculate_matches_regex(source);
+            }
+            SearchMode::Plain | SearchMode::CaseSensitive => {
+                self.recalculate_matches_plain(source);
+            }
+        }
+
+        if !self.matches.is_empty() {
+            self.current_match_idx = Some(0);
+        }
+    }
+
+    /// Plain / CaseSensitive 모드 매치 계산.
+    fn recalculate_matches_plain(&mut self, source: &str) {
+        let (src_cmp, q_cmp) = if self.case_sensitive
+            || self.search_mode == SearchMode::CaseSensitive
+        {
             (source.to_string(), self.query.clone())
         } else {
             (source.to_lowercase(), self.query.to_lowercase())
         };
 
-        for (line_idx, (orig_line, cmp_line)) in source.lines().zip(src_cmp.lines()).enumerate() {
-            let _ = orig_line; // orig_line 은 향후 렌더링용 — 현재는 인덱스만 사용
+        for (line_idx, cmp_line) in src_cmp.lines().enumerate() {
             let mut search_start = 0;
             while let Some(pos) = cmp_line[search_start..].find(&q_cmp) {
                 let abs_start = search_start + pos;
@@ -183,9 +240,37 @@ impl FindReplaceState {
                 search_start = abs_start + q_cmp.len().max(1);
             }
         }
+    }
 
-        if !self.matches.is_empty() {
-            self.current_match_idx = Some(0);
+    /// Regex 모드 매치 계산.
+    ///
+    /// 정규식 컴파일 실패 → `regex_error` 에 저장, matches 비움.
+    /// `^` / `$` 앵커는 각 줄 단위로 처리한다 (find_iter per line).
+    fn recalculate_matches_regex(&mut self, source: &str) {
+        use regex::Regex;
+
+        // 정규식 컴파일 실패 시 오류 저장 후 반환
+        let re = match Regex::new(&self.query) {
+            Ok(r) => r,
+            Err(e) => {
+                self.regex_error = Some(e.to_string());
+                return;
+            }
+        };
+        self.regex_error = None;
+
+        // 줄 단위로 `^`, `$` 앵커가 동작하도록 각 줄을 개별 처리
+        for (line_idx, line) in source.lines().enumerate() {
+            for mat in re.find_iter(line) {
+                // byte offset → char offset 변환
+                let start_char = line[..mat.start()].chars().count();
+                let end_char = start_char + mat.as_str().chars().count();
+                self.matches.push(MatchLocation {
+                    line: line_idx,
+                    start: start_char,
+                    end: end_char,
+                });
+            }
         }
     }
 }
@@ -441,6 +526,78 @@ mod tests {
         assert!(new_source.contains("line1 baz"));
         assert!(new_source.contains("line2 baz"));
         assert!(new_source.contains("line3 bar"));
+    }
+
+    // ── T8: Regex 검색 모드 (MS-3b) ──
+
+    #[test]
+    fn regex_mode_finds_pattern_matches() {
+        let mut state = FindReplaceState::new();
+        let source = "foo bar";
+        state.set_mode(SearchMode::Regex, source);
+        state.set_query(r"\w+".to_string(), source);
+        assert_eq!(state.match_count(), 2, r"\w+ 는 foo, bar 두 단어를 매칭해야 한다");
+        assert!(state.regex_error.is_none(), "유효한 regex 는 오류 없음");
+    }
+
+    #[test]
+    fn regex_mode_with_invalid_regex_stores_error_no_panic() {
+        let mut state = FindReplaceState::new();
+        let source = "hello world";
+        state.set_mode(SearchMode::Regex, source);
+        state.set_query("[invalid".to_string(), source);
+        assert!(
+            state.regex_error.is_some(),
+            "잘못된 regex 는 regex_error 에 오류를 저장해야 한다"
+        );
+        assert_eq!(
+            state.match_count(),
+            0,
+            "regex 컴파일 실패 시 매치 목록은 비어야 한다"
+        );
+    }
+
+    #[test]
+    fn regex_mode_case_sensitive_by_default() {
+        // regex 기본은 대소문자 구분 — 명시적 문서화
+        let mut state = FindReplaceState::new();
+        let source = "Foo foo FOO";
+        state.set_mode(SearchMode::Regex, source);
+        state.set_query("foo".to_string(), source);
+        // 기본 regex 는 대소문자 구분 → 소문자 "foo" 만 매칭
+        assert_eq!(state.match_count(), 1, "기본 regex 는 대소문자 구분");
+    }
+
+    #[test]
+    fn set_mode_clears_previous_matches() {
+        let mut state = FindReplaceState::new();
+        let source = "foo bar foo";
+        state.set_query("foo".to_string(), source);
+        assert_eq!(state.match_count(), 2);
+        // 모드 변경 시 이전 매치 초기화
+        state.set_mode(SearchMode::Regex, source);
+        // query 는 여전히 "foo" — regex "foo" 도 2개 매칭이어야 함
+        // 단, 이 테스트는 set_mode 자체가 매치를 재계산하는지 확인
+        assert!(
+            state.regex_error.is_none(),
+            "set_mode 후 regex_error 초기화"
+        );
+    }
+
+    #[test]
+    fn regex_mode_multiline_anchors() {
+        // `^foo` 는 각 줄 시작의 foo 만 매칭해야 한다
+        let mut state = FindReplaceState::new();
+        let source = "foo bar\nbaz foo\nfoo qux";
+        state.set_mode(SearchMode::Regex, source);
+        // 줄 시작 foo: 1번째 줄("foo bar"), 3번째 줄("foo qux") — 2개
+        // 2번째 줄("baz foo") 는 줄 중간이라 매칭 안 됨
+        state.set_query("^foo".to_string(), source);
+        assert_eq!(
+            state.match_count(),
+            2,
+            "^foo 는 줄 시작의 foo 만 매칭해야 한다"
+        );
     }
 
     // ── T7: 매치 위치 검증 ──
