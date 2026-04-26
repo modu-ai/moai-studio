@@ -74,28 +74,26 @@ pub fn parse_ears_tables(text: &str) -> Vec<RequirementGroup> {
                 heading_level = Some(level);
                 heading_text.clear();
             }
-            Event::End(TagEnd::Heading(_)) => {
-                if in_heading {
-                    let ht = heading_text.trim().to_string();
-                    // `### RG-{id}` 또는 `### RG-{id} — {title}` 인식
-                    if matches!(heading_level, Some(HeadingLevel::H3))
-                        && ht.to_uppercase().contains("RG-")
-                    {
-                        // 이전 그룹 완료
-                        if let Some((id, title)) = current_rg.take() {
-                            groups.push(RequirementGroup {
-                                id,
-                                title,
-                                requirements: std::mem::take(&mut current_reqs),
-                            });
-                        }
-                        // 새 그룹 시작
-                        let (rg_id, rg_title) = extract_rg_id_title(&ht);
-                        current_rg = Some((rg_id, rg_title));
+            Event::End(TagEnd::Heading(_)) if in_heading => {
+                let ht = heading_text.trim().to_string();
+                // `### RG-{id}` or `### RG-{id} — {title}` recognition.
+                if matches!(heading_level, Some(HeadingLevel::H3))
+                    && ht.to_uppercase().contains("RG-")
+                {
+                    // Close out the previous group if one is open.
+                    if let Some((id, title)) = current_rg.take() {
+                        groups.push(RequirementGroup {
+                            id,
+                            title,
+                            requirements: std::mem::take(&mut current_reqs),
+                        });
                     }
-                    in_heading = false;
-                    heading_level = None;
+                    // Start a new group.
+                    let (rg_id, rg_title) = extract_rg_id_title(&ht);
+                    current_rg = Some((rg_id, rg_title));
                 }
+                in_heading = false;
+                heading_level = None;
             }
 
             // ── Table ──
@@ -118,63 +116,59 @@ pub fn parse_ears_tables(text: &str) -> Vec<RequirementGroup> {
             }
             Event::End(TagEnd::TableHead) => {
                 in_table_head = false;
-                if in_table && current_rg.is_some() {
-                    // header 분석: 첫 셀이 "REQ ID" 혹은 "REQ" 로 시작하면 요구사항 표
-                    let first_cell = header_cells
-                        .first()
-                        .map(|s| s.to_uppercase())
-                        .unwrap_or_default();
-                    if first_cell.starts_with("REQ") {
-                        is_req_table = true;
-                        req_col = header_cells
-                            .iter()
-                            .position(|h| h.to_uppercase().starts_with("REQ"));
-                        pattern_col = header_cells.iter().position(|h| {
-                            h.to_uppercase().contains("패턴") || h.to_uppercase() == "PATTERN"
-                        });
-                        korean_col = header_cells.iter().position(|h| {
-                            let u = h.to_uppercase();
-                            u.contains("한국어") || u.contains("요구사항") || u.contains("KOREAN")
-                        });
-                        english_col = header_cells.iter().position(|h| {
-                            let u = h.to_uppercase();
-                            u.contains("영문") || u.contains("ENGLISH")
-                        });
+                // Header analysis: when first cell starts with "REQ" treat as a requirement table.
+                let first_cell = header_cells
+                    .first()
+                    .map(|s| s.to_uppercase())
+                    .unwrap_or_default();
+                if in_table && current_rg.is_some() && first_cell.starts_with("REQ") {
+                    is_req_table = true;
+                    req_col = header_cells
+                        .iter()
+                        .position(|h| h.to_uppercase().starts_with("REQ"));
+                    pattern_col = header_cells.iter().position(|h| {
+                        h.to_uppercase().contains("패턴") || h.to_uppercase() == "PATTERN"
+                    });
+                    korean_col = header_cells.iter().position(|h| {
+                        let u = h.to_uppercase();
+                        u.contains("한국어") || u.contains("요구사항") || u.contains("KOREAN")
+                    });
+                    english_col = header_cells.iter().position(|h| {
+                        let u = h.to_uppercase();
+                        u.contains("영문") || u.contains("ENGLISH")
+                    });
+                }
+            }
+            Event::Start(Tag::TableRow) if !in_table_head => {
+                current_row.clear();
+                current_cell.clear();
+            }
+            Event::End(TagEnd::TableRow) if !in_table_head && is_req_table => {
+                let row = &current_row;
+                let get = |idx: Option<usize>| -> Option<&str> {
+                    idx.and_then(|i| row.get(i)).map(|s| s.trim())
+                };
+                match get(req_col) {
+                    Some(id) if !id.is_empty() && id.starts_with("REQ") => {
+                        let req = Requirement {
+                            id: id.to_string(),
+                            pattern: get(pattern_col).map(|s| s.to_string()).unwrap_or_default(),
+                            korean: get(korean_col).map(|s| s.to_string()).unwrap_or_default(),
+                            english: get(english_col).map(|s| s.to_string()),
+                        };
+                        current_reqs.push(req);
                     }
-                }
-            }
-            Event::Start(Tag::TableRow) => {
-                if !in_table_head {
-                    current_row.clear();
-                    current_cell.clear();
-                }
-            }
-            Event::End(TagEnd::TableRow) => {
-                if !in_table_head && is_req_table {
-                    let row = &current_row;
-                    let get = |idx: Option<usize>| -> Option<&str> {
-                        idx.and_then(|i| row.get(i)).map(|s| s.trim())
-                    };
-                    if let Some(id) = get(req_col) {
-                        if !id.is_empty() && id.starts_with("REQ") {
-                            let req = Requirement {
-                                id: id.to_string(),
-                                pattern: get(pattern_col)
-                                    .map(|s| s.to_string())
-                                    .unwrap_or_default(),
-                                korean: get(korean_col).map(|s| s.to_string()).unwrap_or_default(),
-                                english: get(english_col).map(|s| s.to_string()),
-                            };
-                            current_reqs.push(req);
-                        }
-                    } else {
+                    Some(_) => {
+                        // ID column present but cell does not look like a REQ ID — skip silently.
+                    }
+                    None => {
                         warn!(
-                            "EARS 표 행 파싱 실패 (graceful skip): cells={:?}",
+                            "EARS row parse failed (graceful skip): cells={:?}",
                             current_row
                         );
                     }
-                    current_row.clear();
                 }
+                current_row.clear();
             }
             Event::Start(Tag::TableCell) => {
                 current_cell.clear();
@@ -198,10 +192,8 @@ pub fn parse_ears_tables(text: &str) -> Vec<RequirementGroup> {
                     current_cell.push_str(&t);
                 }
             }
-            Event::SoftBreak | Event::HardBreak => {
-                if in_table {
-                    current_cell.push(' ');
-                }
+            Event::SoftBreak | Event::HardBreak if in_table => {
+                current_cell.push(' ');
             }
             _ => {}
         }
