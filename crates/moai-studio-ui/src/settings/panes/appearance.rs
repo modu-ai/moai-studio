@@ -31,6 +31,18 @@ impl AppearancePane {
         Self { state }
     }
 
+    // ---- section 메타데이터 ----
+
+    /// section 타이틀.
+    pub fn title() -> &'static str {
+        "Appearance"
+    }
+
+    /// section 설명.
+    pub fn description() -> &'static str {
+        "테마, 밀도, 액센트 색상, 폰트 크기를 설정합니다."
+    }
+
     // ---- theme control ----
 
     /// theme RadioGroup 선택을 반영한다 (AC-V13-4 in-memory).
