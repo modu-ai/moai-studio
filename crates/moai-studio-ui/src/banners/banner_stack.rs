@@ -6,8 +6,12 @@
 //!   fan_in >= 3: MS-3 helper API (push_crash/update/lsp/pty/workspace), RootView::render, tick loop.
 
 use std::collections::HashSet;
-use std::time::Instant;
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
+use gpui::Context;
+
+use super::variants::{CrashBanner, LspBanner, PtyBanner, UpdateBanner, WorkspaceBanner};
 use super::{BannerData, BannerId, Severity, should_dismiss};
 
 /// 최대 동시 배너 수 (REQ-V14-011).
@@ -199,6 +203,66 @@ impl BannerStack {
 impl Default for BannerStack {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// ============================================================
+// Mock helper API — REQ-V14-028 (5 push_* public helpers)
+// ============================================================
+
+impl BannerStack {
+    /// Agent crash 배너 push (REQ-V14-028).
+    ///
+    /// @MX:ANCHOR: [AUTO] banner-stack-push-crash
+    /// @MX:REASON: [AUTO] REQ-V14-028. CrashBanner(Critical) 를 스택에 push 하는 mock helper.
+    ///   fan_in >= 3: RootView::push_crash (MS-3), 통합 테스트, 모의 crash 시나리오.
+    pub fn push_crash(&mut self, log_path: PathBuf, last_alive: Duration, cx: &mut Context<Self>) {
+        let data = CrashBanner::build(log_path, last_alive);
+        if self.push(data) {
+            cx.notify();
+        }
+    }
+
+    /// 업데이트 가용 배너 push (REQ-V14-028).
+    pub fn push_update(
+        &mut self,
+        version: impl Into<String>,
+        size: impl Into<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let data = UpdateBanner::build(version, size);
+        if self.push(data) {
+            cx.notify();
+        }
+    }
+
+    /// LSP 서버 시작 실패 배너 push (REQ-V14-028).
+    pub fn push_lsp(
+        &mut self,
+        server: impl Into<String>,
+        error: impl Into<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let data = LspBanner::build(server, error);
+        if self.push(data) {
+            cx.notify();
+        }
+    }
+
+    /// 터미널 spawn 실패 배너 push (REQ-V14-028).
+    pub fn push_pty(&mut self, error_code: i32, cwd: PathBuf, cx: &mut Context<Self>) {
+        let data = PtyBanner::build(error_code, cwd);
+        if self.push(data) {
+            cx.notify();
+        }
+    }
+
+    /// Workspace 상태 손상 배너 push (REQ-V14-028).
+    pub fn push_workspace(&mut self, bak_path: Option<PathBuf>, cx: &mut Context<Self>) {
+        let data = WorkspaceBanner::build(bak_path);
+        if self.push(data) {
+            cx.notify();
+        }
     }
 }
 

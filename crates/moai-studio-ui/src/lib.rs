@@ -126,6 +126,12 @@ pub struct RootView {
     // ── SPEC-V3-006 MS-3a: Find/Replace 상태 ──
     /// Find bar 표시 여부 (Cmd+F → true, Esc → false).
     pub find_bar_open: bool,
+    // ── SPEC-V3-014 MS-3: BannerStack overlay slot ──
+    // @MX:ANCHOR: [AUTO] root-view-banner-stack-slot
+    // @MX:REASON: [AUTO] SPEC-V3-014 MS-3. banner_stack 은 top-of-window 알림 스택의 유일한 소유자.
+    //   fan_in >= 3: RootView::render (mount), push_crash/update/lsp/pty/workspace helpers, tick loop.
+    /// SPEC-V3-014 MS-3: BannerStack Entity. None = 미초기화 (테스트 호환), Some = 활성 (REQ-V14-026).
+    pub banner_stack: Option<Entity<banners::BannerStack>>,
 }
 
 impl RootView {
@@ -153,6 +159,7 @@ impl RootView {
             user_settings,
             active_theme,
             find_bar_open: false,
+            banner_stack: None,
         }
     }
 
@@ -564,6 +571,24 @@ impl Render for RootView {
         // SPEC-V3-013 MS-3: settings overlay slot — settings_modal 이 Some 이면 overlay 렌더.
         let active_palette = self.palette.active_variant;
         let has_settings = self.settings_modal.is_some();
+        // SPEC-V3-014 MS-3: banner_stack — entries 를 읽어 Entity<BannerView> 목록 생성.
+        // 두 단계로 분리: (1) 불변 참조로 data 복사, (2) 가변 참조로 entity 생성.
+        let banner_view_data: Vec<banners::banner_view::BannerView> = self
+            .banner_stack
+            .as_ref()
+            .map(|entity| {
+                entity
+                    .read(cx)
+                    .entries()
+                    .iter()
+                    .map(|e| banners::banner_view::BannerView::from_data(&e.data))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let banner_view_entities: Vec<Entity<banners::banner_view::BannerView>> = banner_view_data
+            .into_iter()
+            .map(|v| cx.new(|_| v))
+            .collect();
         div()
             .flex()
             .flex_col()
@@ -587,6 +612,8 @@ impl Render for RootView {
                 this.handle_key_event(ev, cx);
             }))
             .child(title_bar(self.title_label()))
+            // SPEC-V3-014 REQ-V14-027: banner_stack — TabContainer 위, 정상 flow (overlay 아님).
+            .child(render_banner_strip(banner_view_entities))
             .child(main_body(&self.workspaces, rows, new_ws_btn, tab_container))
             .child(status_bar())
             .children(active_palette.map(|_v| render_palette_overlay()))
@@ -611,6 +638,24 @@ fn new_workspace_button() -> gpui::Stateful<gpui::Div> {
         .hover(|s| s.bg(rgb(tok::BG_ELEVATED)))
         .cursor_pointer()
         .child("+ New Workspace")
+}
+
+// ============================================================
+// 0) BannerStrip — SPEC-V3-014 REQ-V14-027
+// ============================================================
+
+/// BannerStack 의 배너 Entity 목록을 v_flex 로 렌더 (REQ-V14-027).
+///
+/// 배너가 없으면 빈 div (높이 0) 반환.
+/// TabContainer 위, TitleBar 아래 위치 (normal flow, not overlay).
+fn render_banner_strip(
+    banner_entities: Vec<Entity<banners::banner_view::BannerView>>,
+) -> impl IntoElement {
+    let mut strip = div().flex().flex_col().w_full();
+    for entity in banner_entities {
+        strip = strip.child(entity);
+    }
+    strip
 }
 
 // ============================================================
@@ -1081,7 +1126,12 @@ pub fn run_app(workspaces: Vec<Workspace>, storage_path: PathBuf) {
         let ws = workspaces.clone();
         let path = storage_path.clone();
         cx.open_window(options, move |_window, cx| {
-            cx.new(|_cx| RootView::new(ws, path))
+            cx.new(|cx| {
+                let mut rv = RootView::new(ws, path);
+                // SPEC-V3-014 REQ-V14-026: banner_stack 초기화 (empty BannerStack).
+                rv.banner_stack = Some(cx.new(|_| banners::BannerStack::new()));
+                rv
+            })
         })
         .expect("GPUI 윈도우 생성 실패");
 
@@ -1620,5 +1670,113 @@ mod tests {
             !consumed,
             "find bar 닫혀있을 때 Esc 는 소비하지 않아야 한다"
         );
+    }
+
+    // ── SPEC-V3-014 MS-3: RootView + BannerStack 통합 테스트 (AC-V14-11, AC-V14-12) ──
+
+    /// AC-V14-11: RootView::new 초기 상태 — banner_stack = None (cx 없이 생성).
+    #[test]
+    fn rootview_banner_stack_none_when_created_without_cx() {
+        let view = RootView::new(vec![], dummy_path());
+        // cx 없이 생성되면 banner_stack = None (테스트 호환 초기값)
+        assert!(
+            view.banner_stack.is_none(),
+            "cx 없이 생성 시 banner_stack = None (정상)"
+        );
+    }
+
+    /// AC-V14-11: GPUI cx 로 생성 시 banner_stack 이 Some 으로 초기화됨.
+    #[test]
+    fn rootview_banner_stack_initialized_with_cx() {
+        use gpui::TestAppContext;
+
+        let mut cx = TestAppContext::single();
+        let root_entity = cx.new(|cx| {
+            let mut rv = RootView::new(vec![], dummy_path());
+            rv.banner_stack = Some(cx.new(|_| banners::BannerStack::new()));
+            rv
+        });
+        let has_stack = cx.read(|app| root_entity.read(app).banner_stack.is_some());
+        assert!(
+            has_stack,
+            "cx 로 생성 시 banner_stack 은 Some 이어야 함 (AC-V14-11)"
+        );
+    }
+
+    /// AC-V14-11: 초기 banner_stack Entity 는 empty (len == 0).
+    #[test]
+    fn rootview_banner_stack_empty_on_init() {
+        use gpui::TestAppContext;
+
+        let mut cx = TestAppContext::single();
+        let root_entity = cx.new(|cx| {
+            let mut rv = RootView::new(vec![], dummy_path());
+            rv.banner_stack = Some(cx.new(|_| banners::BannerStack::new()));
+            rv
+        });
+        let len = cx.read(|app| {
+            let view = root_entity.read(app);
+            view.banner_stack.as_ref().unwrap().read(app).len()
+        });
+        assert_eq!(len, 0, "초기 banner_stack 은 비어있어야 함 (AC-V14-11)");
+    }
+
+    /// AC-V14-12: push_crash helper — CrashBanner(Critical) 가 스택에 삽입됨.
+    #[test]
+    fn push_crash_helper_constructs_crash_banner() {
+        use gpui::TestAppContext;
+        use std::time::Duration;
+
+        let mut cx = TestAppContext::single();
+        let stack_entity = cx.new(|_| banners::BannerStack::new());
+
+        cx.update(|app| {
+            stack_entity.update(app, |stack, cx| {
+                stack.push_crash("/tmp/log".into(), Duration::from_secs(12), cx);
+            });
+        });
+
+        cx.read(|app| {
+            let stack = stack_entity.read(app);
+            assert_eq!(stack.len(), 1, "push_crash 후 스택 길이 = 1 (AC-V14-12)");
+            let entry = &stack.entries()[0];
+            assert_eq!(
+                entry.data.severity,
+                banners::Severity::Critical,
+                "CrashBanner severity = Critical (AC-V14-12)"
+            );
+            assert_eq!(entry.data.message, "Agent crashed");
+            assert_eq!(entry.data.actions.len(), 2);
+            let primary = entry.data.actions.iter().find(|a| a.primary).unwrap();
+            assert_eq!(primary.label, "Reopen");
+        });
+    }
+
+    /// AC-V14-12: push_update helper — UpdateBanner(Info, auto-dismiss 8s) 삽입.
+    #[test]
+    fn push_update_helper_constructs_update_banner() {
+        use gpui::TestAppContext;
+        use std::time::Duration;
+
+        let mut cx = TestAppContext::single();
+        let stack_entity = cx.new(|_| banners::BannerStack::new());
+
+        cx.update(|app| {
+            stack_entity.update(app, |stack, cx| {
+                stack.push_update("0.2.0", "12.3 MB", cx);
+            });
+        });
+
+        cx.read(|app| {
+            let stack = stack_entity.read(app);
+            assert_eq!(stack.len(), 1);
+            let entry = &stack.entries()[0];
+            assert_eq!(entry.data.severity, banners::Severity::Info);
+            assert_eq!(
+                entry.data.auto_dismiss_after,
+                Some(Duration::from_secs(8)),
+                "UpdateBanner auto_dismiss = 8s (AC-V14-12)"
+            );
+        });
     }
 }
