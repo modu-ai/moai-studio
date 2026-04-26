@@ -1,9 +1,9 @@
 ---
 id: SPEC-V3-011
-version: 1.0.0
-status: draft
+version: 1.1.0
+status: ready
 created_at: 2026-04-25
-updated_at: 2026-04-25
+updated_at: 2026-04-27
 author: MoAI (manager-spec)
 priority: High
 issue_number: 0
@@ -22,6 +22,7 @@ revision: v1.0.0 (initial draft, v0.1.0 release infrastructure)
 | 버전 | 날짜 | 변경 |
 |------|------|------|
 | 1.0.0-draft | 2026-04-25 | 초안 작성. moai-studio v0.1.0+ 정식 릴리스의 외부 빌드/배포 인프라 정의. RG-PK-1 ~ RG-PK-7, AC-PK-1 ~ AC-PK-12, MS-1/MS-2/MS-3, USER-DECISION 4 게이트. v3 functional SPEC (V3-001 ~ V3-010) 모두 선행. CI billing 해소 + 서명 인증서 보유는 외부 차단으로 명시. 코드베이스 무변경 (외부 빌드 인프라 한정). Enhanced GitHub Flow (CLAUDE.local.md §1, §5) 와 정합. |
+| 1.1.0 | 2026-04-27 | USER-DECISION 4 게이트 모두 RESOLVED. PK-A=자체 (GitHub Releases JSON + Ed25519), PK-B=미보유 (MS-1 까지만, MS-2 BLOCKED), PK-C=v{x.y.z} 단일, PK-D=opt-out. status draft→ready. v0.1.0 스코프 = MS-1 unsigned builds 만. MS-2/MS-3 는 인증서 보유 + Ed25519 keypair 생성 후 별 sprint 진입. |
 
 ---
 
@@ -306,6 +307,8 @@ implement 진입은 다음 차단 해소가 전제:
 
 ### 10.1 USER-DECISION-PK-A — Auto-update 메커니즘 (MS-3 진입)
 
+**결정 (2026-04-27): RESOLVED → 옵션 (a) 자체 (GitHub Releases JSON manifest + Ed25519). 근거: 외부 의존 0, Rust 100~200 LOC, moai-studio 의 minimal-dependency 원칙 정합, 플랫폼 일관성.**
+
 질문: "자동 업데이트 메커니즘은?"
 
 옵션:
@@ -316,6 +319,10 @@ implement 진입은 다음 차단 해소가 전제:
 영향 범위: RG-PK-5 전체, MS-3 산출.
 
 ### 10.2 USER-DECISION-PK-B — 서명 인증서 보유 (P0 차단, MS-2 진입)
+
+**결정 (2026-04-27): RESOLVED → 옵션 (b) 현재 미보유. 근거: Apple Developer Program / DigiCert EV cert 미계약 상태. v0.1.0 스코프는 MS-1 unsigned builds 까지로 한정. macOS 사용자는 Gatekeeper 우클릭 우회, Windows 사용자는 SmartScreen 경고 수동 통과 안내 필요.**
+
+**[P0 BLOCKER 활성]** 본 SPEC 의 MS-2 산출은 인증서 미보유 상태에서 차단된다. v0.1.0 스코프는 MS-1 unsigned builds 까지로 한정. PK-B 옵션 (a) 로 재결정 시 MS-2 sprint 별도 진입.
 
 질문: "macOS Developer ID + Windows EV cert 를 보유했는가?"
 
@@ -330,6 +337,8 @@ implement 진입은 다음 차단 해소가 전제:
 
 ### 10.3 USER-DECISION-PK-C — Release tag naming (MS-1 진입)
 
+**결정 (2026-04-27): RESOLVED → 옵션 (a) `v{x.y.z}` 단일. 근거: CLAUDE.local.md §1.2 준수, hotfix 명명 (`hotfix/v0.1.1-{slug}`) 와 직접 매칭, release.yml trigger regex 단순화 (`v*.*.*`). -rc 패턴 / prerelease 분기 제거.**
+
 질문: "릴리스 tag 명명 컨벤션은?"
 
 옵션:
@@ -340,6 +349,8 @@ implement 진입은 다음 차단 해소가 전제:
 영향 범위: REQ-PK-060 (tag trigger regex), REQ-PK-063 (prerelease mark), Release Drafter 정합 (CLAUDE.local.md §5.3).
 
 ### 10.4 USER-DECISION-PK-D — Crash reporting (선택, default opt-out)
+
+**결정 (2026-04-27): RESOLVED → 옵션 (a) opt-out (도입 안함). 근거: 사용자 프라이버시 우선, v0.1.0 단계 적합, 이슈 리포트는 GitHub Issues 로. v0.2.0+ 별 SPEC 에서 재논의. 본 SPEC RG 제외.**
 
 질문: "크래시 리포팅을 도입할 것인가?"
 
