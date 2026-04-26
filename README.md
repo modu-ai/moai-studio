@@ -5,7 +5,7 @@
 
 **Status**: M2 Complete (Conditional GO v1.2.0). 339 tests passing (Rust 233 + Swift 106).
 **Platform**: macOS only (macOS 14+, Apple Silicon + Intel).
-**License**: MIT
+**License**: Apache-2.0
 **Language**: Swift (UI) + Rust (Core)
 **Brand**: MoAI Studio (확정 — 2026-04-11, DESIGN.v4 §14 O6 RESOLVED)
 **Package**: `moai-studio` (바이너리/패키지 식별자)
@@ -159,7 +159,7 @@ ln -sf /path/to/claude-code-map .references/claude-code-map
 
 ## 라이선스
 
-MIT License © 2026 modu-ai
+Apache License 2.0 © 2026 MoAI (modu-ai)
 
 ---
 
