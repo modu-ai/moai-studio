@@ -1,0 +1,77 @@
+name: CI Required Stubs
+
+# Provides "success" status for the 7 required branch protection contexts
+# when the actual CI workflows (ci-v3-pane.yml, ci-rust.yml) do NOT trigger
+# because only documentation-like files changed (e.g., README.md, LICENSE,
+# .moai/specs/**). Without this stub, doc-only PRs would block forever
+# waiting for status checks that never report.
+#
+# 7 required contexts (per CLAUDE.local.md §2.1):
+#   fmt (macOS), fmt (Linux), clippy (macOS), clippy (Linux),
+#   test (macOS), bench-smoke (macOS), bench-smoke (Linux)
+#
+# Trigger semantics:
+#   - paths-ignore lists the patterns that the REAL workflows match.
+#   - This stub workflow triggers ONLY when ALL changed files match the
+#     ignore list (i.e., no crate / build / CI yaml change). For doc-only
+#     PRs this is true → stub runs → reports 7 context names as success.
+#   - For code PRs, this stub does NOT run; ci-v3-pane.yml / ci-rust.yml
+#     handle the same 7 contexts with real test execution.
+#   - For mixed PRs (code + docs), real workflows run; stub does not.
+#
+# Stub jobs all run on ubuntu-latest (cheap + fast, ~10s each). Branch
+# protection only cares about the context NAME and SUCCESS conclusion.
+
+on:
+  pull_request:
+    paths-ignore:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain'
+      - 'rust-toolchain.toml'
+      - '.github/workflows/ci-v3-pane.yml'
+      - '.github/workflows/ci-rust.yml'
+
+jobs:
+  fmt-macos:
+    name: fmt (macOS)
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'echo "Stub success: doc-only PR — fmt (macOS) skipped (no Rust source changes)"'
+
+  fmt-linux:
+    name: fmt (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'echo "Stub success: doc-only PR — fmt (Linux) skipped"'
+
+  clippy-macos:
+    name: clippy (macOS)
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'echo "Stub success: doc-only PR — clippy (macOS) skipped"'
+
+  clippy-linux:
+    name: clippy (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'echo "Stub success: doc-only PR — clippy (Linux) skipped"'
+
+  test-macos:
+    name: test (macOS)
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'echo "Stub success: doc-only PR — test (macOS) skipped"'
+
+  bench-smoke-macos:
+    name: bench-smoke (macOS)
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'echo "Stub success: doc-only PR — bench-smoke (macOS) skipped"'
+
+  bench-smoke-linux:
+    name: bench-smoke (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'echo "Stub success: doc-only PR — bench-smoke (Linux) skipped"'
