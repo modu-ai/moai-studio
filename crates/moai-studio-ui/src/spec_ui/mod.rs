@@ -11,10 +11,12 @@ pub mod command_client;
 pub mod detail_view;
 pub mod kanban_view;
 pub mod list_view;
+pub mod spec_panel_view;
 pub mod sprint_panel;
 
 pub use command_client::{CommandStatus, MoaiCommandClient, MoaiSubcommand};
 pub use detail_view::SpecDetailView;
 pub use kanban_view::KanbanBoardView;
 pub use list_view::SpecListView;
+pub use spec_panel_view::{SpecPanelMode, SpecPanelView};
 pub use sprint_panel::SprintContractPanel;
