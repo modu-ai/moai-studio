@@ -152,6 +152,264 @@ impl AppearanceState {
 }
 
 // ============================================================
+// KeyBinding — 키보드 단축키 바인딩 (MS-2)
+// ============================================================
+
+/// 단일 키보드 바인딩 엔트리.
+///
+/// @MX:ANCHOR: [AUTO] key-binding-struct
+/// @MX:REASON: [AUTO] KeyboardPane 테이블 행, conflict_check, 기본값 목록의 공통 타입.
+///   fan_in >= 3: keyboard.rs, settings_state.rs, settings_modal.rs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyBinding {
+    /// 액션 식별자 (예: "command_palette", "open.settings").
+    pub action_id: String,
+    /// 사용자 표시용 레이블.
+    pub label: String,
+    /// 현재 할당된 단축키 (예: "Cmd+Shift+P", "Cmd+,").
+    pub shortcut: String,
+}
+
+impl KeyBinding {
+    /// 새 KeyBinding 을 생성한다.
+    pub fn new(
+        action_id: impl Into<String>,
+        label: impl Into<String>,
+        shortcut: impl Into<String>,
+    ) -> Self {
+        Self {
+            action_id: action_id.into(),
+            label: label.into(),
+            shortcut: shortcut.into(),
+        }
+    }
+}
+
+/// 기본 키보드 바인딩 목록 (10개 이상, REQ-V13-030).
+///
+/// @MX:NOTE: [AUTO] default-key-bindings
+/// 내부 충돌 없음 — 각 shortcut 이 유일하다. 초기화 시 conflict_check 로 검증.
+pub fn default_key_bindings() -> Vec<KeyBinding> {
+    vec![
+        KeyBinding::new("open.command_palette", "명령 팔레트 열기", "Cmd+Shift+P"),
+        KeyBinding::new("open.settings", "설정 열기", "Cmd+,"),
+        KeyBinding::new("panes.split_horizontal", "수평 분할", "Cmd+\\"),
+        KeyBinding::new("panes.split_vertical", "수직 분할", "Cmd+Shift+\\"),
+        KeyBinding::new("panes.close", "패인 닫기", "Cmd+W"),
+        KeyBinding::new("panes.focus_left", "왼쪽 패인 포커스", "Cmd+Left"),
+        KeyBinding::new("panes.focus_right", "오른쪽 패인 포커스", "Cmd+Right"),
+        KeyBinding::new("tabs.new", "새 탭", "Cmd+T"),
+        KeyBinding::new("tabs.close", "탭 닫기", "Cmd+Shift+W"),
+        KeyBinding::new("terminal.toggle", "터미널 토글", "Ctrl+`"),
+        KeyBinding::new("agent.toggle", "에이전트 패널 토글", "Cmd+Shift+A"),
+        KeyBinding::new("file.save", "파일 저장", "Cmd+S"),
+    ]
+}
+
+// ============================================================
+// KeyboardState — KeyboardPane in-memory 상태 (MS-2)
+// ============================================================
+
+/// KeyboardPane 의 편집 다이얼로그 상태.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EditDialogState {
+    /// 편집 중인 바인딩의 action_id.
+    pub action_id: String,
+    /// 현재 입력 중인 단축키 (아직 저장되지 않음).
+    pub pending_shortcut: String,
+    /// 충돌 정보 — Some(충돌_action_label) 이면 충돌 발생.
+    pub conflict_error: Option<String>,
+}
+
+impl EditDialogState {
+    /// 새 편집 다이얼로그 상태를 생성한다.
+    pub fn new(action_id: impl Into<String>, current_shortcut: impl Into<String>) -> Self {
+        Self {
+            action_id: action_id.into(),
+            pending_shortcut: current_shortcut.into(),
+            conflict_error: None,
+        }
+    }
+}
+
+/// KeyboardPane 의 in-memory 상태.
+pub struct KeyboardState {
+    /// 현재 모든 바인딩 목록 (기본 + 커스텀 포함).
+    pub bindings: Vec<KeyBinding>,
+    /// 편집 다이얼로그 표시 중인지 여부 (None = 닫힘).
+    pub edit_dialog: Option<EditDialogState>,
+}
+
+impl Default for KeyboardState {
+    fn default() -> Self {
+        Self {
+            bindings: default_key_bindings(),
+            edit_dialog: None,
+        }
+    }
+}
+
+impl KeyboardState {
+    /// 새 KeyboardState 를 기본 바인딩으로 생성한다.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 충돌 검사 — 동일 shortcut 이 다른 action_id 에 이미 할당되어 있으면 Some(레이블) 반환.
+    ///
+    /// @MX:ANCHOR: [AUTO] conflict-check-fn
+    /// @MX:REASON: [AUTO] KeyboardPane 의 핵심 안전 로직. AC-V13-8 의 pass/fail 양 케이스를 보증.
+    ///   fan_in >= 3: keyboard.rs, settings_state.rs, settings_modal.rs (MS-2/MS-3).
+    pub fn conflict_check(&self, action_id: &str, new_shortcut: &str) -> Option<String> {
+        for binding in &self.bindings {
+            if binding.action_id != action_id && binding.shortcut == new_shortcut {
+                return Some(binding.label.clone());
+            }
+        }
+        None
+    }
+
+    /// 바인딩을 업데이트한다. 충돌 시 Err(충돌_레이블), 성공 시 Ok(()) 반환.
+    pub fn apply_binding(
+        &mut self,
+        action_id: &str,
+        new_shortcut: impl Into<String>,
+    ) -> Result<(), String> {
+        let new_shortcut = new_shortcut.into();
+        if let Some(conflict_label) = self.conflict_check(action_id, &new_shortcut) {
+            return Err(conflict_label);
+        }
+        if let Some(binding) = self.bindings.iter_mut().find(|b| b.action_id == action_id) {
+            binding.shortcut = new_shortcut;
+            Ok(())
+        } else {
+            Err(format!("action_id '{action_id}' 를 찾을 수 없습니다"))
+        }
+    }
+
+    /// 편집 다이얼로그를 열고 EditDialogState 를 초기화한다.
+    pub fn open_edit_dialog(&mut self, action_id: &str) {
+        if let Some(binding) = self.bindings.iter().find(|b| b.action_id == action_id) {
+            self.edit_dialog = Some(EditDialogState::new(action_id, &binding.shortcut));
+        }
+    }
+
+    /// 편집 다이얼로그를 닫는다.
+    pub fn close_edit_dialog(&mut self) {
+        self.edit_dialog = None;
+    }
+
+    /// pending_shortcut 을 저장 시도한다. 충돌 시 dialog 에 오류 설정.
+    pub fn save_edit_dialog(&mut self) -> bool {
+        if let Some(dialog) = self.edit_dialog.take() {
+            let result = self.apply_binding(&dialog.action_id, &dialog.pending_shortcut);
+            match result {
+                Ok(()) => true,
+                Err(conflict_label) => {
+                    // 오류 상태로 다이얼로그를 다시 열어둠
+                    self.edit_dialog = Some(EditDialogState {
+                        conflict_error: Some(conflict_label),
+                        ..dialog
+                    });
+                    false
+                }
+            }
+        } else {
+            false
+        }
+    }
+}
+
+// ============================================================
+// EditorState — EditorPane in-memory 상태 (MS-2 skeleton)
+// ============================================================
+
+/// EditorPane 의 in-memory 상태 (v0.1.0 skeleton — 1 setting).
+#[derive(Debug, Clone, PartialEq)]
+pub struct EditorState {
+    /// 탭 크기 (2~8, default 4) — REQ-V13-040.
+    pub tab_size: u8,
+}
+
+impl Default for EditorState {
+    fn default() -> Self {
+        Self { tab_size: 4 }
+    }
+}
+
+impl EditorState {
+    /// tab_size 를 설정한다. 2~8 범위 외는 무시.
+    pub fn set_tab_size(&mut self, size: u8) -> bool {
+        if (2..=8).contains(&size) {
+            self.tab_size = size;
+            true
+        } else {
+            false
+        }
+    }
+}
+
+// ============================================================
+// TerminalState — TerminalPane in-memory 상태 (MS-2 skeleton)
+// ============================================================
+
+/// TerminalPane 의 in-memory 상태 (v0.1.0 skeleton — 1 setting).
+#[derive(Debug, Clone, PartialEq)]
+pub struct TerminalState {
+    /// 스크롤백 줄 수 (1000~100000, default 10000) — REQ-V13-041.
+    pub scrollback_lines: u32,
+}
+
+impl Default for TerminalState {
+    fn default() -> Self {
+        Self {
+            scrollback_lines: 10_000,
+        }
+    }
+}
+
+impl TerminalState {
+    /// scrollback_lines 를 설정한다. 1000~100000 범위 외는 무시.
+    pub fn set_scrollback_lines(&mut self, lines: u32) -> bool {
+        if (1_000..=100_000).contains(&lines) {
+            self.scrollback_lines = lines;
+            true
+        } else {
+            false
+        }
+    }
+}
+
+// ============================================================
+// AgentState — AgentPane in-memory 상태 (MS-2 skeleton)
+// ============================================================
+
+/// AgentPane 의 in-memory 상태 (v0.1.0 skeleton — 1 setting).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct AgentState {
+    /// 자동 승인 여부 (default false) — REQ-V13-042.
+    pub auto_approve: bool,
+}
+
+impl AgentState {
+    /// auto_approve 를 토글한다.
+    pub fn toggle_auto_approve(&mut self) {
+        self.auto_approve = !self.auto_approve;
+    }
+}
+
+// ============================================================
+// AdvancedState — AdvancedPane in-memory 상태 (MS-2 skeleton)
+// ============================================================
+
+/// AdvancedPane 의 in-memory 상태 (v0.1.0 skeleton — 1 setting).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct AdvancedState {
+    /// 실험적 플래그 목록 (read-only, default 빈 목록) — REQ-V13-043.
+    pub experimental_flags: Vec<String>,
+}
+
+// ============================================================
 // SettingsViewState — SettingsModal transient 상태
 // ============================================================
 
@@ -165,6 +423,16 @@ pub struct SettingsViewState {
     pub selected_section: SettingsSection,
     /// AppearancePane 의 in-memory 상태.
     pub appearance: AppearanceState,
+    /// KeyboardPane 의 in-memory 상태.
+    pub keyboard: KeyboardState,
+    /// EditorPane 의 in-memory 상태.
+    pub editor: EditorState,
+    /// TerminalPane 의 in-memory 상태.
+    pub terminal: TerminalState,
+    /// AgentPane 의 in-memory 상태.
+    pub agent: AgentState,
+    /// AdvancedPane 의 in-memory 상태.
+    pub advanced: AdvancedState,
     /// SettingsModal 이 표시 중인지 여부 (mount/dismiss 상태).
     pub is_visible: bool,
 }
@@ -174,6 +442,11 @@ impl Default for SettingsViewState {
         Self {
             selected_section: SettingsSection::Appearance,
             appearance: AppearanceState::default(),
+            keyboard: KeyboardState::default(),
+            editor: EditorState::default(),
+            terminal: TerminalState::default(),
+            agent: AgentState::default(),
+            advanced: AdvancedState::default(),
             is_visible: false,
         }
     }
@@ -405,5 +678,312 @@ mod tests {
         state.appearance.accent = AccentColor::Violet;
         assert_eq!(state.appearance.accent, AccentColor::Violet);
         assert_eq!(state.appearance.accent.hex_value(), 0x6a4cc7);
+    }
+
+    // ---- MS-2: KeyBinding tests ----
+
+    #[test]
+    /// default_key_bindings() 가 10개 이상의 바인딩을 반환한다 (AC-V13-7).
+    fn default_key_bindings_has_ten_or_more() {
+        let bindings = default_key_bindings();
+        assert!(
+            bindings.len() >= 10,
+            "기본 바인딩은 10개 이상이어야 함, 실제: {}",
+            bindings.len()
+        );
+    }
+
+    #[test]
+    /// 기본 바인딩 중 내부 충돌 (동일 shortcut) 이 없다 (R-V13-5).
+    fn default_key_bindings_no_internal_conflicts() {
+        let bindings = default_key_bindings();
+        let mut seen_shortcuts = std::collections::HashSet::new();
+        for b in &bindings {
+            assert!(
+                seen_shortcuts.insert(b.shortcut.clone()),
+                "중복 shortcut 발견: '{}' (action: '{}')",
+                b.shortcut,
+                b.action_id
+            );
+        }
+    }
+
+    #[test]
+    /// 기본 바인딩 중 action_id 가 모두 유일하다.
+    fn default_key_bindings_unique_action_ids() {
+        let bindings = default_key_bindings();
+        let mut seen_ids = std::collections::HashSet::new();
+        for b in &bindings {
+            assert!(
+                seen_ids.insert(b.action_id.clone()),
+                "중복 action_id 발견: '{}'",
+                b.action_id
+            );
+        }
+    }
+
+    #[test]
+    /// KeyBinding::new() 생성자가 필드를 올바르게 설정한다.
+    fn key_binding_new_sets_fields() {
+        let b = KeyBinding::new("open.settings", "설정 열기", "Cmd+,");
+        assert_eq!(b.action_id, "open.settings");
+        assert_eq!(b.label, "설정 열기");
+        assert_eq!(b.shortcut, "Cmd+,");
+    }
+
+    // ---- MS-2: KeyboardState tests ----
+
+    #[test]
+    /// KeyboardState::new() 가 기본 바인딩으로 초기화된다.
+    fn keyboard_state_default_has_bindings() {
+        let ks = KeyboardState::new();
+        assert!(ks.bindings.len() >= 10);
+        assert!(ks.edit_dialog.is_none());
+    }
+
+    #[test]
+    /// conflict_check — 미사용 단축키는 None 반환 (AC-V13-8 pass case).
+    fn conflict_check_unused_shortcut_returns_none() {
+        let ks = KeyboardState::new();
+        let result = ks.conflict_check("open.settings", "Cmd+Option+X");
+        assert!(result.is_none(), "미사용 단축키는 충돌 없음");
+    }
+
+    #[test]
+    /// conflict_check — 같은 action_id 의 단축키는 충돌 아님 (자기 자신 재할당).
+    fn conflict_check_same_action_id_no_conflict() {
+        let ks = KeyboardState::new();
+        // open.settings 의 기본 shortcut = "Cmd+,"
+        let result = ks.conflict_check("open.settings", "Cmd+,");
+        assert!(result.is_none(), "같은 action에 같은 shortcut은 충돌 아님");
+    }
+
+    #[test]
+    /// conflict_check — 다른 action_id 에 할당된 단축키는 충돌 반환 (AC-V13-8 fail case).
+    fn conflict_check_occupied_shortcut_returns_conflict() {
+        let ks = KeyboardState::new();
+        // "Cmd+," 은 이미 open.settings 에 할당됨
+        let result = ks.conflict_check("panes.close", "Cmd+,");
+        assert!(result.is_some(), "이미 할당된 shortcut은 충돌 반환");
+        let conflict_label = result.unwrap();
+        assert_eq!(conflict_label, "설정 열기", "충돌 레이블이 일치해야 함");
+    }
+
+    #[test]
+    /// apply_binding — 미사용 단축키 적용 성공.
+    fn apply_binding_unused_shortcut_succeeds() {
+        let mut ks = KeyboardState::new();
+        let result = ks.apply_binding("open.settings", "Cmd+Option+S");
+        assert!(result.is_ok());
+        let binding = ks
+            .bindings
+            .iter()
+            .find(|b| b.action_id == "open.settings")
+            .unwrap();
+        assert_eq!(binding.shortcut, "Cmd+Option+S");
+    }
+
+    #[test]
+    /// apply_binding — 충돌 단축키 적용 시 Err 반환하고 기존 값 유지.
+    fn apply_binding_conflict_returns_err_and_preserves_original() {
+        let mut ks = KeyboardState::new();
+        // "Cmd+T" 는 tabs.new 에 할당됨
+        let result = ks.apply_binding("open.settings", "Cmd+T");
+        assert!(result.is_err(), "충돌 단축키는 Err 반환");
+        // open.settings 는 여전히 원래 shortcut
+        let binding = ks
+            .bindings
+            .iter()
+            .find(|b| b.action_id == "open.settings")
+            .unwrap();
+        assert_eq!(binding.shortcut, "Cmd+,");
+    }
+
+    #[test]
+    /// open_edit_dialog — 존재하는 action_id 로 다이얼로그를 연다.
+    fn open_edit_dialog_sets_dialog_state() {
+        let mut ks = KeyboardState::new();
+        ks.open_edit_dialog("open.settings");
+        assert!(ks.edit_dialog.is_some());
+        let dialog = ks.edit_dialog.as_ref().unwrap();
+        assert_eq!(dialog.action_id, "open.settings");
+        assert_eq!(dialog.pending_shortcut, "Cmd+,");
+        assert!(dialog.conflict_error.is_none());
+    }
+
+    #[test]
+    /// close_edit_dialog — 다이얼로그를 닫는다.
+    fn close_edit_dialog_clears_dialog() {
+        let mut ks = KeyboardState::new();
+        ks.open_edit_dialog("open.settings");
+        assert!(ks.edit_dialog.is_some());
+        ks.close_edit_dialog();
+        assert!(ks.edit_dialog.is_none());
+    }
+
+    #[test]
+    /// save_edit_dialog — 미사용 단축키로 저장 성공.
+    fn save_edit_dialog_success() {
+        let mut ks = KeyboardState::new();
+        ks.open_edit_dialog("open.settings");
+        ks.edit_dialog.as_mut().unwrap().pending_shortcut = "Cmd+Option+S".to_string();
+        let ok = ks.save_edit_dialog();
+        assert!(ok, "저장 성공");
+        assert!(ks.edit_dialog.is_none(), "저장 후 다이얼로그 닫힘");
+        let binding = ks
+            .bindings
+            .iter()
+            .find(|b| b.action_id == "open.settings")
+            .unwrap();
+        assert_eq!(binding.shortcut, "Cmd+Option+S");
+    }
+
+    #[test]
+    /// save_edit_dialog — 충돌 단축키로 저장 실패 시 dialog 에 오류 설정.
+    fn save_edit_dialog_conflict_sets_error() {
+        let mut ks = KeyboardState::new();
+        ks.open_edit_dialog("open.settings");
+        // tabs.new 의 단축키 "Cmd+T" 로 충돌 시도
+        ks.edit_dialog.as_mut().unwrap().pending_shortcut = "Cmd+T".to_string();
+        let ok = ks.save_edit_dialog();
+        assert!(!ok, "충돌 시 저장 실패");
+        // 다이얼로그가 열려 있고 오류가 설정됨
+        assert!(ks.edit_dialog.is_some());
+        assert!(ks.edit_dialog.as_ref().unwrap().conflict_error.is_some());
+    }
+
+    // ---- MS-2: EditorState tests ----
+
+    #[test]
+    /// EditorState 기본값이 tab_size = 4 이다 (REQ-V13-040).
+    fn editor_state_default_tab_size_is_4() {
+        let s = EditorState::default();
+        assert_eq!(s.tab_size, 4);
+    }
+
+    #[test]
+    /// tab_size 2~8 범위 내 설정 성공.
+    fn editor_state_set_tab_size_valid_range() {
+        let mut s = EditorState::default();
+        assert!(s.set_tab_size(2));
+        assert_eq!(s.tab_size, 2);
+        assert!(s.set_tab_size(8));
+        assert_eq!(s.tab_size, 8);
+    }
+
+    #[test]
+    /// tab_size 1 (범위 하한 미만) 거부.
+    fn editor_state_set_tab_size_below_min_rejected() {
+        let mut s = EditorState::default();
+        assert!(!s.set_tab_size(1));
+        assert_eq!(s.tab_size, 4);
+    }
+
+    #[test]
+    /// tab_size 9 (범위 상한 초과) 거부.
+    fn editor_state_set_tab_size_above_max_rejected() {
+        let mut s = EditorState::default();
+        assert!(!s.set_tab_size(9));
+        assert_eq!(s.tab_size, 4);
+    }
+
+    // ---- MS-2: TerminalState tests ----
+
+    #[test]
+    /// TerminalState 기본값이 scrollback_lines = 10000 이다 (REQ-V13-041).
+    fn terminal_state_default_scrollback_is_10000() {
+        let s = TerminalState::default();
+        assert_eq!(s.scrollback_lines, 10_000);
+    }
+
+    #[test]
+    /// scrollback_lines 1000~100000 범위 내 설정 성공.
+    fn terminal_state_set_scrollback_valid() {
+        let mut s = TerminalState::default();
+        assert!(s.set_scrollback_lines(1_000));
+        assert_eq!(s.scrollback_lines, 1_000);
+        assert!(s.set_scrollback_lines(100_000));
+        assert_eq!(s.scrollback_lines, 100_000);
+    }
+
+    #[test]
+    /// scrollback_lines 999 거부.
+    fn terminal_state_set_scrollback_below_min_rejected() {
+        let mut s = TerminalState::default();
+        assert!(!s.set_scrollback_lines(999));
+        assert_eq!(s.scrollback_lines, 10_000);
+    }
+
+    #[test]
+    /// scrollback_lines 100001 거부.
+    fn terminal_state_set_scrollback_above_max_rejected() {
+        let mut s = TerminalState::default();
+        assert!(!s.set_scrollback_lines(100_001));
+        assert_eq!(s.scrollback_lines, 10_000);
+    }
+
+    // ---- MS-2: AgentState tests ----
+
+    #[test]
+    /// AgentState 기본값이 auto_approve = false 이다 (REQ-V13-042).
+    fn agent_state_default_auto_approve_is_false() {
+        let s = AgentState::default();
+        assert!(!s.auto_approve);
+    }
+
+    #[test]
+    /// toggle_auto_approve() 가 상태를 반전한다.
+    fn agent_state_toggle_auto_approve() {
+        let mut s = AgentState::default();
+        s.toggle_auto_approve();
+        assert!(s.auto_approve);
+        s.toggle_auto_approve();
+        assert!(!s.auto_approve);
+    }
+
+    // ---- MS-2: AdvancedState tests ----
+
+    #[test]
+    /// AdvancedState 기본값이 experimental_flags = [] 이다 (REQ-V13-043).
+    fn advanced_state_default_flags_empty() {
+        let s = AdvancedState::default();
+        assert!(s.experimental_flags.is_empty());
+    }
+
+    // ---- MS-2: SettingsViewState 확장 tests ----
+
+    #[test]
+    /// SettingsViewState 기본 keyboard state 가 기본 바인딩을 포함한다.
+    fn view_state_keyboard_has_default_bindings() {
+        let state = SettingsViewState::new();
+        assert!(state.keyboard.bindings.len() >= 10);
+    }
+
+    #[test]
+    /// SettingsViewState 기본 editor state 가 tab_size = 4 이다.
+    fn view_state_editor_default_tab_size() {
+        let state = SettingsViewState::new();
+        assert_eq!(state.editor.tab_size, 4);
+    }
+
+    #[test]
+    /// SettingsViewState 기본 terminal state 가 scrollback = 10000 이다.
+    fn view_state_terminal_default_scrollback() {
+        let state = SettingsViewState::new();
+        assert_eq!(state.terminal.scrollback_lines, 10_000);
+    }
+
+    #[test]
+    /// SettingsViewState 기본 agent state 가 auto_approve = false 이다.
+    fn view_state_agent_default_auto_approve() {
+        let state = SettingsViewState::new();
+        assert!(!state.agent.auto_approve);
+    }
+
+    #[test]
+    /// SettingsViewState 기본 advanced state 가 flags = [] 이다.
+    fn view_state_advanced_default_flags_empty() {
+        let state = SettingsViewState::new();
+        assert!(state.advanced.experimental_flags.is_empty());
     }
 }

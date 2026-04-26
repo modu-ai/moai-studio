@@ -1,9 +1,13 @@
 //! SettingsModal — 880×640 컨테이너 + sidebar(200px) + main pane(680px).
 //!
 //! SPEC-V3-013 MS-1: AC-V13-1 ~ AC-V13-3 구현.
-//! MS-1 단계: in-memory 상태 관리 + 레이아웃 상수 정의.
+//! SPEC-V3-013 MS-2: AC-V13-7 ~ AC-V13-9 — section routing 확장.
+//! MS-1/MS-2 단계: in-memory 상태 관리 + 레이아웃 상수 정의.
 //! RootView 배선 + Cmd+, keybinding 은 lib.rs 와 함께 MS-3 에서.
 
+use crate::settings::panes::{
+    AdvancedPane, AgentPane, AppearancePane, EditorPane, KeyboardPane, TerminalPane,
+};
 use crate::settings::settings_state::{SettingsSection, SettingsViewState};
 
 // ============================================================
@@ -97,6 +101,60 @@ impl SettingsModal {
     /// sidebar 의 6개 section 을 정해진 순서로 반환한다 (AC-V13-2).
     pub fn sections(&self) -> [SettingsSection; 6] {
         SettingsSection::all()
+    }
+
+    // ---- section routing (MS-2) ----
+
+    /// 현재 선택된 section 이 AppearancePane 에 해당하는지 여부.
+    pub fn is_appearance_active(&self) -> bool {
+        self.view_state.selected_section == SettingsSection::Appearance
+    }
+
+    /// 현재 선택된 section 이 KeyboardPane 에 해당하는지 여부.
+    pub fn is_keyboard_active(&self) -> bool {
+        self.view_state.selected_section == SettingsSection::Keyboard
+    }
+
+    /// 현재 선택된 section 이 EditorPane 에 해당하는지 여부.
+    pub fn is_editor_active(&self) -> bool {
+        self.view_state.selected_section == SettingsSection::Editor
+    }
+
+    /// 현재 선택된 section 이 TerminalPane 에 해당하는지 여부.
+    pub fn is_terminal_active(&self) -> bool {
+        self.view_state.selected_section == SettingsSection::Terminal
+    }
+
+    /// 현재 선택된 section 이 AgentPane 에 해당하는지 여부.
+    pub fn is_agent_active(&self) -> bool {
+        self.view_state.selected_section == SettingsSection::Agent
+    }
+
+    /// 현재 선택된 section 이 AdvancedPane 에 해당하는지 여부.
+    pub fn is_advanced_active(&self) -> bool {
+        self.view_state.selected_section == SettingsSection::Advanced
+    }
+
+    /// 현재 선택된 section 의 타이틀을 반환한다.
+    pub fn active_section_title(&self) -> &'static str {
+        match self.view_state.selected_section {
+            SettingsSection::Appearance => "Appearance",
+            SettingsSection::Keyboard => "Keyboard",
+            SettingsSection::Editor => EditorPane::title(),
+            SettingsSection::Terminal => TerminalPane::title(),
+            SettingsSection::Agent => AgentPane::title(),
+            SettingsSection::Advanced => AdvancedPane::title(),
+        }
+    }
+
+    /// AppearancePane 의 기본 타이틀을 반환한다.
+    pub fn appearance_pane_title() -> &'static str {
+        AppearancePane::title()
+    }
+
+    /// KeyboardPane 의 기본 타이틀을 반환한다.
+    pub fn keyboard_pane_title() -> &'static str {
+        KeyboardPane::title()
     }
 }
 
@@ -278,5 +336,133 @@ mod tests {
         assert_eq!(sections[3], SettingsSection::Terminal);
         assert_eq!(sections[4], SettingsSection::Agent);
         assert_eq!(sections[5], SettingsSection::Advanced);
+    }
+
+    // ---- MS-2: section routing tests (AC-V13-9) ----
+
+    #[test]
+    /// 기본 선택 시 is_appearance_active() 가 true 이다.
+    fn section_routing_default_is_appearance() {
+        let modal = SettingsModal::new();
+        assert!(modal.is_appearance_active());
+        assert!(!modal.is_keyboard_active());
+    }
+
+    #[test]
+    /// Keyboard 선택 시 is_keyboard_active() 가 true 이다.
+    fn section_routing_keyboard_active() {
+        let mut modal = SettingsModal::new();
+        modal.select_section(SettingsSection::Keyboard);
+        assert!(modal.is_keyboard_active());
+        assert!(!modal.is_appearance_active());
+    }
+
+    #[test]
+    /// Editor 선택 시 is_editor_active() 가 true 이다.
+    fn section_routing_editor_active() {
+        let mut modal = SettingsModal::new();
+        modal.select_section(SettingsSection::Editor);
+        assert!(modal.is_editor_active());
+    }
+
+    #[test]
+    /// Terminal 선택 시 is_terminal_active() 가 true 이다.
+    fn section_routing_terminal_active() {
+        let mut modal = SettingsModal::new();
+        modal.select_section(SettingsSection::Terminal);
+        assert!(modal.is_terminal_active());
+    }
+
+    #[test]
+    /// Agent 선택 시 is_agent_active() 가 true 이다.
+    fn section_routing_agent_active() {
+        let mut modal = SettingsModal::new();
+        modal.select_section(SettingsSection::Agent);
+        assert!(modal.is_agent_active());
+    }
+
+    #[test]
+    /// Advanced 선택 시 is_advanced_active() 가 true 이다.
+    fn section_routing_advanced_active() {
+        let mut modal = SettingsModal::new();
+        modal.select_section(SettingsSection::Advanced);
+        assert!(modal.is_advanced_active());
+    }
+
+    #[test]
+    /// active_section_title() 이 선택된 section 에 맞는 타이틀을 반환한다.
+    fn active_section_title_matches_section() {
+        let mut modal = SettingsModal::new();
+        assert_eq!(modal.active_section_title(), "Appearance");
+        modal.select_section(SettingsSection::Keyboard);
+        assert_eq!(modal.active_section_title(), "Keyboard");
+        modal.select_section(SettingsSection::Editor);
+        assert_eq!(modal.active_section_title(), "Editor");
+        modal.select_section(SettingsSection::Terminal);
+        assert_eq!(modal.active_section_title(), "Terminal");
+        modal.select_section(SettingsSection::Agent);
+        assert_eq!(modal.active_section_title(), "Agent");
+        modal.select_section(SettingsSection::Advanced);
+        assert_eq!(modal.active_section_title(), "Advanced");
+    }
+
+    #[test]
+    /// 각 section 전환 시 정확히 하나의 section 만 활성화된다.
+    fn only_one_section_active_at_a_time() {
+        let mut modal = SettingsModal::new();
+        let all_active = |m: &SettingsModal| -> Vec<bool> {
+            vec![
+                m.is_appearance_active(),
+                m.is_keyboard_active(),
+                m.is_editor_active(),
+                m.is_terminal_active(),
+                m.is_agent_active(),
+                m.is_advanced_active(),
+            ]
+        };
+        for section in SettingsSection::all() {
+            modal.select_section(section);
+            let active = all_active(&modal);
+            let count = active.iter().filter(|&&v| v).count();
+            assert_eq!(count, 1, "section {:?} 선택 시 정확히 1개만 활성", section);
+        }
+    }
+
+    #[test]
+    /// KeyboardPane 의 기본 binding 개수가 10개 이상이다 (AC-V13-7 routing 확인).
+    fn keyboard_section_has_default_bindings_via_state() {
+        let modal = SettingsModal::new();
+        assert!(
+            modal.view_state.keyboard.bindings.len() >= 10,
+            "keyboard 기본 바인딩 10개 이상 필요"
+        );
+    }
+
+    #[test]
+    /// EditorPane title 이 "Editor" 이다 (AC-V13-9).
+    fn editor_pane_title_via_modal_routing() {
+        use crate::settings::panes::EditorPane;
+        assert_eq!(EditorPane::title(), "Editor");
+    }
+
+    #[test]
+    /// TerminalPane title 이 "Terminal" 이다 (AC-V13-9).
+    fn terminal_pane_title_via_modal_routing() {
+        use crate::settings::panes::TerminalPane;
+        assert_eq!(TerminalPane::title(), "Terminal");
+    }
+
+    #[test]
+    /// AgentPane title 이 "Agent" 이다 (AC-V13-9).
+    fn agent_pane_title_via_modal_routing() {
+        use crate::settings::panes::AgentPane;
+        assert_eq!(AgentPane::title(), "Agent");
+    }
+
+    #[test]
+    /// AdvancedPane title 이 "Advanced" 이다 (AC-V13-9).
+    fn advanced_pane_title_via_modal_routing() {
+        use crate::settings::panes::AdvancedPane;
+        assert_eq!(AdvancedPane::title(), "Advanced");
     }
 }
