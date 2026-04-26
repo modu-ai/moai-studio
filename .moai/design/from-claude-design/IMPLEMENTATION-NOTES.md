@@ -1,8 +1,30 @@
 # Implementation Notes — Claude Design → GPUI Rust
 
-> **Source bundle**: `.moai/design/from-claude-design/` (Claude Design 핸드오프, 2026-04-25 import).
+> **Source bundle**: `.moai/design/from-claude-design/` (Claude Design 핸드오프, **Round 2 = v2 통합** 2026-04-26).
 > **Target**: `crates/moai-studio-ui/` GPUI 0.2.2 Rust.
 > **Goal**: HTML/CSS/JSX 시안을 GPUI 컴포넌트로 픽셀-단위 충실 재현. README 지시: "render in browser 금지, 소스 직독으로 토큰/구조 추출".
+
+## Round 2 변경 요약 (2026-04-26)
+
+Round 1 → Round 2 변경:
+- **moai-studio.html**: 839 → 1442 lines (+603 신규 CSS — palette/popover/modal/banner)
+- **moai-revisions.jsx** 신규 (640 lines, 18 component)
+- **chat1.md**: 173 → 319 lines (Round 2 conversation transcript)
+- **colors_and_type.css**: 동일 (토큰 정합 유지)
+- **uploads/**: revision-instructions.md 가 Claude Design 에 입력됨 확인
+
+Round 2 신규 컴포넌트 (18) — `tokens.json round2_component` 섹션 참조:
+1. **Palette** — Cmd+P (CmdPalette), Cmd+Shift+P (CommandPalette), /moai (SlashBar) — 600px width, 32px row
+2. **FindReplace** (.find) — Code viewer 인라인 toolbar, 26px ibtn
+3. **LspHover** (.lspop) — type signature + doc preview, 420px width
+4. **MXPopover** — body / fan_in / SPEC link, 360px, 4 색 (ANCHOR gold / WARN amber / NOTE info / TODO violet)
+5. **MergeDiff** — 3-way conflict (base / ours / theirs)
+6. **SprintPanel** — SPEC-V3-009 AC checklist sidecar, 320px
+7. **SettingsModal** — 6 sections (Appearance/Keyboard/Editor/Terminal/Agent/Advanced), 880×640
+8. **CrashBanner / UpdateBanner** — 영구 banner, 40-48px height
+9. **LspStarting / PtyStarting** — transient state banner
+10. **WorkspaceSwitching** — workspace 전환 transition
+11. **CodeStub / AppearancePane / KeyboardPane** — 보조 컴포넌트
 
 ---
 
@@ -330,3 +352,155 @@ production GPUI 앱에서는 settings menu 또는 user-config 로 별도 구현.
 Version: 1.0.0
 Last Updated: 2026-04-25
 Bundle Origin: `https://api.anthropic.com/v1/design/h/Soj3DRdFBF68x3X61_YtJQ`
+
+---
+
+## 13. Round 2 신규 컴포넌트 — GPUI Rust 매핑 가이드
+
+### 13.1 Palette (Cmd+P / Cmd+Shift+P / /moai *) — `crates/moai-studio-ui/src/palette/` (신규)
+
+**CSS class `.pal`** (overlay scrim `.ovl-scrim` 위에 mount).
+
+| CSS | GPUI 매핑 |
+|-----|-----------|
+| `.ovl-scrim` | `Scrim` 컴포넌트 — `Entity<Scrim>` 또는 modal layer |
+| `.pal` (600px width, radius 10px, shadow palette) | `PaletteView` Entity, `impl Render` |
+| `.pal-input` (44px height) | input row with 14px icon + mono 13px input |
+| `.pal-section` (uppercase 9.5px, letter-spacing 0.10em) | section header |
+| `.pal-list` (max-height 320px, scrollable) | virtualized list |
+| `.pal-row` (32px height, grid 16/1fr/auto) | row: icon / name / kbd shortcut |
+| `.pal-row.sel` (accent-soft bg, inset 2px accent) | keyboard-selected state |
+| `.pal-row .pal-nm em` | fuzzy match highlight (accent-soft bg, accent text) |
+| `.pal-foot` (28px height) | footer with hints (`↑↓ Navigate`, `Enter Open`, `Esc Close`) |
+
+**Action**: 3 variant entry points share PaletteView struct with `mode: PaletteMode::FileQuickOpen | CommandPalette | SlashBar`.
+
+### 13.2 Find/Replace (Cmd+F) — Code Viewer 인라인
+
+**CSS class `.find`** (Code viewer 우측 상단 absolute).
+
+| CSS | GPUI 매핑 |
+|-----|-----------|
+| `.find` (absolute top-right of `.code .src`) | mount overlay above CodeViewer body |
+| `.find .row` (input + count + ibtn group) | search row + replace row |
+| `.find input` (26px height) | input element with focus border accent |
+| `.find .cnt` (mono 10.5px) | "3 of 12" match count |
+| `.find .ibtn` (icon button — Aa, .*, |abc|) | toggle: case-sensitive / regex / whole-word |
+| `.find .ibtn.on` (accent-soft bg, primary border) | active toggle |
+| `.find .ibtn.close` (margin-left auto) | close X button |
+| `.find .actrow` (action row — replace/replace-all) | replace mode actions |
+| `.find .btn.pri` (accent bg, weight 600) | primary action button |
+
+**Action**: V3-006 MS-3 진입 시 추가. CodeViewer 내부 child Entity 로 mount/unmount.
+
+### 13.3 LSP Hover Popover — Code Viewer
+
+**CSS class `.lspop`** (cursor anchor 기반 absolute position).
+
+| CSS | GPUI 매핑 |
+|-----|-----------|
+| `.lspop` (420px width, max 320 height, padding 14-16) | `LspHoverPopover` Entity |
+| `.lspop .sig` (mono 12.5px, syntax highlight) | function signature with .kw/.fn/.ty class |
+| `.lspop .doc` (12px, fg-2) | rust-analyzer markdown rendering |
+| `.lspop .doc .pdef` (parameter definitions) | param row: name (accent) + desc (fg-3) |
+| `.lspop .foot kbd` (mono kbd hint) | "Cmd+Click to go-to-def" |
+| `.lspop .ed-anchor` | viewport edge offset 8px |
+
+**Action**: V3-006 MS-3 LSP 통합 시. async-lsp + lsp-types `textDocument/hover` 응답 → popover render.
+
+### 13.4 MX Tag Click Popover — Markdown/Code Viewer
+
+| CSS | GPUI 매핑 |
+|-----|-----------|
+| `.mxpop` (360px, padding 12-14, radius 8) | `MxTagPopover` Entity |
+| Tag color: ANCHOR `#d4a017` gold ★ / WARN `#c47b2a` amber ⚠ / NOTE `#2a8a8c` info ● / TODO `#6a4cc7` violet ◇ |
+| Body text + REASON + fan_in count + SPEC link | structured popover content |
+
+**Action**: V3-006 MS-3 mx_scan + gutter T21/T22 진입 시.
+
+### 13.5 3-way Merge Diff — Git UI
+
+**CSS class `.mergediff` / `.merge-cols` / `.merge-pane`**.
+
+| 영역 | 색상 |
+|-----|------|
+| Base (좌) | text.tertiary |
+| Ours (중) | semantic.success (mint) |
+| Theirs (우) | brand.primary.dark (accent) |
+| Conflict line | semantic.danger (crimson) |
+
+**Action**: V3-008 MS-3 merge conflict resolver. 3-pane grid + accept ours/theirs/manual buttons.
+
+### 13.6 Sprint Contract Panel — SPEC UI
+
+**CSS class `.sprint-panel`** — SPEC detail view 의 우측 sidecar (320px).
+
+| 영역 | 내용 |
+|-----|------|
+| Header | "Sprint Contract v1.0.x" + revision badge |
+| AC checklist | 14px checkbox + 26px row + AC label + 상태 dot |
+| Sprint Exit progress | bar chart — pass/fail/pending |
+| Hard thresholds 표 | coverage / lsp / clippy / fmt / regression |
+
+**Action**: V3-009 MS-2/MS-3 implement 시.
+
+### 13.7 Settings/Preferences Modal
+
+**CSS class `.settings-modal` / `.settings-sidebar` / `.settings-pane`**.
+
+| Section | 내용 |
+|---------|------|
+| Appearance | theme (dark/light/system) / density / accent (teal/blue/violet/cyan) / font size |
+| Keyboard | binding 테이블 + edit |
+| Editor | tab size / word wrap / minimap / format on save |
+| Terminal | shell / font / scrollback / opacity |
+| Agent | model / cost limit / auto-approve / hook config |
+| Advanced | LSP servers / tree-sitter languages / experimental flags |
+
+**Action**: 신규 `crates/moai-studio-ui/src/settings/` 모듈. UserSettings struct + SettingsModal Entity.
+
+### 13.8 Banners (Crash / Update / LSP starting / PTY starting / Workspace switching)
+
+| Banner | 색상 | 위치 |
+|--------|-----|------|
+| Crash recovery | semantic.danger | top of app, dismissable + restore CTA |
+| Update available | brand.primary | top, install/dismiss |
+| LSP starting | semantic.info | bottom of CodeViewer, transient |
+| PTY starting | semantic.success | bottom of Terminal, transient |
+| Workspace switching | brand.primary.dark | center overlay during transition |
+
+**Action**: 신규 `crates/moai-studio-ui/src/banners/` 모듈. Banner Entity + BannerKind enum + auto-dismiss timer.
+
+### 13.9 Backdrop Scrim — modal/palette 공용
+
+| 속성 | 값 |
+|-----|------|
+| position | absolute inset 0 |
+| dark bg | rgba(8,12,11,0.55) |
+| light bg | rgba(20,30,28,0.18) |
+| backdrop-filter blur | 2px |
+| z-index | 20 |
+| padding-top | 80px (palette 위치 기준점) |
+
+**Action**: 공용 Scrim Entity. PaletteView / SettingsModal / MergeDiff 가 mount 시 emit.
+
+---
+
+## 14. Round 2 후속 Implementation 작업 권장 순서
+
+| 단계 | 작업 | SPEC | 우선도 |
+|------|-----|------|------|
+| A | 토큰 → GPUI Rust 상수 (`src/design/tokens.rs`) Round 2 dimension 포함 | chore | P0 |
+| B | 기존 surface 색상 일괄 교체 (`#2563EB` → `#144a46` repo-wide grep) | chore | P0 |
+| C | Scrim + PaletteView (Cmd+P 우선) | 신규 `palette/` | P0 |
+| D | Settings modal | 신규 `settings/` | P0 |
+| E | Find/Replace + LSP Hover + MX Popover | V3-006 MS-3 | P1 |
+| F | Banners (Crash/Update/LSP/PTY/Workspace) | 신규 `banners/` | P1 |
+| G | Sprint Contract Panel | V3-009 implement 시 | P1 |
+| H | 3-way Merge Diff | V3-008 MS-3 | P1 |
+
+---
+
+Version: 1.1.0 (Round 2 통합)
+Last Updated: 2026-04-26
+Bundle Origin: `https://api.anthropic.com/v1/design/h/MIrSZ25-Uvr1x44EiPyeOg` (Round 2)

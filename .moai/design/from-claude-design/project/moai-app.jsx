@@ -5,7 +5,10 @@ const { I, FileTree, SAMPLE_TREE, Terminal, CodeViewer, MarkdownViewer,
         EmptyState, LoadingSkeleton, ErrorBanner, FirstRun,
         useTweaks, TweaksPanel, TweakSection, TweakSlider, TweakToggle,
         TweakRadio, TweakSelect, TweakColor,
-        DesignCanvas, DCSection, DCArtboard } = window;
+        DesignCanvas, DCSection, DCArtboard,
+        CmdPalette, CommandPalette, SlashBar, FindReplace, CodeStub,
+        LspHover, MXPopover, MergeDiff, SprintPanel, SettingsModal,
+        CrashBanner, UpdateBanner, LspStarting, PtyStarting, WorkspaceSwitching } = window;
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "theme": "dark",
@@ -415,6 +418,138 @@ function App() {
               <span style={{ marginLeft:"auto", color: "var(--accent)" }}>⌘⇧A · open dashboard</span>
             </div>
             <div style={{ flex:1, background: "var(--bg)", display:"grid", placeItems:"center", color: "var(--fg-3)", fontSize: 11 }}>prominent — agent timeline lives above tabs</div>
+          </MoAI>
+        </DCArtboard>
+      </DCSection>
+      {/* === Section 11: Command surfaces (Round 2) === */}
+      <DCSection id="palettes" title="Command surfaces — palettes &amp; bars" subtitle="⌘P · ⌘⇧P · ⌘F · /moai slash dispatch. Floating overlays on top of the IDE.">
+        <DCArtboard id="cmd-p" label="⌘P · File quick-open" width={840} height={580}>
+          <MoAI mode={mode} accent={accent} density={density} sidebar="none" showStatus={false} showAgent={false}>
+            <Surface tabs={[{ name: "render.rs", active: true, icon: <I.fileCode size={12}/> }]}>
+              <div style={{ position:"relative", flex:1, display:"flex" }}>
+                <CodeStub/>
+                <CmdPalette query="spec/v3"/>
+              </div>
+            </Surface>
+          </MoAI>
+        </DCArtboard>
+        <DCArtboard id="cmd-shift-p" label="⌘⇧P · Command palette" width={840} height={580}>
+          <MoAI mode={mode} accent={accent} density={density} sidebar="none" showStatus={false} showAgent={false}>
+            <Surface tabs={[{ name: "render.rs", active: true, icon: <I.fileCode size={12}/> }]}>
+              <div style={{ position:"relative", flex:1, display:"flex" }}>
+                <CodeStub/>
+                <CommandPalette query=">git"/>
+              </div>
+            </Surface>
+          </MoAI>
+        </DCArtboard>
+        <DCArtboard id="slash" label="/moai · agent slash" width={760} height={460}>
+          <MoAI mode={mode} accent={accent} density={density} sidebar="none" showStatus={false} showAgent={false}>
+            <Surface tabs={[{ name: "Agent", active: true, icon: <I.agent size={12}/> }]}>
+              <div style={{ position:"relative", flex:1, display:"flex", background:"var(--bg)" }}>
+                <SlashBar/>
+              </div>
+            </Surface>
+          </MoAI>
+        </DCArtboard>
+        <DCArtboard id="cmd-f" label="⌘F · find / replace" width={900} height={460}>
+          <MoAI mode={mode} accent={accent} density={density} sidebar="none" showStatus={false} showAgent={false}>
+            <Surface tabs={[{ name: "render.rs", active: true, icon: <I.fileCode size={12}/> }]}>
+              <div style={{ flex:1, display:"flex", minWidth:0 }}><FindReplace/></div>
+            </Surface>
+          </MoAI>
+        </DCArtboard>
+      </DCSection>
+
+      {/* === Section 12: Editor popovers === */}
+      <DCSection id="popovers" title="Editor popovers — LSP &amp; @MX" subtitle="Hover-anchored detail surfaces with footer keybinds.">
+        <DCArtboard id="lsp-hover" label="LSP hover · rust-analyzer" width={760} height={520}>
+          <MoAI mode={mode} accent={accent} density={density} sidebar="none" showStatus={false} showAgent={false}>
+            <Surface tabs={[{ name: "render.rs", active: true, icon: <I.fileCode size={12}/> }]}>
+              <div style={{ flex:1, display:"flex", minWidth:0 }}><LspHover/></div>
+            </Surface>
+          </MoAI>
+        </DCArtboard>
+        <DCArtboard id="mx-pop" label="@MX:ANCHOR · tag detail" width={760} height={520}>
+          <MoAI mode={mode} accent={accent} density={density} sidebar="none" showStatus={false} showAgent={false}>
+            <Surface tabs={[{ name: "focus.rs", active: true, icon: <I.fileCode size={12}/> }]}>
+              <div style={{ flex:1, display:"flex", minWidth:0 }}><MXPopover tag="ANCHOR"/></div>
+            </Surface>
+          </MoAI>
+        </DCArtboard>
+      </DCSection>
+
+      {/* === Section 13: Git deeper === */}
+      <DCSection id="git-deep" title="Git — 3-way merge conflict" subtitle="Base · Ours · Theirs — accept-direction or stage chunks individually.">
+        <DCArtboard id="git-merge" label="Conflict · persist.rs" width={1280} height={580}>
+          <MoAI mode={mode} accent={accent} density={density} sidebar="none" showStatus={false} showAgent={false}>
+            <Surface tabs={[{ name: "persist.rs · MERGING", active: true, icon: <I.branch size={12}/> }]}>
+              <div style={{ flex:1, display:"flex", minWidth:0 }}><MergeDiff/></div>
+            </Surface>
+          </MoAI>
+        </DCArtboard>
+      </DCSection>
+
+      {/* === Section 14: SPEC deeper === */}
+      <DCSection id="spec-deep" title="SPEC · Sprint Contract" subtitle="The approval surface — moai's promise to ship.">
+        <DCArtboard id="sprint" label="Sprint contract · review &amp; approve" width={520} height={680}>
+          <MoAI mode={mode} accent={accent} density={density} sidebar="none" showStatus={false} showAgent={false}>
+            <SprintPanel/>
+          </MoAI>
+        </DCArtboard>
+      </DCSection>
+
+      {/* === Section 15: Settings === */}
+      <DCSection id="settings" title="Settings · Preferences modal" subtitle="Two-pane modal — left nav, right surface. ⌘, opens.">
+        <DCArtboard id="set-appearance" label="Appearance" width={1080} height={680}>
+          <MoAI mode={mode} accent={accent} density={density} sidebar="none" showStatus={false} showAgent={false}>
+            <Surface tabs={[{ name: "render.rs", active: true, icon: <I.fileCode size={12}/> }]}>
+              <div style={{ position:"relative", flex:1, display:"flex" }}>
+                <CodeStub/>
+                <SettingsModal section="appearance"/>
+              </div>
+            </Surface>
+          </MoAI>
+        </DCArtboard>
+        <DCArtboard id="set-keyboard" label="Keyboard shortcuts" width={1080} height={680}>
+          <MoAI mode={mode} accent={accent} density={density} sidebar="none" showStatus={false} showAgent={false}>
+            <Surface tabs={[{ name: "render.rs", active: true, icon: <I.fileCode size={12}/> }]}>
+              <div style={{ position:"relative", flex:1, display:"flex" }}>
+                <CodeStub/>
+                <SettingsModal section="keyboard"/>
+              </div>
+            </Surface>
+          </MoAI>
+        </DCArtboard>
+      </DCSection>
+
+      {/* === Section 16: System banners === */}
+      <DCSection id="banners" title="System banners — non-blocking states" subtitle="Crash · update · LSP/PTY starting. Top of canvas, dismissable.">
+        <DCArtboard id="ban-crash" label="Agent crashed" width={1080} height={120}>
+          <MoAI mode={mode} accent={accent} density={density} sidebar="none" showStatus={false} showAgent={false}>
+            <CrashBanner/>
+          </MoAI>
+        </DCArtboard>
+        <DCArtboard id="ban-update" label="Update available" width={1080} height={120}>
+          <MoAI mode={mode} accent={accent} density={density} sidebar="none" showStatus={false} showAgent={false}>
+            <UpdateBanner/>
+          </MoAI>
+        </DCArtboard>
+        <DCArtboard id="ban-lsp" label="rust-analyzer starting" width={1080} height={120}>
+          <MoAI mode={mode} accent={accent} density={density} sidebar="none" showStatus={false} showAgent={false}>
+            <LspStarting/>
+          </MoAI>
+        </DCArtboard>
+        <DCArtboard id="ban-pty" label="Terminal spawning" width={1080} height={120}>
+          <MoAI mode={mode} accent={accent} density={density} sidebar="none" showStatus={false} showAgent={false}>
+            <PtyStarting/>
+          </MoAI>
+        </DCArtboard>
+        <DCArtboard id="ws-switch" label="Workspace switching" width={760} height={520}>
+          <MoAI mode={mode} accent={accent} density={density} sidebar="none" showStatus={false} showAgent={false}>
+            <Surface tabs={[{ name: "render.rs", icon: <I.fileCode size={12}/> }]}>
+              <div style={{ flex:1, display:"flex", minWidth:0 }}><WorkspaceSwitching/></div>
+            </Surface>
           </MoAI>
         </DCArtboard>
       </DCSection>
