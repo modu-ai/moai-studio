@@ -17,6 +17,8 @@ pub mod agent;
 // tokens.json v2.0.0 GPUI Rust 상수 모듈 (chore: design-tokens-rust-A-B)
 pub mod design;
 pub mod explorer;
+// SPEC-V3-012 MS-1: Palette Surface 모듈 (Scrim + PaletteView core)
+pub mod palette;
 pub mod panes;
 pub mod tabs;
 pub mod terminal;
