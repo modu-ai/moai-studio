@@ -11,7 +11,7 @@ use tracing::{info, warn};
 
 use crate::parser::parse_spec_md;
 use crate::state::ac_state::parse_ac_states_from_progress;
-use crate::state::kanban::KanbanStage;
+use crate::state::kanban_persist;
 use crate::state::spec_record::{SpecFileKind, SpecId, SpecRecord};
 
 /// `.moai/specs/` 디렉터리의 모든 SPEC 을 관리하는 인덱스.
@@ -111,18 +111,8 @@ impl SpecIndex {
                 }
             }
 
-            // .kanban-stage sidecar 읽기 (REQ-SU-021)
-            let sidecar_path = path.join(".kanban-stage");
-            if sidecar_path.exists() {
-                match std::fs::read_to_string(&sidecar_path) {
-                    Ok(content) => {
-                        record.kanban_stage = KanbanStage::from_sidecar(content.trim());
-                    }
-                    Err(e) => {
-                        warn!(".kanban-stage 읽기 실패 (graceful skip): {sidecar_path:?}: {e}");
-                    }
-                }
-            }
+            // .kanban-stage sidecar 읽기 (REQ-SU-021) — kanban_persist::read_stage 위임
+            record.kanban_stage = kanban_persist::read_stage(&path);
 
             records.push(record);
             info!("SPEC 스캔 완료: {dir_name}");
@@ -197,6 +187,7 @@ impl SpecIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::kanban::KanbanStage;
     use std::fs;
     use tempfile::TempDir;
 

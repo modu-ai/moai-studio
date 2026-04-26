@@ -15,6 +15,6 @@ pub mod watch;
 pub use parser::{ParsedSpec, parse_spec_md};
 pub use state::{
     AcRecord, AcState, AcSummary, KanbanStage, SpecFileKind, SpecId, SpecIndex, SpecRecord,
-    parse_ac_states_from_progress,
+    parse_ac_states_from_progress, read_stage, write_stage,
 };
 pub use watch::{SpecChangeEvent, SpecWatcher};
