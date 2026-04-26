@@ -38,6 +38,60 @@ pub enum PaletteVariant {
     SlashBar,
 }
 
+// ============================================================
+// PaletteOverlay — MS-3 RootView 통합 헬퍼 (AC-PL-14~15)
+// ============================================================
+
+/// PaletteOverlay — RootView 가 보유하는 palette 상태 관리자.
+///
+/// @MX:ANCHOR: [AUTO] PaletteOverlay — RootView 통합 진입점.
+/// @MX:REASON: [AUTO] AC-PL-14/15 mutual exclusion 계약. fan_in >= 3:
+///   RootView.handle_palette_key_event, RootView.render_palette_overlay, lib::tests.
+/// @MX:SPEC: SPEC-V3-012 MS-3
+pub struct PaletteOverlay {
+    /// 현재 활성 variant. None 이면 palette 가 닫혀있음.
+    pub active_variant: Option<PaletteVariant>,
+}
+
+impl PaletteOverlay {
+    /// 새 PaletteOverlay 를 생성한다 (초기 상태: 닫힘).
+    pub fn new() -> Self {
+        Self {
+            active_variant: None,
+        }
+    }
+
+    /// 주어진 variant 를 연다. 이미 다른 variant 가 열려있으면 교체 (mutual exclusion).
+    pub fn open(&mut self, variant: PaletteVariant) {
+        self.active_variant = Some(variant);
+    }
+
+    /// 현재 열려있는 palette 를 닫는다.
+    pub fn dismiss(&mut self) {
+        self.active_variant = None;
+    }
+
+    /// variant 를 toggle 한다. 동일 variant 가 이미 열려있으면 닫고, 아니면 연다 (AC-PL-14).
+    pub fn toggle(&mut self, variant: PaletteVariant) {
+        if self.active_variant == Some(variant) {
+            self.active_variant = None;
+        } else {
+            self.active_variant = Some(variant);
+        }
+    }
+
+    /// palette 가 열려있는지 여부.
+    pub fn is_visible(&self) -> bool {
+        self.active_variant.is_some()
+    }
+}
+
+impl Default for PaletteOverlay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Palette 이벤트 — Scrim 과 PaletteView 가 공유하는 이벤트 타입.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PaletteEvent {
@@ -55,6 +109,85 @@ pub enum PaletteEvent {
 mod tests {
     use super::*;
     use crate::palette::variants::{CmdPalette, CommandPalette, SlashBar};
+
+    // ----------------------------------------------------------
+    // PaletteOverlay 단위 테스트 (AC-PL-14/15 기반)
+    // ----------------------------------------------------------
+
+    /// PaletteOverlay 초기 상태는 닫힘 (active_variant = None).
+    #[test]
+    fn overlay_initial_state_is_closed() {
+        let overlay = PaletteOverlay::new();
+        assert!(overlay.active_variant.is_none());
+        assert!(!overlay.is_visible());
+    }
+
+    /// open(CmdPalette) → active_variant == CmdPalette.
+    #[test]
+    fn overlay_open_cmd_palette() {
+        let mut overlay = PaletteOverlay::new();
+        overlay.open(PaletteVariant::CmdPalette);
+        assert_eq!(overlay.active_variant, Some(PaletteVariant::CmdPalette));
+        assert!(overlay.is_visible());
+    }
+
+    /// open another variant → 이전 variant 는 교체됨 (mutual exclusion).
+    #[test]
+    fn overlay_open_replaces_existing_variant() {
+        let mut overlay = PaletteOverlay::new();
+        overlay.open(PaletteVariant::CmdPalette);
+        overlay.open(PaletteVariant::CommandPalette);
+        assert_eq!(overlay.active_variant, Some(PaletteVariant::CommandPalette));
+        assert_ne!(overlay.active_variant, Some(PaletteVariant::CmdPalette));
+    }
+
+    /// dismiss() → active_variant == None.
+    #[test]
+    fn overlay_dismiss_closes() {
+        let mut overlay = PaletteOverlay::new();
+        overlay.open(PaletteVariant::SlashBar);
+        overlay.dismiss();
+        assert!(overlay.active_variant.is_none());
+        assert!(!overlay.is_visible());
+    }
+
+    /// toggle — 닫혀있을 때 open, 같은 variant 열려있을 때 dismiss.
+    #[test]
+    fn overlay_toggle_opens_when_closed() {
+        let mut overlay = PaletteOverlay::new();
+        overlay.toggle(PaletteVariant::CmdPalette);
+        assert_eq!(overlay.active_variant, Some(PaletteVariant::CmdPalette));
+    }
+
+    /// toggle — 같은 variant 가 열려있으면 닫힘 (AC-PL-14 toggle semantics).
+    #[test]
+    fn overlay_toggle_closes_same_variant() {
+        let mut overlay = PaletteOverlay::new();
+        overlay.open(PaletteVariant::CmdPalette);
+        overlay.toggle(PaletteVariant::CmdPalette);
+        assert!(overlay.active_variant.is_none());
+    }
+
+    /// toggle — 다른 variant 가 열려있으면 교체 (mutual exclusion 유지).
+    #[test]
+    fn overlay_toggle_replaces_different_variant() {
+        let mut overlay = PaletteOverlay::new();
+        overlay.open(PaletteVariant::CmdPalette);
+        overlay.toggle(PaletteVariant::CommandPalette);
+        assert_eq!(overlay.active_variant, Some(PaletteVariant::CommandPalette));
+    }
+
+    /// 전체 SlashBar 순환 (open → open → dismiss → closed).
+    #[test]
+    fn overlay_slash_bar_lifecycle() {
+        let mut overlay = PaletteOverlay::new();
+        overlay.open(PaletteVariant::SlashBar);
+        assert_eq!(overlay.active_variant, Some(PaletteVariant::SlashBar));
+        overlay.open(PaletteVariant::CmdPalette);
+        assert_ne!(overlay.active_variant, Some(PaletteVariant::SlashBar));
+        overlay.dismiss();
+        assert!(!overlay.is_visible());
+    }
 
     /// PaletteVariant enum 이 3개 variant 를 모두 포함한다.
     #[test]
