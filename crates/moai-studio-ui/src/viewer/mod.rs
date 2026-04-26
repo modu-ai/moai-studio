@@ -8,7 +8,13 @@
 //!   (RG-MV-4 async-lsp + lsp-types 통합).
 
 pub mod code;
+// SPEC-V3-006 MS-3a: Find/Replace (CodeViewer + MarkdownViewer 공통)
+pub mod find_replace;
+// SPEC-V3-006 MS-3a: LSP Hover tooltip (mock diagnostic provider)
+pub mod lsp;
 pub mod markdown;
+// SPEC-V3-006 MS-3a: @MX gutter 아이콘 + popover (mock scanner)
+pub mod mx_gutter;
 pub mod scroll;
 
 // @MX:ANCHOR: [AUTO] leaf-kind-dispatch
