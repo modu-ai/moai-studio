@@ -121,6 +121,9 @@ pub struct RootView {
     pub user_settings: settings::user_settings::UserSettings,
     /// 현재 런타임 테마 (ActiveTheme dispatch wrapper, REQ-V13-061).
     pub active_theme: design::runtime::ActiveTheme,
+    // ── SPEC-V3-006 MS-3a: Find/Replace 상태 ──
+    /// Find bar 표시 여부 (Cmd+F → true, Esc → false).
+    pub find_bar_open: bool,
 }
 
 impl RootView {
@@ -147,6 +150,7 @@ impl RootView {
             settings_modal: None,
             user_settings,
             active_theme,
+            find_bar_open: false,
         }
     }
 
@@ -237,6 +241,39 @@ impl RootView {
     /// Palette overlay 렌더 여부 — active palette variant 가 있을 때 true.
     pub fn has_palette_overlay(&self) -> bool {
         self.palette.is_visible()
+    }
+
+    // ── SPEC-V3-006 MS-3a: Find/Replace 글로벌 키바인딩 ──
+
+    /// Find/Replace 글로벌 키 이벤트 처리 (SPEC-V3-006 MS-3a).
+    ///
+    /// - Cmd+F: active viewer 의 find bar 를 열거나 포커스
+    /// - Esc: find bar 가 열려있으면 닫기 (palette/settings 핸들러 이후에 호출)
+    ///
+    /// 반환값: 이 핸들러가 키 이벤트를 소비했으면 true.
+    pub fn handle_find_key_event(&mut self, ev: &KeyDownEvent) -> bool {
+        let k = &ev.keystroke;
+        let cmd = k.modifiers.platform;
+        let ctrl = k.modifiers.control;
+        let shift = k.modifiers.shift;
+        let key = k.key.as_str();
+
+        // Cmd+F (macOS) 또는 Ctrl+F (Linux/Win) — find bar open.
+        if (cmd || ctrl) && !shift && key == "f" {
+            self.find_bar_open = true;
+            return true;
+        }
+        // Esc — find bar 가 열려있으면 닫기.
+        if key == "escape" && self.find_bar_open {
+            self.find_bar_open = false;
+            return true;
+        }
+        false
+    }
+
+    /// Find bar 가 현재 열려있는지 확인한다.
+    pub fn has_find_bar(&self) -> bool {
+        self.find_bar_open
     }
 
     // ── SPEC-V3-013 MS-3: Settings 키바인딩 (AC-V13-1) ──
@@ -537,9 +574,15 @@ impl Render for RootView {
                     return;
                 }
                 // MS-3: palette 키 처리 — 소비되면 tab 키 dispatch 스킵.
-                if !this.handle_palette_key_event(ev) {
-                    this.handle_key_event(ev, cx);
+                if this.handle_palette_key_event(ev) {
+                    return;
                 }
+                // MS-3a: Find/Replace Cmd+F 처리 — 소비되면 tab 키 dispatch 스킵.
+                if this.handle_find_key_event(ev) {
+                    cx.notify();
+                    return;
+                }
+                this.handle_key_event(ev, cx);
             }))
             .child(title_bar(self.title_label()))
             .child(main_body(&self.workspaces, rows, new_ws_btn, tab_container))
@@ -1504,5 +1547,76 @@ mod tests {
         let consumed = view.handle_settings_key_event(&ev);
         assert!(consumed, "Ctrl+, 는 소비되어야 함");
         assert!(view.has_settings_modal());
+    }
+
+    // ── SPEC-V3-006 MS-3a: Find/Replace 키바인딩 테스트 ──
+
+    fn make_find_key_event(cmd: bool, ctrl: bool, shift: bool, key: &str) -> KeyDownEvent {
+        KeyDownEvent {
+            keystroke: gpui::Keystroke {
+                modifiers: gpui::Modifiers {
+                    platform: cmd,
+                    control: ctrl,
+                    shift,
+                    ..Default::default()
+                },
+                key: key.to_string(),
+                key_char: None,
+            },
+            is_held: false,
+        }
+    }
+
+    #[test]
+    fn find_bar_initially_closed() {
+        let view = RootView::new(vec![], dummy_path());
+        assert!(
+            !view.has_find_bar(),
+            "초기 상태에서 find bar 는 닫혀있어야 한다"
+        );
+    }
+
+    #[test]
+    fn cmd_f_opens_find_bar() {
+        let mut view = RootView::new(vec![], dummy_path());
+        let ev = make_find_key_event(true, false, false, "f");
+        let consumed = view.handle_find_key_event(&ev);
+        assert!(consumed, "Cmd+F 는 소비되어야 한다");
+        assert!(view.has_find_bar(), "Cmd+F 후 find bar 가 열려야 한다");
+    }
+
+    #[test]
+    fn ctrl_f_opens_find_bar() {
+        let mut view = RootView::new(vec![], dummy_path());
+        let ev = make_find_key_event(false, true, false, "f");
+        let consumed = view.handle_find_key_event(&ev);
+        assert!(consumed, "Ctrl+F 는 소비되어야 한다");
+        assert!(view.has_find_bar());
+    }
+
+    #[test]
+    fn escape_closes_find_bar() {
+        let mut view = RootView::new(vec![], dummy_path());
+        // Cmd+F 로 열기
+        let open_ev = make_find_key_event(true, false, false, "f");
+        view.handle_find_key_event(&open_ev);
+        assert!(view.has_find_bar());
+        // Esc 로 닫기
+        let esc_ev = make_find_key_event(false, false, false, "escape");
+        let consumed = view.handle_find_key_event(&esc_ev);
+        assert!(consumed, "Esc 는 find bar 닫을 때 소비되어야 한다");
+        assert!(!view.has_find_bar(), "Esc 후 find bar 가 닫혀야 한다");
+    }
+
+    #[test]
+    fn escape_when_find_bar_closed_is_not_consumed() {
+        let mut view = RootView::new(vec![], dummy_path());
+        // find bar 가 닫혀있을 때 Esc 는 소비하지 않는다
+        let esc_ev = make_find_key_event(false, false, false, "escape");
+        let consumed = view.handle_find_key_event(&esc_ev);
+        assert!(
+            !consumed,
+            "find bar 닫혀있을 때 Esc 는 소비하지 않아야 한다"
+        );
     }
 }

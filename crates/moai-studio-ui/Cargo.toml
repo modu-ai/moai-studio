@@ -45,6 +45,9 @@ tree-sitter-go = "0.25"
 tree-sitter-python = "0.25"
 tree-sitter-typescript = "0.23"
 
+# SPEC-V3-006 MS-3a: @MX tag scan 및 Find/Replace 정규식 (RG-MV-5)
+regex = "1"
+
 [dev-dependencies]
 # T11 (SPEC-V3-003 MS-2 AC-P-19): tab_switch 50-cycle bench.
 # criterion 0.5 는 harness=false 로 동작하며 --test 모드로 smoke-run 가능.
