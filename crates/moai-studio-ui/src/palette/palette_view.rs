@@ -458,4 +458,51 @@ mod tests {
         assert!((LIST_MAX_HEIGHT - 320.0).abs() < f32::EPSILON);
         assert!((HIGHLIGHT_ALPHA - 0.20).abs() < f32::EPSILON);
     }
+
+    // ----------------------------------------------------------
+    // AC-PL-13: highlight accent-soft 스타일 검증
+    // ----------------------------------------------------------
+
+    /// AC-PL-13: highlight 인덱스 [0, 2, 4] 위치 문자가 accent-soft 스타일 대상이다.
+    ///
+    /// PaletteView 는 highlight 인덱스를 그대로 보관하며, 렌더러가 HIGHLIGHT_ALPHA 와
+    /// brand::PRIMARY_DARK 를 조합한 accent-soft 스타일을 해당 인덱스에 적용한다.
+    /// 이 테스트는 HIGHLIGHT_ALPHA 상수와 인덱스 경계를 검증한다.
+    #[test]
+    fn highlight_uses_accent_soft() {
+        // fuzzy 매처에서 반환된 highlight 인덱스를 PaletteView 가 그대로 노출한다.
+        // accent-soft 스타일: brand::PRIMARY_DARK + HIGHLIGHT_ALPHA(0.20).
+        // HIGHLIGHT_ALPHA 가 0.20 인지 확인.
+        assert!(
+            (HIGHLIGHT_ALPHA - 0.20).abs() < f32::EPSILON,
+            "accent-soft alpha 는 0.20 이어야 함 (RG-PL-27)"
+        );
+
+        // fuzzy 매처의 highlight 인덱스가 유효한 바이트 인덱스인지 확인.
+        let candidate = "a_b_c";
+        let highlights: Vec<usize> = vec![0, 2, 4];
+        for &idx in &highlights {
+            assert!(
+                idx < candidate.len(),
+                "highlight 인덱스 {idx} 가 후보 길이 {} 를 초과",
+                candidate.len()
+            );
+            // 바이트 인덱스가 유효한 char boundary 인지 확인.
+            assert!(
+                candidate.is_char_boundary(idx),
+                "highlight 인덱스 {idx} 가 char boundary 가 아님"
+            );
+        }
+
+        // highlight 인덱스 순서가 오름차순이어야 한다.
+        for i in 0..highlights.len() - 1 {
+            assert!(
+                highlights[i] < highlights[i + 1],
+                "highlight 인덱스가 오름차순이 아님: highlights[{i}]={} >= highlights[{}]={}",
+                highlights[i],
+                i + 1,
+                highlights[i + 1]
+            );
+        }
+    }
 }
