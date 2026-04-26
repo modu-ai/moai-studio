@@ -171,3 +171,149 @@ MoAI Studio 디자인 캔버스 완성했어요.
 - Tweak 추가 (폰트 사이즈, 모서리 둥글기 등)
 - 실제 코드 핸드오프용 토큰 추출
 
+## User
+
+첨부한 파일의 claude design 지침대로 모두 추가/수정을 해줘
+
+## Assistant
+
+_[tool: snip]_
+
+_[tool: read_file]_
+
+알겠습니다. 분석한 내용을 정리하면:
+
+**P0 (즉시 수정):**
+1. Color audit — `#2563EB` blue accent → `#144a46` 모두의AI 청록
+2. Light theme 모든 surface 완성
+3. 치수 정확화 (tab 36px, gutter 44px / MX gutter 64px)
+4. Syntax color 매핑 정확화
+
+**P1 (신규 9 surface + 5 state):**
+- Cmd+P / Cmd+Shift+P / Cmd+F 팔레트
+- LSP Hover, MX Popover
+- 3-way Merge Diff
+- Sprint Contract Panel
+- /moai Slash Command
+- Settings Modal
+- Crash/Update banner, LSP/PTY starting, Workspace switching
+
+기존 파일들의 현재 상태를 확인하고 작업 계획 세울게요.
+
+_[tool: grep]_
+
+_[tool: grep]_
+
+_[tool: read_file]_
+
+Let me check the rest of the structure quickly:
+
+_[tool: read_file]_
+
+_[tool: grep]_
+
+_[tool: grep]_
+
+Now let me look at the rest of the HTML CSS so I understand the surface CSS classes:
+
+_[tool: read_file]_
+
+_[tool: read_file]_
+
+_[tool: snip]_
+
+Now I have full context. Let me build the revisions. Plan:
+
+**P0 fixes (in CSS):**
+- Already mostly correct! `--accent: #144a46`, syntax colors right, MX gutter 64px, code gutter 44px ✓
+- Tab activeBg + bold (currently has top stripe; add bg color too)
+- Cyan accent: should be `#06B6D4` not `#2a8a8c`
+- Status bar height 24px ✓, file row 26px/22px ✓
+
+**P1 New surfaces (9):**
+1. CmdP, CmdShiftP, CmdF, LSP Hover, MX Popover, 3-way Merge, Sprint Contract, /moai slash, Settings modal
+
+**P1 New states (5):** Crash, Update, LSP starting, PTY starting, Workspace switching
+
+I'll create a new modular file `moai-revisions.jsx` with all new surfaces/states, fix small CSS issues in HTML, and add new sections to the Design Canvas.
+
+_[tool: update_todos]_
+
+_[tool: str_replace_edit]_
+
+_[tool: str_replace_edit]_
+
+Now add CSS for the new surfaces (palettes, popovers, modals, banners) before the closing `</style>`:
+
+_[tool: str_replace_edit]_
+
+Now create the new `moai-revisions.jsx` file with the 9 surfaces + 5 states:
+
+_[tool: write_file]_
+
+Now let me check what icons are available in `moai-icons.jsx` so I'm using real ones:
+
+_[tool: grep]_
+
+I need to map icon names. Let me check the actual icon names in the icons file then fix references in revisions:
+
+_[tool: snip]_
+
+_[tool: grep]_
+
+I need to fix icon name mismatches in `moai-revisions.jsx`. Real names: `branch` (not `gitBranch`), `alertTri` (not `alert`), `x` (not `close`), no `command`/`info`/`palette`. Let me fix:
+
+_[tool: run_script]_
+
+_[tool: snip]_
+
+_[tool: read_file]_
+
+_[tool: snip]_
+
+_[tool: grep]_
+
+_[tool: snip]_
+
+_[tool: str_replace_edit]_
+
+_[tool: read_file]_
+
+_[tool: snip]_
+
+Now wire the new components into moai-app.jsx. Add Round 2 sections at the end, plus a tweak for choosing which round-2 surface to highlight:
+
+_[tool: str_replace_edit]_
+
+_[tool: str_replace_edit]_
+
+_[tool: snip]_
+
+_[tool: done]_
+
+_[tool: snip]_
+
+_[tool: fork_verifier_agent]_
+
+**Round 2 추가 완료** — 6개 새 섹션 · 14개 새 아트보드.
+
+**P0 fixes**
+- Cyan accent `#2a8a8c` → `#06B6D4`
+- 활성 탭 배경 추가 + 700 weight (top stripe와 함께)
+
+**P1 새 surfaces (9)**
+- `⌘P` File quick-open · `⌘⇧P` Command palette · `/moai` slash dispatch
+- `⌘F` Find & Replace toolbar
+- LSP hover popover (rust-analyzer)
+- `@MX:ANCHOR` tag detail popover
+- 3-way Merge conflict (Base · Ours · Theirs)
+- Sprint Contract 승인 패널
+- Settings modal (Appearance + Keyboard 두 섹션)
+
+**P1 새 states (5)**
+- Crash banner · Update banner
+- LSP/PTY starting (애니메이션 도트)
+- Workspace switching overlay
+
+이제 캔버스에 **총 16 섹션 / 40+ 아트보드**가 있고, 모든 새 surface가 Tweaks의 mode/accent/density를 따라갑니다. ⌘P/⌘⇧P/Settings는 코드 위에 scrim으로 떠 있는 진짜 오버레이로 그렸습니다.
+
