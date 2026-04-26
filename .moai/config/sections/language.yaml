@@ -1,6 +1,6 @@
 language:
     agent_prompt_language: en
-    code_comments: ko
+    code_comments: en
     conversation_language: ko
     conversation_language_name: ko
     documentation: ko

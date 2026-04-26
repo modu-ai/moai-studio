@@ -291,17 +291,70 @@ v0.1.0 릴리스 시점에:
 
 ---
 
-## 9. Troubleshooting
+## 9. Code Comments Policy [HARD]
+
+### 9.1 영어 주석 강제
+
+[HARD] 본 레포의 모든 코드 주석은 **영어** 로 작성한다. `.moai/config/sections/language.yaml` 의 `code_comments: en` 설정과 일치.
+
+적용 범위:
+- inline comment (`//`, `#`, `--`, `;` 등 모든 언어 prefix)
+- docstring / doc-comment (`///`, `/** */`, `//!`, `"""..."""` 등)
+- module / file 헤더 주석 (`//!` Rust file-level, package docstring Python 등)
+- @MX 태그 description 및 @MX:REASON sub-line
+- 테스트 함수 주석 및 assert message (가능한 한 영어)
+
+### 9.2 적용 시점 및 점진 전환
+
+- **2026-04-26 이후 작성·수정되는 모든 코드** 는 즉시 영어 주석 적용 (HARD)
+- 기존 한국어 주석 코드: 정책 활성 이후 해당 파일을 touch 할 때 그 시점에 영어로 전환 (점진 마이그레이션)
+- 일괄 변환은 별도 SPEC (`SPEC-V3-COMMENTS-MIGRATION` 후보) 으로 분리 — 본 정책은 신규 코드와 touch-on-modify 만 강제
+
+### 9.3 한국어 유지 영역 (제외)
+
+다음은 영어 정책에서 제외된다 (별도 language.yaml 설정 따라감):
+- SPEC 문서 (`.moai/specs/**/*.md`) — `documentation: ko`
+- README / CHANGELOG / 사용자 가이드 — `documentation: ko`
+- git commit message subject 및 body — `git_commit_messages: ko`
+- 사용자 응답 (orchestrator → user) — `conversation_language: ko`
+- error_messages 의 사용자 메시지 — `error_messages: en` (이미 영어, 별도)
+
+### 9.4 Skill / Agent / Rule 정의
+
+`.claude/skills/**`, `.claude/agents/**`, `.claude/rules/**` 의 instruction document 는 영어로 작성 (CLAUDE.md / coding-standards.md 의 Language Policy 따라감). 본 §9 와 동일한 영어 강제.
+
+### 9.5 Agent 위임 시 명시
+
+코드를 작성하는 subagent (`manager-tdd`, `manager-ddd`, `expert-backend`, `expert-frontend` 등) 의 위임 프롬프트에 다음 라인을 권장 포함:
+
+> All code comments and docstrings MUST be in English. Variable / function / type / module names are also in English (already enforced by Rust convention). Korean is reserved for SPEC documents (`.moai/specs/`), git commit messages, README / docs, and user-facing orchestrator responses only.
+
+### 9.6 위반 처리
+
+- 코드 리뷰 시 한국어 주석 발견 → 영어로 수정 요청 (블로킹 사유)
+- 자동 검증 도구 부재: `cargo clippy` / `eslint` 등 표준 lint 는 주석 언어 검사 없음 → 수동 리뷰
+- 향후 자동 검사 도입 후보: pre-commit hook 에서 정규식 기반 한글 unicode 검출 (단, 의도적 한글 string literal 은 false positive 가능 — 신중히 도입)
+
+---
+
+## 10. Troubleshooting
 
 | 상황 | 대응 |
 |------|------|
 | feature 브랜치가 develop 에서 오래 방치 → merge conflict 우려 | `git rebase develop` 또는 develop merge 로 최신화. 주기적 sync 권장. |
 | hotfix back-merge 누락 → develop 에 regression | PR 자동화: hotfix 머지 후 즉시 back-merge PR 자동 열기 (Release Drafter 외 별도 workflow 향후 도입). |
 | Release Drafter 가 라벨 없는 PR 을 미분류로 표시 | PR 작성자는 머지 전 3축 라벨 부착 필수. 미부착 PR 은 review 에서 reject. |
+| Release Drafter action 자체가 "Invalid config file" 로 실패 | `.github/release-drafter.yml` 이 default branch (`main`) 에 없어서 발생 (CLAUDE.local.md §8 의 "main 은 bootstrap 상태" 임시 규칙 부산물). v0.1.0 release 시 main 에 release-drafter.yml 동기화하면 해소. 그 전까지는 무시 가능. |
 | 실수로 main 에 직접 push | Branch protection rule 활성화 시 차단됨. 미설정 상태라면 즉시 revert + hotfix 브랜치로 이관. |
+| 한국어 주석이 신규 코드에 들어감 | §9.1 위반. 머지 전 영어로 수정. agent 가 작성한 경우 위임 프롬프트에 §9.5 라인 누락 → 다음 위임에 추가. |
+| GitHub Actions billing 차단 | Pro 플랜 활성화 또는 spending limit 상향. 활성화 후 `gh run rerun <run-id>` 로 실패한 workflow 재실행. |
 
 ---
 
-Version: 1.0.0
-Last Updated: 2026-04-24
+Version: 1.1.0
+Last Updated: 2026-04-26
 Scope: github.com/GoosLab/moai-studio
+
+Changelog:
+- 1.1.0 (2026-04-26): §9 Code Comments Policy 신설 (HARD: 모든 코드 주석 영어). Troubleshooting → §10 이동. CI billing / Release Drafter config troubleshooting 항목 추가.
+- 1.0.0 (2026-04-24): 초안. Enhanced GitHub Flow + 3축 라벨 + Release Drafter + branch protection 가이드.
