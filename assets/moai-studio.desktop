@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=moai-studio
+Comment=GUI shell for MoAI-ADK
+Exec=/usr/bin/moai-studio
+Icon=moai-studio
+Categories=Development;Utility;
+Terminal=false
+StartupNotify=true
