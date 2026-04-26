@@ -267,6 +267,137 @@ impl LspBannerState {
 }
 
 // ============================================================
+// MS-3b: LSP spawn graceful degradation (AC-MV-5, REQ-MV-043)
+// ============================================================
+
+// @MX:ANCHOR: [AUTO] lsp-spawn-state
+// @MX:REASON: [AUTO] SPEC-V3-006 MS-3b AC-MV-5. LspSpawnState 는 LSP 서버
+//   spawn 결과를 표현하는 핵심 enum 이다.
+//   fan_in >= 3: try_spawn_lsp, CodeViewer 초기화, banner_message, 테스트.
+
+// @MX:WARN: [AUTO] try-spawn-lsp-subprocess
+// @MX:REASON: [AUTO] try_spawn_lsp 내부에서 std::process::Command 로 외부 프로세스를
+//   탐침한다. SIGCHLD 처리, PATH 환경변수 의존성 있음. 실패 시 Unavailable 반환
+//   (패닉 없음, AC-MV-5 graceful degradation 보장).
+
+/// LSP 서버 spawn 상태 (MS-3b).
+///
+/// `Active` 는 향후 실제 LSP 클라이언트를 담을 placeholder 이다.
+/// MS-3b 범위에서는 graceful degradation 경로(Unavailable)만 구현한다.
+#[derive(Debug)]
+pub enum LspSpawnState {
+    /// 아직 spawn 시도 안 함
+    NotAttempted,
+    /// 서버 spawn 성공 (MS-3b: 바이너리 존재 확인 완료 — 실제 handshake 는 미구현)
+    Active { server_name: String },
+    /// 서버 바이너리 없음 또는 spawn 실패 → graceful degradation
+    Unavailable {
+        server_name: String,
+        reason: String,
+    },
+}
+
+// @MX:ANCHOR: [AUTO] server-for-extension
+// @MX:REASON: [AUTO] SPEC-V3-006 MS-3b. server_for_extension 은 확장자 → LSP 서버
+//   이름 매핑의 단일 진입점이다.
+//   fan_in >= 3: try_spawn_lsp, CodeViewer 초기화, 테스트.
+
+/// 파일 확장자에 대응하는 LSP 서버 이름을 반환한다 (REQ-MV-042).
+///
+/// 알 수 없는 확장자는 `None` 반환.
+pub fn server_for_extension(ext: &str) -> Option<&'static str> {
+    match ext {
+        "rs" => Some("rust-analyzer"),
+        "go" => Some("gopls"),
+        "py" => Some("pyright"),
+        "ts" | "tsx" => Some("typescript-language-server"),
+        _ => None,
+    }
+}
+
+/// LSP 서버 바이너리 존재 여부를 탐침하여 `LspSpawnState` 를 반환한다 (AC-MV-5).
+///
+/// 구현 전략:
+/// - `std::process::Command::new(server).arg("--version").output()` 로 바이너리 존재 확인
+/// - `NotFound` 오류 → `Unavailable` 반환 (패닉 없음)
+/// - 성공 → `Active` 반환 (MS-3b: handshake 는 미구현)
+///
+/// `file_ext` 에 대응하는 서버가 없으면 `Unavailable` 반환.
+pub fn try_spawn_lsp(file_ext: &str) -> LspSpawnState {
+    let Some(server_name) = server_for_extension(file_ext) else {
+        return LspSpawnState::Unavailable {
+            server_name: "(none)".to_string(),
+            reason: format!("확장자 '{}' 에 대응하는 LSP 서버 없음", file_ext),
+        };
+    };
+    try_spawn_lsp_with_server_name(server_name)
+}
+
+/// 서버 이름을 직접 받아 LSP 바이너리 존재를 탐침한다.
+///
+/// `try_spawn_lsp` 의 내부 구현 — 테스트에서도 직접 호출 가능.
+pub fn try_spawn_lsp_with_server_name(server_name: &str) -> LspSpawnState {
+    match std::process::Command::new(server_name)
+        .arg("--version")
+        .output()
+    {
+        Ok(_) => LspSpawnState::Active {
+            server_name: server_name.to_string(),
+        },
+        Err(e) => {
+            // 오류 로그 (stderr 에 1회 기록 — AC-MV-5)
+            eprintln!(
+                "[moai-lsp] LSP 서버 '{}' spawn 실패: {}",
+                server_name, e
+            );
+            LspSpawnState::Unavailable {
+                server_name: server_name.to_string(),
+                reason: e.to_string(),
+            }
+        }
+    }
+}
+
+/// LSP spawn 결과로부터 banner 메시지를 생성한다.
+///
+/// `Unavailable` → `Some("LSP unavailable: {server}")` 를 최초 1회만 반환.
+/// `Active` 또는 `NotAttempted` → `None`.
+pub struct LspSpawnBanner {
+    /// banner 가 표시됐는지 여부 (1회 제한)
+    shown_once: bool,
+}
+
+impl LspSpawnBanner {
+    /// 새 banner 를 생성한다 (아직 표시 안 됨).
+    pub fn new() -> Self {
+        Self { shown_once: false }
+    }
+
+    /// spawn 상태에 따라 banner 메시지를 반환한다.
+    ///
+    /// - `Unavailable` 이고 아직 표시 안 됐으면 `Some(message)` + shown 플래그 설정
+    /// - 이미 표시했거나 `Active`/`NotAttempted` 이면 `None`
+    pub fn banner_message(&mut self, state: &LspSpawnState) -> Option<String> {
+        if self.shown_once {
+            return None;
+        }
+        match state {
+            LspSpawnState::Unavailable { server_name, .. } => {
+                self.shown_once = true;
+                Some(format!("LSP 미설치: {}", server_name))
+            }
+            _ => None,
+        }
+    }
+}
+
+impl Default for LspSpawnBanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ============================================================
 // 단위 테스트 (MS-3a TDD — RED → GREEN)
 // ============================================================
 
@@ -468,5 +599,101 @@ mod tests {
         let p = MockLspProvider::with_diagnostics(vec![diag]);
         assert_eq!(p.diagnostics_at(0, 4).len(), 1); // 포함
         assert_eq!(p.diagnostics_at(0, 5).len(), 0); // end 제외
+    }
+
+    // ── T6: server_for_extension (MS-3b) ──
+
+    #[test]
+    fn server_for_extension_known_languages() {
+        assert_eq!(server_for_extension("rs"), Some("rust-analyzer"));
+        assert_eq!(server_for_extension("go"), Some("gopls"));
+        assert_eq!(server_for_extension("py"), Some("pyright"));
+        assert_eq!(server_for_extension("ts"), Some("typescript-language-server"));
+        assert_eq!(server_for_extension("tsx"), Some("typescript-language-server"));
+    }
+
+    #[test]
+    fn server_for_extension_unknown_returns_none() {
+        assert_eq!(server_for_extension("unknown_ext_xyz"), None);
+        assert_eq!(server_for_extension(""), None);
+        assert_eq!(server_for_extension("css"), None);
+    }
+
+    // ── T7: try_spawn_lsp graceful degradation (MS-3b) ──
+
+    #[test]
+    fn try_spawn_with_nonexistent_server_returns_unavailable() {
+        // 존재하지 않는 서버 바이너리 이름으로 spawn 시도
+        // server_for_extension 을 우회하여 직접 가짜 서버명으로 탐침
+        let state = try_spawn_lsp_with_server_name("nonexistent-lsp-xyz123");
+        assert!(
+            matches!(state, LspSpawnState::Unavailable { .. }),
+            "존재하지 않는 서버는 Unavailable 이어야 한다"
+        );
+    }
+
+    #[test]
+    fn try_spawn_unavailable_logs_error_no_panic() {
+        // 패닉 없이 Unavailable 반환되면 성공
+        let state = try_spawn_lsp_with_server_name("nonexistent-lsp-xyz123");
+        match state {
+            LspSpawnState::Unavailable { reason, .. } => {
+                assert!(!reason.is_empty(), "실패 이유가 있어야 한다");
+            }
+            _ => panic!("Unavailable 이어야 한다"),
+        }
+    }
+
+    #[test]
+    fn try_spawn_unknown_extension_returns_unavailable() {
+        let state = try_spawn_lsp("unknownext123");
+        assert!(
+            matches!(state, LspSpawnState::Unavailable { .. }),
+            "알 수 없는 확장자는 Unavailable 이어야 한다"
+        );
+    }
+
+    // ── T8: LspSpawnBanner (MS-3b) ──
+
+    #[test]
+    fn banner_message_shown_once() {
+        let state = LspSpawnState::Unavailable {
+            server_name: "rust-analyzer".to_string(),
+            reason: "not found".to_string(),
+        };
+        let mut banner = LspSpawnBanner::new();
+        let first = banner.banner_message(&state);
+        let second = banner.banner_message(&state);
+        assert!(first.is_some(), "첫 번째 호출은 Some 반환");
+        assert!(second.is_none(), "두 번째 호출은 None (1회 제한)");
+    }
+
+    #[test]
+    fn banner_message_none_when_active() {
+        let state = LspSpawnState::Active {
+            server_name: "rust-analyzer".to_string(),
+        };
+        let mut banner = LspSpawnBanner::new();
+        let msg = banner.banner_message(&state);
+        assert!(msg.is_none(), "Active 상태에서는 banner 없음");
+    }
+
+    #[test]
+    fn banner_message_none_when_not_attempted() {
+        let state = LspSpawnState::NotAttempted;
+        let mut banner = LspSpawnBanner::new();
+        let msg = banner.banner_message(&state);
+        assert!(msg.is_none(), "NotAttempted 상태에서는 banner 없음");
+    }
+
+    #[test]
+    fn banner_message_contains_server_name() {
+        let state = LspSpawnState::Unavailable {
+            server_name: "gopls".to_string(),
+            reason: "binary not found".to_string(),
+        };
+        let mut banner = LspSpawnBanner::new();
+        let msg = banner.banner_message(&state).unwrap();
+        assert!(msg.contains("gopls"), "banner 메시지에 서버 이름 포함");
     }
 }
