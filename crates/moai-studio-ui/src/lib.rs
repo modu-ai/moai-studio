@@ -28,6 +28,8 @@ pub mod tabs;
 pub mod terminal;
 // SPEC-V3-006 MS-1: viewer surface 모듈
 pub mod viewer;
+// SPEC-V3-009 MS-1: SPEC Management UI 모듈 (SpecListView + SpecDetailView)
+pub mod spec_ui;
 
 use design::tokens::{self as tok, traffic};
 use gpui::{

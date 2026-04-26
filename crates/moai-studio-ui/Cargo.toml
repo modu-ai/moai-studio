@@ -34,6 +34,9 @@ arboard = "3.0"
 # SPEC-V3-010 MS-1: agent dashboard domain crate
 moai-studio-agent = { path = "../moai-studio-agent" }
 
+# SPEC-V3-009 MS-1: SPEC 파싱 + AC 상태 추적
+moai-studio-spec = { path = "../moai-studio-spec" }
+
 # SPEC-V3-006 MS-1: Markdown 파싱 (RG-MV-1, pulldown-cmark)
 pulldown-cmark = "0.13"
 
