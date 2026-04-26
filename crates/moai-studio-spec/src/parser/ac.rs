@@ -108,42 +108,40 @@ pub fn parse_ac_tables(text: &str) -> Vec<AcRow> {
                     }
                 }
             }
-            Event::Start(Tag::TableRow) => {
-                if !in_table_head {
-                    current_row.clear();
-                    current_cell.clear();
-                }
+            Event::Start(Tag::TableRow) if !in_table_head => {
+                current_row.clear();
+                current_cell.clear();
             }
-            Event::End(TagEnd::TableRow) => {
-                if !in_table_head && is_ac_table {
-                    let row = &current_row;
-                    let get = |idx: Option<usize>| -> Option<&str> {
-                        idx.and_then(|i| row.get(i)).map(|s| s.trim())
-                    };
-                    if let Some(id) = get(id_col) {
-                        // AC ID 패턴: "AC-{group}-{nnn}"
-                        if id.starts_with("AC-") {
-                            let row = AcRow {
-                                id: id.to_string(),
-                                scenario: get(scenario_col)
-                                    .map(|s| s.to_string())
-                                    .unwrap_or_default(),
-                                pass_condition: get(pass_col)
-                                    .map(|s| s.to_string())
-                                    .unwrap_or_default(),
-                                verification: get(verify_col).map(|s| s.to_string()),
-                                rg_mapping: get(rg_col).map(|s| s.to_string()),
-                            };
-                            rows.push(row);
-                        }
-                    } else {
+            Event::End(TagEnd::TableRow) if !in_table_head && is_ac_table => {
+                let row = &current_row;
+                let get = |idx: Option<usize>| -> Option<&str> {
+                    idx.and_then(|i| row.get(i)).map(|s| s.trim())
+                };
+                match get(id_col) {
+                    // AC ID pattern: "AC-{group}-{nnn}".
+                    Some(id) if id.starts_with("AC-") => {
+                        let ac_row = AcRow {
+                            id: id.to_string(),
+                            scenario: get(scenario_col).map(|s| s.to_string()).unwrap_or_default(),
+                            pass_condition: get(pass_col)
+                                .map(|s| s.to_string())
+                                .unwrap_or_default(),
+                            verification: get(verify_col).map(|s| s.to_string()),
+                            rg_mapping: get(rg_col).map(|s| s.to_string()),
+                        };
+                        rows.push(ac_row);
+                    }
+                    Some(_) => {
+                        // ID column present but cell does not look like an AC ID — skip silently.
+                    }
+                    None => {
                         warn!(
-                            "AC 표 행 파싱 실패 (graceful skip): cells={:?}",
+                            "AC row parse failed (graceful skip): cells={:?}",
                             current_row
                         );
                     }
-                    current_row.clear();
                 }
+                current_row.clear();
             }
             Event::Start(Tag::TableCell) => {
                 current_cell.clear();
@@ -158,15 +156,11 @@ pub fn parse_ac_tables(text: &str) -> Vec<AcRow> {
                 }
                 current_cell.clear();
             }
-            Event::Text(t) | Event::Code(t) => {
-                if in_table {
-                    current_cell.push_str(&t);
-                }
+            Event::Text(t) | Event::Code(t) if in_table => {
+                current_cell.push_str(&t);
             }
-            Event::SoftBreak | Event::HardBreak => {
-                if in_table {
-                    current_cell.push(' ');
-                }
+            Event::SoftBreak | Event::HardBreak if in_table => {
+                current_cell.push(' ');
             }
             _ => {}
         }
