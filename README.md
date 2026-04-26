@@ -1,148 +1,208 @@
 # MoAI Studio
 
-> **moai-adk 의 공식 macOS 네이티브 Agent IDE.**
-> Claude Code 를 subprocess 로 호스트하여 27개 hook 이벤트 + 26 전문 에이전트 + TRUST 5 품질 게이트 + @MX 태그 시스템 + Kanban/SPEC 워크플로우를 한 화면에서 시각화 · 조작한다.
+> **moai-adk 공식 크로스플랫폼 Agent IDE.**
+> SPEC-first 개발 방법론, MoAI-ADK 통합, 27개 Hook 이벤트, 26개 전문 에이전트, TRUST 5 품질 게이트, @MX 코드 어노테이션을 갖춘 고성능 네이티브 터미널 멀티플렉서.
 
-**Status**: M2 Complete (Conditional GO v1.2.0). 339 tests passing (Rust 233 + Swift 106).
-**Platform**: macOS only (macOS 14+, Apple Silicon + Intel).
-**License**: MIT
-**Language**: Swift (UI) + Rust (Core)
-**Brand**: MoAI Studio (확정 — 2026-04-11, DESIGN.v4 §14 O6 RESOLVED)
-**Package**: `moai-studio` (바이너리/패키지 식별자)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Rust](https://img.shields.io/badge/rust-1.93%2B-orange.svg)](https://www.rust-lang.org/)
+[![Pane CI](https://github.com/modu-ai/moai-studio/actions/workflows/ci-v3-pane.yml/badge.svg?branch=develop)](https://github.com/modu-ai/moai-studio/actions/workflows/ci-v3-pane.yml)
+[![Rust CI](https://github.com/modu-ai/moai-studio/actions/workflows/ci-rust.yml/badge.svg?branch=develop)](https://github.com/modu-ai/moai-studio/actions/workflows/ci-rust.yml)
+![Status](https://img.shields.io/badge/status-pre--v0.1.0-yellow.svg)
 
-> **저장소 리네임 안내**: 본 저장소의 디스크 경로 (`~/moai/moai-cli`) 와 GitHub URL (`modu-ai/moai-cli`) 은 브랜드 확정에 따라 **장래 `moai-studio` 로 리네임 예정**. 설계 문서와 setup 명령의 현 경로 표기는 실제 디스크 상태와의 정합성을 위해 리네임 시점까지 유지한다.
-
----
-
-## 현재 상태
-
-이 저장소는 **M2 Viewers 마일스톤 완료** 상태입니다 (v1.2.0 — Conditional GO 안정화). 12개 Rust crates + SwiftUI 앱 + 5개 Viewer surfaces (Terminal/FileTree/Markdown/Image/Browser) + Command Palette + NSSplitView binary tree pane 분할 + TabUI 완성.
-
-| 마일스톤 | 상태 | 스프린트 수 | 산출물 | 테스트 |
-|---------|------|----------|--------|--------|
-| **M0** | ✅ 완료 | 2 (Pre-M0 검증, M0 킥오프) | Rust core skeleton + Swift UI shell | 50+ |
-| **M1** | ✅ 완료 (Conditional GO) | 1 (T-020~T-030) | Working Shell (Sidebar, Workspace, Pane, Surface DAO) | 106 |
-| **M2** | ✅ 완료 (Conditional GO v1.2.0) | 7 (MS-1~MS-7, T-031~T-087) | 5 Viewers, NSSplitView, TabUI, Command Palette, CI/CD | 339 |
-| **M3+** | 📅 다음 | — | Code Viewer, GhosttyKit tuning, Agent Run UI | — |
-
-4개의 설계 문서가 순차 진화:
-
-| 파일 | 버전 | 상태 | 요약 |
-|---|---|---|---|
-| [DESIGN.md](./DESIGN.md) | v2 (2026-04-11) | 참고용 | 초기 아키텍처 — 일부 가정 오류 (Bridge, hooks.yaml) |
-| [DESIGN.v3.md](./DESIGN.v3.md) | v3 (2026-04-11) | 참고용 | "SDK 임베드" 가정, Pure Swift 제안 |
-| **[DESIGN.v4.md](./DESIGN.v4.md)** | **v4 (2026-04-11)** | **★ 현 기준** | 공식 문서 검증 완료, Rust core + Swift UI, IDE MCP Server Pattern |
-| [NEXT-STEPS.md](./NEXT-STEPS.md) | v1 | ★ 작업 계획 | Pre-M0 spike + M0 킥오프 + 열린 결정 + 커뮤니티 |
-
-**v4 를 보십시오.** v2, v3 는 evolution 기록으로만 보존.
+**저장소**: `github.com/modu-ai/moai-studio` (2026-04-26 GoosLab에서 modu-ai org로 이전)  
+**언어**: Pure Rust  
+**Edition**: Rust 2024  
+**MSRV**: Rust 1.93+  
+**라이선스**: Apache License 2.0
 
 ---
 
-## 핵심 아키텍처 (v4)
+## 이것이 MoAI Studio입니다
+
+MoAI Studio는 **SPEC-first 개발 방법론을 구현한 크로스플랫폼 Agent IDE**입니다. Rust 기반의 고성능 엔진과 GPUI 프레임워크를 통해 GPU 가속 네이티브 UI를 제공하며, 터미널 엔진으로 libghostty-vt를 통합합니다.
+
+**핵심 특징:**
+
+- **SPEC-driven 워크플로우**: EARS 형식 요구사항, TRUST 5 품질 게이트, @MX 코드 어노테이션으로 엄격한 개발 규율 유지
+- **MoAI-ADK 통합**: Go CLI 오케스트레이션 프레임워크와 시스템 수준 협력 (Hook, Agent dispatch)
+- **고성능 Terminal**: libghostty-vt 기반 터미널 멀티플렉서로 최대 성능 + 호환성
+- **크로스플랫폼 배포**: macOS (arm64 + x86_64), Linux (x86_64), Windows (x86_64) — 부호화 및 자동 업데이트는 MS-2 예정
+
+---
+
+## 현재 상태 & 로드맵
+
+| 마일스톤 | 상태 | 구현 내용 |
+|---------|------|---------|
+| **V3 Scaffold** | ✅ 완료 | 23개 Rust crate 컴파일, 기본 UI/Terminal 구조 |
+| **SPEC-V3-001~013** | 🔄 진행 중 | 핵심 Agent IDE 기능, Pane system, Terminal multiplexing |
+| **SPEC-V3-011 MS-1** | ✅ 완료 | macOS (.app), Linux (.deb + .AppImage), Windows (.msi) 패키징 infra |
+| **v0.1.0 (unsigned)** | 📅 예정 | GitHub Releases 자동 배포, GHA billing 복구 후 |
+| **MS-2 (signed)** | 📅 차기 | macOS codesign + notarize, Windows EV signtool 인증 |
+| **MS-3 (auto-update)** | 📅 차기 | Ed25519 서명, GitHub Releases JSON manifest 기반 자동 업데이트 |
+
+---
+
+## 아키텍처 (V3)
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│           MoAI Studio.app (macOS, SwiftUI + Rust)       │
-│                                                         │
-│  Swift UI (SwiftUI + AppKit)                            │
-│     │ swift-bridge FFI                                  │
-│     ▼                                                   │
-│  Rust Core (moai-core workspace)                        │
-│     - ClaudeSubprocessManager                           │
-│     - StreamJsonCodec                                   │
-│     - IdeMcpServer (127.0.0.1 + ~/.claude/ide/*.lock)   │
-│     - HookHttpEndpoint                                  │
-│     - Store (rusqlite WAL)                              │
-│     - Git (git2)                                        │
-└──────────────┬─────────────────────────┬────────────────┘
-               │ stdin/stdout            │ HTTP loopback
-               ▼                         ▼
-       claude subprocess         Plugin http hooks
-       (per workspace)           POST /hooks/<event>
+┌─────────────────────────────────────────────────────────────┐
+│              MoAI Studio (Rust + GPUI)                      │
+│                                                             │
+│   GPU-accelerated UI (gpui crate)                          │
+│       │                                                     │
+│       ▼                                                     │
+│   moai-studio-app (binary: moai-studio)                    │
+│       │                                                     │
+│       ├─ moai-studio-terminal ──────► libghostty-vt        │
+│       ├─ moai-studio-ui              (terminal subsystem)  │
+│       ├─ moai-studio-workspace                             │
+│       ├─ moai-studio-spec   ──────► .moai/specs/ parsing   │
+│       ├─ moai-studio-agent  ──────► agent dispatch         │
+│       └─ moai-studio-plugin-api ──► plugin runtime         │
+│                                                             │
+│   Foundation crates (moai-core, moai-fs, moai-git, ...)    │
+└─────────────────────────────────────────────────────────────┘
+                       │
+                       ▼ subprocess / IPC
+              moai-adk-go (Go CLI orchestration)
 ```
 
-### 3가지 핵심 피벗 (v4)
+**핵심 설계:**
 
-1. **Subprocess 호스트** (SDK 임베드 아님) — 공식 Agent SDK 조차 `claude` 를 subprocess spawn
-2. **IDE MCP Server Pattern PRIMARY** — VS Code 확장과 동일한 공식 아키텍처
-3. **Rust core + Swift UI** — macOS 단독이지만 actor supervision / stream-json 성능 / 메모리 안전성 이득
-
-### 7가지 Moat (경쟁사 0)
-
-1. 공식 IDE MCP Server Pattern 채택
-2. Hook 18-25 이벤트 양방향 + tool input rewriting
-3. LSP as plugin feature (`.lsp.json`)
-4. Kanban + Memory + InstructionsGraph 3종
-5. @MX 태그 거터 + TRUST 5 게이지
-6. In-app Claude UI 조작 (`mcp__moai__*`)
-7. Native permission dialog + updatedPermissions
+- **Pure Rust**: 메모리 안전성, 성능, 빌드 일관성 (Swift 레거시 제거 완료)
+- **GPUI 기반**: Zed Industries의 GPU 가속 UI 프레임워크 (의존성 계획)
+- **libghostty-vt 통합**: ghostty-org의 재사용 가능한 VT 서브시스템
+- **23개 Rust crate 워크스페이스**: 모듈식 아키텍처, 각 도메인별 책임 분리
 
 ---
 
 ## 저장소 구조
 
 ```
-moai-cli/                  ← 현 저장소 이름 (MoAI Studio 로 리네임 예정)
-├── README.md              ← 이 파일
-├── DESIGN.md              ← v2 (참고)
-├── DESIGN.v3.md           ← v3 (참고)
-├── DESIGN.v4.md           ← v4 (★ 현 기준)
-├── NEXT-STEPS.md          ← 4 단계 다음 작업
-├── REFERENCES.md          ← 참조 저장소 설정 가이드
-├── .gitignore
-├── .references/           ← 로컬 전용 (gitignored)
-│   ├── moai-adk-go  →  /Users/goos/MoAI/moai-adk-go
-│   └── claude-code-map  →  /Users/goos/moai/claude-code-map
-├── design-exports/        ← 12 PNG UI 목업 + v1 PDF
-└── research/              ← 리서치 결과
-    ├── R1-native-ai-shells.md           (50KB, 경쟁사)
-    ├── B1-bridge-direct-connect.md      (10KB, 소스 분석)
-    ├── B2-hook-events-tool-system.md    (20KB, 소스 분석)
-    ├── B3-extension-points.md           (24KB, 소스 분석)
-    ├── B4-official-docs-verification.md (19KB, 공식 문서)
-    └── B5-wsl-wslg-windows-coverage.md  (13KB, Linux 포기 근거)
+moai-studio/
+├── README.md                  ← 이 파일
+├── CHANGELOG.md
+├── LICENSE                    ← Apache 2.0
+├── Cargo.toml                 ← Rust workspace
+├── Cargo.lock
+├── crates/                    ← 23개 Rust crate
+│   ├── moai-claude-host/
+│   ├── moai-core/
+│   ├── moai-fs/
+│   ├── moai-git/
+│   ├── moai-studio-app/       ← 메인 binary (moai-studio)
+│   ├── moai-studio-ui/        ← UI layer
+│   ├── moai-studio-terminal/  ← Terminal multiplexer
+│   ├── moai-studio-workspace/
+│   ├── moai-studio-spec/      ← SPEC parsing
+│   └── ... (16 more crates)
+├── .moai/
+│   ├── specs/                 ← SPEC-V3-001~015 드래프트 및 구현
+│   ├── config/
+│   └── project/
+├── .github/
+│   ├── workflows/             ← CI/CD (Pane CI, Rust CI, Release Drafter)
+│   └── labels.yml
+├── .claude/                   ← Claude Code 설정 & rules
+│   ├── rules/moai/
+│   ├── skills/
+│   └── agents/
+├── scripts/                   ← 빌드 & 배포 유틸
+│   ├── build-macos.sh
+│   ├── build-linux.sh
+│   └── build-windows.sh
+├── wix/                       ← Windows MSI 패키징
+└── archive/                   ← 이전 버전 (Swift M2 era)
+    └── swift-legacy/          ← 레거시 Xcode 프로젝트
 ```
 
-## 개발 환경
+**주목:**
 
-### 참조 저장소 (읽기 전용 심볼릭 링크)
-
-`.references/` 디렉토리는 외부 저장소의 소스 코드를 참조합니다. **gitignored**, 로컬 개발 전용.
-
-| 심볼릭 링크 | 타깃 | 용도 |
-|---|---|---|
-| `.references/moai-adk-go` | `/Users/goos/MoAI/moai-adk-go` | moai-adk Go CLI 소스 — Hook 통합, plugin 자동 설치, 27 이벤트 wiring 참조 |
-| `.references/claude-code-map` | `/Users/goos/moai/claude-code-map` | Claude Code 소스 (mapped) — stream-json 프로토콜, SDKMessage, hook 이벤트, MCP 통합 참조 |
-
-**사용 예:**
-```bash
-# moai-adk 소스 참조
-cat .references/moai-adk-go/internal/hook/post-tool.go
-
-# Claude Code 소스 참조
-grep -r "HookEvent" .references/claude-code-map/src/
-```
-
-**복제 시 재설정:**
-```bash
-mkdir -p .references
-ln -sf /path/to/moai-adk-go .references/moai-adk-go
-ln -sf /path/to/claude-code-map .references/claude-code-map
-```
-
-상세는 [REFERENCES.md](./REFERENCES.md) 참조.
+- `.moai/specs/`: EARS 형식 SPEC 문서, TRUST 5 품질 검증
+- `.github/workflows/`: macOS + Linux 매트릭스 CI, bench-smoke, Release Drafter
+- `crates/`: 23개 독립 crate — 각 crate가 명확한 책임 소유
 
 ---
 
-## 다음 단계
+## 빠른 시작
 
-→ **[NEXT-STEPS.md](./NEXT-STEPS.md)** 를 보십시오.
+**필수 조건**: Rust 1.93+, git, 크로스플랫폼 빌드 환경 (Cargo)
 
-**M2 완료 후 로드맵:**
-1. **M3 Code Viewer** (3주) — SwiftTreeSitter + LSP + @MX 거터 + tri-pane diff
-2. **M4 Claude 통합 심화** (3주) — Plugin 자동 설치, Native permission dialog, LSP 6 언어
-3. **M5 Agent Run + Kanban + Memory** (3주) — Agent Run Viewer, Kanban board, Memory surface, Instructions Graph
-4. **M6 안정화 + 배포** (2주) — Sparkle auto-update, notarize, 16-agent stress, DMG 배포
+### 소스에서 빌드
+
+```bash
+git clone https://github.com/modu-ai/moai-studio.git
+cd moai-studio
+cargo build --release -p moai-studio-app
+./target/release/moai-studio
+```
+
+### 사전 컴파일된 바이너리
+
+v0.1.0 릴리스 후 [GitHub Releases](https://github.com/modu-ai/moai-studio/releases)에서 다운로드:
+
+- **macOS**: `moai-studio-v0.1.0.dmg` (universal binary: arm64 + x86_64)
+- **Linux**: `moai-studio-v0.1.0.deb`, `moai-studio-v0.1.0.AppImage`
+- **Windows**: `moai-studio-v0.1.0.msi`
+
+**주의**: 현재는 unsigned 배포입니다 (MS-2에서 서명 예정).
+
+---
+
+## SPEC-driven 개발
+
+MoAI Studio는 **MoAI-ADK 프레임워크**를 통해 SPEC-first 개발을 실현합니다.
+
+**핵심 개념:**
+
+- **EARS 형식**: Ubiquitous, Event-driven, State-driven, Unwanted, Optional 요구사항 표기
+- **TRUST 5 게이트**: Tested (85%+ coverage), Readable, Unified, Secured, Trackable 품질 검증
+- **@MX 태그**: 코드 수준 어노테이션 (@MX:NOTE, @MX:WARN, @MX:ANCHOR, @MX:TODO)
+- **26개 전문 에이전트**: manager-spec, expert-backend, expert-frontend, manager-ddd, manager-tdd 등
+
+현재 구현 중인 SPEC: [.moai/specs/](https://github.com/modu-ai/moai-studio/tree/develop/.moai/specs/)
+
+**학습 자료:**
+
+- [MoAI-ADK 문서](https://github.com/modu-ai/moai-adk) (Go CLI 프레임워크)
+- [SPEC-V3-001~015](https://github.com/modu-ai/moai-studio/tree/develop/.moai/specs/)
+
+---
+
+## CI/품질 게이트
+
+모든 코드 변경은 다음 자동 검증을 거칩니다:
+
+| 검사 | 대상 | 상태 |
+|------|------|------|
+| **Fmt + Clippy** | macOS + Linux | ✅ |
+| **Cargo test** | macOS + Linux | ✅ (7 contexts required, §2.1) |
+| **Bench-smoke** | macOS + Linux | ✅ |
+| **Tmux-test** | macOS + Linux | ⏳ (--ignored 버킷, SPEC-V3-FS-WATCHER-001 pending) |
+| **Release Drafter** | PR 라벨 기반 CHANGELOG | ✅ |
+
+**Branch protection** ([CLAUDE.local.md §2](./CLAUDE.local.md#2-branch-protection-rules-hard--github-settings)):
+
+- `main`: 1개 approval + 7 required contexts (Squash merge: feature, Merge commit: release/hotfix)
+- `develop`: 7 required contexts, 0 approvals (Squash merge: feature)
+- `release/*`, `hotfix/*`: 활성화 시 main과 동일 규칙
+
+---
+
+## 기여 방법
+
+**현재**: 단일 개발자 운영 (Goos Kim, namgoos@gmail.com). 외부 기여는 허용되지만 일괄 처리될 수 있습니다.
+
+**저장소 정책:**
+
+- **branch model**: `main` (releases only) < `release/*` < `develop` < `feature/SPEC-XXX-*` + `hotfix/*`
+- **Conventional Commits**: `feat(scope): description [AC-XXX]` + `🗿 MoAI <email@mo.ai.kr>`
+- **PR base branch**: `develop` (단, hotfix는 `main`에서 분기)
+- **라벨링**: type/ + priority/ + area/ (3축 필수, .github/labels.yml)
+- **Auto-merge**: PR approval + CI GREEN 시 자동 머지 (Squash merge for feature)
+
+자세한 내용: [CLAUDE.local.md §6](./CLAUDE.local.md#6-일상-워크플로-체크리스트)
 
 ---
 
@@ -150,21 +210,45 @@ ln -sf /path/to/claude-code-map .references/claude-code-map
 
 출처: [Claude Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview)
 
-- ✅ 허용: "MoAI Studio", "MoAI Agent IDE", "moai + Claude", "Powered by Claude"
-- ❌ **금지**: "Claude Code" 명칭 사용, "Claude Code Agent", Claude Code ASCII art 차용
+- ✅ **허용**: "MoAI Studio", "MoAI Agent IDE", "moai + Claude", "Powered by Claude"
+- ❌ **금지**: "Claude Code" 명칭 사용, "Claude Code Agent" 명명
 - ❌ **금지**: claude.ai OAuth 로그인 구현
-- ✅ 인증: `ANTHROPIC_API_KEY`, Bedrock, Vertex, Foundry
-
----
-
-## 라이선스
-
-MIT License © 2026 modu-ai
+- ✅ **인증**: `ANTHROPIC_API_KEY`, Bedrock, Vertex, Foundry
 
 ---
 
 ## 관련 저장소
 
-- [modu-ai/moai-adk](https://github.com/modu-ai/moai-adk) — Go CLI, MoAI Studio 가 통합하는 본체
-- [ghostty-org/ghostty](https://github.com/ghostty-org/ghostty) — 터미널 엔진 (libghostty)
-- [anthropics/claude-code](https://github.com/anthropics/claude-code) — Claude Code CLI
+- [**modu-ai/moai-adk**](https://github.com/modu-ai/moai-adk) — Go CLI 오케스트레이션 프레임워크 (이 GUI의 본체)
+- [**ghostty-org/ghostty**](https://github.com/ghostty-org/ghostty) — 터미널 VT 엔진 (libghostty-vt 통합)
+- [**zed-industries/zed**](https://github.com/zed-industries/zed) — GPUI UI 프레임워크
+- [**anthropics/claude-code**](https://github.com/anthropics/claude-code) — Claude Code CLI
+
+---
+
+## 레거시 설계 문서
+
+다음 문서들은 진화 기록 및 아키텍처 결정으로 보존됩니다:
+
+- [DESIGN.md](./DESIGN.md) (v2) — 초기 아키텍처
+- [DESIGN.v3.md](./DESIGN.v3.md) (v3) — SDK 임베드 가정
+- [DESIGN.v4.md](./DESIGN.v4.md) (v4) — 공식 문서 기준 Rust + UI
+- [NEXT-STEPS.md](./NEXT-STEPS.md) — 다음 마일스톤 계획
+
+Swift M2 era의 레거시 Xcode 프로젝트는 `archive/swift-legacy/`에 보존됩니다 (참고 목적).
+
+---
+
+## 라이선스
+
+[Apache License 2.0](./LICENSE) — 자유로운 상용/개인 사용, 수정, 배포 허용.
+
+Copyright © 2026 MoAI Studio (modu-ai organization)
+
+---
+
+## 연락처
+
+- **메인테이너**: Goos Kim (namgoos@gmail.com)
+- **이슈 추적**: [GitHub Issues](https://github.com/modu-ai/moai-studio/issues)
+- **토론**: [GitHub Discussions](https://github.com/modu-ai/moai-studio/discussions)

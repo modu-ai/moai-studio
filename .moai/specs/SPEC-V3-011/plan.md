@@ -4,7 +4,7 @@
 브랜치 (현행 SPEC 작성): `feature/SPEC-V3-004-render`
 브랜치 (implement 진입 시): `feature/SPEC-V3-011-packaging` (v3 functional SPEC 80%+ AC pass 후 develop 에서 분기 — CLAUDE.local.md §1.3 명명 규칙 준수)
 범위: SPEC-V3-011 spec.md 의 RG-PK-1 ~ RG-PK-7, AC-PK-1 ~ AC-PK-12 를 MS-1 / MS-2 / MS-3 으로 분할 구현.
-선행: SPEC-V3-001 ~ V3-010 (functional SPEC complete 권장), CI billing 해소, USER-DECISION-PK-B 의 (a) 서명 인증서 보유.
+선행: SPEC-V3-001 ~ V3-010 (functional SPEC complete 권장), CI billing 해소, USER-DECISION-PK-B RESOLVED (b) — MS-2 BLOCKED, MS-1 만 v0.1.0 진행.
 
 ---
 
@@ -40,6 +40,9 @@
 ---
 
 ## 2. T0 — USER-DECISION-PK-C (release tag naming)
+
+**결정 (2026-04-27): RESOLVED → 옵션 (a) `v{x.y.z}` 단일. CLAUDE.local.md §1.2 준수.**
+release.yml `on.push.tags` regex 는 `v[0-9]+.[0-9]+.[0-9]+` 단일 패턴만 사용. -rc 패턴 / prerelease 분기 (REQ-PK-063) 는 본 sprint 제외.
 
 ### 2.1 호출
 
@@ -373,6 +376,9 @@ on:
 
 ## 10. T8 — USER-DECISION-PK-B (P0 차단, MS-2 진입)
 
+**결정 (2026-04-27): RESOLVED → 옵션 (b) 현재 미보유. MS-2 BLOCKED.**
+v0.1.0 스코프는 MS-1 unsigned builds 까지로 한정. T9 ~ T13 은 인증서 보유 후 별 sprint 진입. 사용자 안내 필수: macOS Gatekeeper 우클릭 우회 / Windows SmartScreen 'More info → Run anyway'.
+
 ### 10.1 호출
 
 [USER-DECISION-REQUIRED: signing-cert-v3-011-ms2]
@@ -540,6 +546,9 @@ GPG key 가 GitHub secret 에 등록된 경우만 활성:
 ---
 
 ## 14. T14 — USER-DECISION-PK-A (auto-update 메커니즘)
+
+**결정 (2026-04-27): RESOLVED → 옵션 (a) 자체 (GitHub Releases JSON manifest + Ed25519). 외부 의존 0, Rust 100~200 LOC.**
+T15 ~ T21 진입 가능. 단, MS-3 은 MS-2 (서명) 가 BLOCKED 인 동안 sprint 진입 보류. v0.1.0 출시 직후 또는 v0.1.x 패치 sprint 후보.
 
 ### 14.1 호출
 
@@ -907,16 +916,16 @@ T7 의 path-filter diff 와 동일. release.yml 의 `verify-version` job 에 추
 # SPEC-V3-011 Progress
 
 ## MS-1 (Priority: High)
-- [ ] T0: USER-DECISION-PK-C (PENDING)
+- [x] T0: USER-DECISION-PK-C RESOLVED (a) v{x.y.z} (2026-04-27)
 - [ ] T1 ~ T7: ...
 
-## MS-2 (Priority: High)
-- [ ] T8: USER-DECISION-PK-B (P0, PENDING)
-- [ ] T9 ~ T13: ...
+## MS-2 (Priority: High) — BLOCKED
+- [x] T8: USER-DECISION-PK-B RESOLVED (b) 미보유 → MS-2 BLOCKED (2026-04-27)
+- [ ] T9 ~ T13: 인증서 보유 시점까지 보류
 
-## MS-3 (Priority: High)
-- [ ] T14: USER-DECISION-PK-A (PENDING)
-- [ ] T15 ~ T22: ...
+## MS-3 (Priority: High) — Deferred (post-v0.1.0)
+- [x] T14: USER-DECISION-PK-A RESOLVED (a) 자체 manifest + Ed25519 (2026-04-27)
+- [ ] T15 ~ T22: Ed25519 keypair 생성 + secret 등록 후 진입
 
 ## AC Status
 | AC | Status |
@@ -959,10 +968,10 @@ implement 진입은 다음 차단 해소가 전제:
 
 ### 24.3 USER-DECISION 4 게이트
 
-- USER-DECISION-PK-A: auto-update 메커니즘 (MS-3 진입).
-- USER-DECISION-PK-B: 서명 인증서 보유 (MS-2 진입, P0 차단).
-- USER-DECISION-PK-C: tag naming (MS-1 진입).
-- USER-DECISION-PK-D: crash reporting (선택, default opt-out).
+- [x] T0: USER-DECISION-PK-C RESOLVED (a) v{x.y.z}
+- [x] T8: USER-DECISION-PK-B RESOLVED (b) 미보유 → MS-2 BLOCKED
+- [x] T14: USER-DECISION-PK-A RESOLVED (a) 자체 manifest + Ed25519
+- USER-DECISION-PK-D RESOLVED: opt-out (도입 안함). v0.2.0+ 재논의.
 
 ---
 
@@ -994,8 +1003,8 @@ implement 진입은 다음 차단 해소가 전제:
 특별히 강조할 사항:
 
 - **MS-1 (unsigned 빌드)** 은 외부 차단 없이 진입 가능. v3 functional SPEC complete 즉시 진행 가능.
-- **MS-2 (서명 + notarization)** 은 USER-DECISION-PK-B 의 (a) 결정 후 진입. P0 차단.
-- **MS-3 (auto-update)** 은 USER-DECISION-PK-A 결정 + Ed25519 keypair 생성 후 진입.
+- **MS-2 (서명 + notarization)** 은 PK-B (b) 미보유 결정으로 v0.1.0 범위 제외. 인증서 보유 시점에 별 sprint 진입.
+- **MS-3 (auto-update)** 은 PK-A (a) 자체 manifest 결정. Ed25519 keypair 생성 (`age` 또는 `ssh-keygen -t ed25519`) 후 GitHub Actions secret 등록 시 진입 가능. v0.1.0 출시 직후 또는 v0.1.x 패치 sprint 후보.
 - **코드베이스 무변경 regression** 은 T22 의 CI assertion 으로 자동 enforcement (RG-PK-7.6).
 - **CI billing 해소 전까지** release.yml 의 실 트리거 (tag push) 는 보류, dry-run + workflow_dispatch 만 활용.
 
