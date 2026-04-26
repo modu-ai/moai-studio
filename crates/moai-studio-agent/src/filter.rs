@@ -171,7 +171,11 @@ mod tests {
         let result = apply_filter(&events, &filter);
         // StreamJson 만 남아야 한다 (id 0, 3)
         assert_eq!(result.len(), 2);
-        assert!(result.iter().all(|ev| matches!(ev.kind, EventKind::StreamJson(_))));
+        assert!(
+            result
+                .iter()
+                .all(|ev| matches!(ev.kind, EventKind::StreamJson(_)))
+        );
     }
 
     /// run_id 필터: run_id 설정 시 kind 매칭은 유지, run_id 격리 확인

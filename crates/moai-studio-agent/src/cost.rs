@@ -166,10 +166,7 @@ mod tests {
         });
 
         let total = tracker.session_total(&id);
-        assert!(
-            (total - 0.05).abs() < 1e-9,
-            "expected 0.05 got {total}"
-        );
+        assert!((total - 0.05).abs() < 1e-9, "expected 0.05 got {total}");
     }
 
     /// 다른 run_id 는 session_total 에 포함되지 않아야 한다
