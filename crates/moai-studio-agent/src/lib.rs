@@ -24,7 +24,9 @@ pub mod view;
 // 자주 쓰는 타입 re-export
 pub use control::{ControlAction, ControlEnvelope, write_envelope};
 pub use cost::{CostSnapshot, CostTracker, extract_from_stream_json, unix_secs_to_system_time};
-pub use events::{AgentEvent, AgentRunId, EventKind, HookEvent, StreamJsonEvent, TokenUsage};
+pub use events::{
+    AgentEvent, AgentRunId, AgentRunStatus, EventKind, HookEvent, StreamJsonEvent, TokenUsage,
+};
 pub use filter::{EventFilter, EventKindDiscriminant, apply_filter};
 pub use instructions::{
     InstructionKind, InstructionNode, InstructionRebuildTrigger, InstructionScanner, ScanPaths,

@@ -127,12 +127,12 @@ impl Render for SpecPanelView {
             .overflow_hidden()
             .child(header)
             .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .flex_grow()
-                    .p_3()
-                    .child(div().text_sm().text_color(rgb(tok::FG_SECONDARY)).child(body_label)),
+                div().flex().flex_col().flex_grow().p_3().child(
+                    div()
+                        .text_sm()
+                        .text_color(rgb(tok::FG_SECONDARY))
+                        .child(body_label),
+                ),
             )
     }
 }

@@ -54,7 +54,11 @@ pub fn apply_filter(node: &mut FsNode, query: &str) -> bool {
     }
 
     match node {
-        FsNode::File { name, is_visible_under_filter, .. } => {
+        FsNode::File {
+            name,
+            is_visible_under_filter,
+            ..
+        } => {
             let visible = fuzzy_match(name, query);
             *is_visible_under_filter = visible;
             visible
@@ -133,7 +137,10 @@ mod tests {
         // 빈 needle → 항상 true
         assert!(fuzzy_match("anything", ""), "빈 needle 은 항상 매칭");
         // 매칭 안 되는 경우
-        assert!(!fuzzy_match("main.rs", "auth"), "관련 없는 문자열은 매칭 안 됨");
+        assert!(
+            !fuzzy_match("main.rs", "auth"),
+            "관련 없는 문자열은 매칭 안 됨"
+        );
     }
 
     // AC-FE-12: 트리 ["src/main.rs", "src/auth/mod.rs", "tests/auth_test.rs"] + query "auth" → 2 visible
@@ -260,8 +267,14 @@ mod tests {
         let mut visible_names: Vec<String> = Vec::new();
         collect_visible_names(&root, &mut visible_names);
 
-        assert!(visible_names.contains(&"main.rs".to_string()), "main.rs 는 visible");
-        assert!(!visible_names.contains(&"lib.rs".to_string()), "lib.rs 는 invisible");
+        assert!(
+            visible_names.contains(&"main.rs".to_string()),
+            "main.rs 는 visible"
+        );
+        assert!(
+            !visible_names.contains(&"lib.rs".to_string()),
+            "lib.rs 는 invisible"
+        );
     }
 
     // AC-FE-12: 빈 query → 모두 visible (REQ-FE-052)
@@ -295,9 +308,18 @@ mod tests {
         let mut visible_names: Vec<String> = Vec::new();
         collect_visible_names(&root, &mut visible_names);
 
-        assert!(visible_names.contains(&"a.rs".to_string()), "빈 query 후 a.rs visible");
-        assert!(visible_names.contains(&"b.rs".to_string()), "빈 query 후 b.rs visible");
-        assert!(visible_names.contains(&"root".to_string()), "빈 query 후 root visible");
+        assert!(
+            visible_names.contains(&"a.rs".to_string()),
+            "빈 query 후 a.rs visible"
+        );
+        assert!(
+            visible_names.contains(&"b.rs".to_string()),
+            "빈 query 후 b.rs visible"
+        );
+        assert!(
+            visible_names.contains(&"root".to_string()),
+            "빈 query 후 root visible"
+        );
     }
 
     /// 테스트 헬퍼: visible 노드 이름 수집

@@ -1193,17 +1193,12 @@ fn render_spec_panel_overlay() -> impl IntoElement {
                 )
                 // 본문
                 .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .flex_grow()
-                        .p_3()
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(rgb(tok::FG_SECONDARY))
-                                .child("SpecListView"),
-                        ),
+                    div().flex().flex_col().flex_grow().p_3().child(
+                        div()
+                            .text_sm()
+                            .text_color(rgb(tok::FG_SECONDARY))
+                            .child("SpecListView"),
+                    ),
                 ),
         )
 }
@@ -1855,10 +1850,7 @@ mod tests {
         view.handle_spec_key_event(&ev); // mount
         assert!(view.has_spec_panel(), "첫 번째 Cmd+Shift+S 후 mount");
         view.handle_spec_key_event(&ev); // dismiss
-        assert!(
-            !view.has_spec_panel(),
-            "두 번째 Cmd+Shift+S 후 dismiss"
-        );
+        assert!(!view.has_spec_panel(), "두 번째 Cmd+Shift+S 후 dismiss");
     }
 
     /// AC-RV-2 (mutual exclusion): palette 열려있을 때 Cmd+Shift+S → noop.

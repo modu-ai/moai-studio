@@ -21,6 +21,46 @@ use std::time::SystemTime;
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct AgentRunId(pub String);
 
+/// Agent run 진행 상태 (REQ-AD-024, REQ-AD-028).
+///
+/// AgentControlBar 의 button enable 상태를 결정하며, 종료 hook 도착 시
+/// `Completed` / `Failed` / `Killed` 로 전이한다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AgentRunStatus {
+    /// 진행 중 (pause/kill 가능)
+    Running,
+    /// 일시정지 (resume/kill 가능)
+    Paused,
+    /// 정상 종료 (모든 control 비활성)
+    Completed,
+    /// 실패 종료
+    Failed,
+    /// 사용자 kill (REQ-AD-027)
+    Killed,
+}
+
+impl AgentRunStatus {
+    /// run 이 종료되었는지 여부.
+    pub fn is_terminal(self) -> bool {
+        matches!(self, Self::Completed | Self::Failed | Self::Killed)
+    }
+
+    /// pause 버튼 활성 여부 (REQ-AD-024).
+    pub fn allows_pause(self) -> bool {
+        matches!(self, Self::Running)
+    }
+
+    /// resume 버튼 활성 여부 (REQ-AD-024).
+    pub fn allows_resume(self) -> bool {
+        matches!(self, Self::Paused)
+    }
+
+    /// kill 버튼 활성 여부 (REQ-AD-024).
+    pub fn allows_kill(self) -> bool {
+        matches!(self, Self::Running | Self::Paused)
+    }
+}
+
 impl AgentRunId {
     /// 새 고유 ID 를 생성한다.
     pub fn new_unique() -> Self {
@@ -194,5 +234,35 @@ mod tests {
         let a = AgentRunId::new_unique();
         let b = AgentRunId::new_unique();
         assert_ne!(a, b, "AgentRunId 는 항상 고유해야 한다");
+    }
+
+    /// REQ-AD-024: AgentRunStatus 의 button enable 매핑이 정확해야 한다.
+    #[test]
+    fn agent_run_status_button_matrix() {
+        // Running: pause/kill 가능, resume 불가
+        assert!(AgentRunStatus::Running.allows_pause());
+        assert!(!AgentRunStatus::Running.allows_resume());
+        assert!(AgentRunStatus::Running.allows_kill());
+
+        // Paused: resume/kill 가능, pause 불가
+        assert!(!AgentRunStatus::Paused.allows_pause());
+        assert!(AgentRunStatus::Paused.allows_resume());
+        assert!(AgentRunStatus::Paused.allows_kill());
+
+        // Terminal 상태: 모두 비활성
+        for st in [
+            AgentRunStatus::Completed,
+            AgentRunStatus::Failed,
+            AgentRunStatus::Killed,
+        ] {
+            assert!(!st.allows_pause(), "{:?} allows_pause", st);
+            assert!(!st.allows_resume(), "{:?} allows_resume", st);
+            assert!(!st.allows_kill(), "{:?} allows_kill", st);
+            assert!(st.is_terminal());
+        }
+
+        // Running/Paused 는 non-terminal
+        assert!(!AgentRunStatus::Running.is_terminal());
+        assert!(!AgentRunStatus::Paused.is_terminal());
     }
 }

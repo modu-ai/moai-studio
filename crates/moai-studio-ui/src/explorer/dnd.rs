@@ -124,7 +124,11 @@ mod tests {
     fn validate_drop_self_returns_self_drop_error() {
         let path = Path::new("src/main.rs");
         let result = validate_drop(path, path);
-        assert_eq!(result, Err(DropError::SelfDrop), "self-drop 은 SelfDrop 에러여야 한다");
+        assert_eq!(
+            result,
+            Err(DropError::SelfDrop),
+            "self-drop 은 SelfDrop 에러여야 한다"
+        );
     }
 
     // AC-FE-11: validate_drop descendant-drop → DescendantDrop 에러
@@ -182,7 +186,10 @@ mod tests {
         let dest = result.unwrap();
         assert_eq!(dest, PathBuf::from("target/main.rs"));
         assert!(workspace.join(&dest).exists(), "이동된 파일이 있어야 한다");
-        assert!(!workspace.join("src/main.rs").exists(), "원본 파일은 없어야 한다");
+        assert!(
+            !workspace.join("src/main.rs").exists(),
+            "원본 파일은 없어야 한다"
+        );
     }
 
     // AC-FE-11: self-drop → 거부 + no panic

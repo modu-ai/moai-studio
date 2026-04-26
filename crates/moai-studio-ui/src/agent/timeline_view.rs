@@ -86,9 +86,18 @@ impl Render for EventTimelineView {
             .collect();
 
         // filter chip row (StreamJson / Hook / Unknown)
-        let chip_stream = self.filter.allowed_kinds.contains(&EventKindDiscriminant::StreamJson);
-        let chip_hook = self.filter.allowed_kinds.contains(&EventKindDiscriminant::Hook);
-        let chip_unknown = self.filter.allowed_kinds.contains(&EventKindDiscriminant::Unknown);
+        let chip_stream = self
+            .filter
+            .allowed_kinds
+            .contains(&EventKindDiscriminant::StreamJson);
+        let chip_hook = self
+            .filter
+            .allowed_kinds
+            .contains(&EventKindDiscriminant::Hook);
+        let chip_unknown = self
+            .filter
+            .allowed_kinds
+            .contains(&EventKindDiscriminant::Unknown);
 
         let chip_color = |active: bool| -> u32 {
             if active {

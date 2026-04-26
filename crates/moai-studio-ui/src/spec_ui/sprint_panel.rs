@@ -12,8 +12,8 @@
 //!   spec_ui::mod, AC-SU-11 테스트, MS-3 통합.
 
 use gpui::{Context, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb};
-use moai_studio_spec::parser::{SprintContractRevision, parse_sprint_contracts};
 use moai_studio_spec::SpecRecord;
+use moai_studio_spec::parser::{SprintContractRevision, parse_sprint_contracts};
 
 use crate::design::tokens as tok;
 
@@ -243,8 +243,7 @@ Not a sprint contract.
     fn from_text_extracts_5_from_v3_003_fixture() {
         // AC-SU-11: 실제 SPEC-V3-003 spec.md 에서 revision 추출
         // 파일이 없는 경우 inline fixture 로 대체
-        let real_spec_path =
-            std::path::Path::new(".moai/specs/SPEC-V3-003/spec.md");
+        let real_spec_path = std::path::Path::new(".moai/specs/SPEC-V3-003/spec.md");
         if real_spec_path.exists() {
             let text = std::fs::read_to_string(real_spec_path).unwrap();
             let panel = SprintContractPanel::from_text(&text);

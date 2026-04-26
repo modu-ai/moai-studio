@@ -88,10 +88,7 @@ pub trait GitStatusProvider: Send + Sync {
     ///
     /// 키: 저장소 루트 기준 상대 경로 문자열 (예: "src/main.rs")
     /// 값: GitStatus enum
-    fn status_map(
-        &self,
-        repo_root: &Path,
-    ) -> Result<HashMap<String, GitStatus>, GitStatusError>;
+    fn status_map(&self, repo_root: &Path) -> Result<HashMap<String, GitStatus>, GitStatusError>;
 }
 
 // ============================================================
@@ -105,13 +102,10 @@ pub trait GitStatusProvider: Send + Sync {
 pub struct MoaiGitStatusProvider;
 
 impl GitStatusProvider for MoaiGitStatusProvider {
-    fn status_map(
-        &self,
-        repo_root: &Path,
-    ) -> Result<HashMap<String, GitStatus>, GitStatusError> {
+    fn status_map(&self, repo_root: &Path) -> Result<HashMap<String, GitStatus>, GitStatusError> {
         // moai_git::GitRepo 를 열어서 status_map() 호출
-        let repo = moai_git::GitRepo::open(repo_root)
-            .map_err(|e| GitStatusError::Git(e.to_string()))?;
+        let repo =
+            moai_git::GitRepo::open(repo_root).map_err(|e| GitStatusError::Git(e.to_string()))?;
 
         let raw_map = repo
             .status_map()
@@ -192,7 +186,11 @@ mod tests {
 
     #[test]
     fn roll_up_priority_empty_returns_clean() {
-        assert_eq!(roll_up_priority(&[]), GitStatus::Clean, "빈 슬라이스 → Clean");
+        assert_eq!(
+            roll_up_priority(&[]),
+            GitStatus::Clean,
+            "빈 슬라이스 → Clean"
+        );
     }
 
     #[test]

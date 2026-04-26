@@ -291,10 +291,7 @@ pub enum LspSpawnState {
     /// 서버 spawn 성공 (MS-3b: 바이너리 존재 확인 완료 — 실제 handshake 는 미구현)
     Active { server_name: String },
     /// 서버 바이너리 없음 또는 spawn 실패 → graceful degradation
-    Unavailable {
-        server_name: String,
-        reason: String,
-    },
+    Unavailable { server_name: String, reason: String },
 }
 
 // @MX:ANCHOR: [AUTO] server-for-extension
@@ -346,10 +343,7 @@ pub fn try_spawn_lsp_with_server_name(server_name: &str) -> LspSpawnState {
         },
         Err(e) => {
             // 오류 로그 (stderr 에 1회 기록 — AC-MV-5)
-            eprintln!(
-                "[moai-lsp] LSP 서버 '{}' spawn 실패: {}",
-                server_name, e
-            );
+            eprintln!("[moai-lsp] LSP 서버 '{}' spawn 실패: {}", server_name, e);
             LspSpawnState::Unavailable {
                 server_name: server_name.to_string(),
                 reason: e.to_string(),
@@ -608,8 +602,14 @@ mod tests {
         assert_eq!(server_for_extension("rs"), Some("rust-analyzer"));
         assert_eq!(server_for_extension("go"), Some("gopls"));
         assert_eq!(server_for_extension("py"), Some("pyright"));
-        assert_eq!(server_for_extension("ts"), Some("typescript-language-server"));
-        assert_eq!(server_for_extension("tsx"), Some("typescript-language-server"));
+        assert_eq!(
+            server_for_extension("ts"),
+            Some("typescript-language-server")
+        );
+        assert_eq!(
+            server_for_extension("tsx"),
+            Some("typescript-language-server")
+        );
     }
 
     #[test]

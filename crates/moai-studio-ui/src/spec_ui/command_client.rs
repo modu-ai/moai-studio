@@ -73,7 +73,6 @@ impl CommandStatus {
 /// @MX:ANCHOR: [AUTO] MoaiCommandClient — SPEC-V3-009 RG-SU-5 진입점.
 /// @MX:REASON: [AUTO] fan_in >= 3: spec_ui::mod, kanban_view, AC-SU-9/10.
 pub struct MoaiCommandClient {
-
     /// 대상 SPEC ID
     pub spec_id: String,
     /// 실행 서브커맨드
@@ -101,11 +100,7 @@ impl MoaiCommandClient {
     ///
     /// `moai` 바이너리가 PATH 에 없으면 `Err(io::ErrorKind::NotFound)` 반환 (REQ-SU-044).
     /// stdin = null, stdout = piped, stderr = piped 로 설정한다.
-    pub fn spawn(
-        spec_id: String,
-        subcommand: MoaiSubcommand,
-        cwd: &Path,
-    ) -> std::io::Result<Self> {
+    pub fn spawn(spec_id: String, subcommand: MoaiSubcommand, cwd: &Path) -> std::io::Result<Self> {
         Self::spawn_with_binary("moai", spec_id, subcommand, cwd)
     }
 

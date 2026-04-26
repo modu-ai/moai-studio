@@ -62,11 +62,7 @@ pub fn active_branch(repo_root: &Path) -> Option<String> {
     }
 
     let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if s.is_empty() {
-        None
-    } else {
-        Some(s)
-    }
+    if s.is_empty() { None } else { Some(s) }
 }
 
 /// `feature/SPEC-*` 패턴과 일치하는 branch 목록을 반환한다 (REQ-SU-030).
@@ -95,7 +91,10 @@ pub fn list_spec_branches(repo_root: &Path) -> Vec<BranchState> {
         .lines()
         .map(|line| {
             // `git branch --list` 출력에서 `* ` 또는 `  ` prefix 제거
-            let name = line.trim_start_matches("* ").trim_start_matches("  ").trim();
+            let name = line
+                .trim_start_matches("* ")
+                .trim_start_matches("  ")
+                .trim();
             let spec_id = parse_spec_id_from_branch(name);
             let is_active = active.as_deref() == Some(name);
             BranchState {

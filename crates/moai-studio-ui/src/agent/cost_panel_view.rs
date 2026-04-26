@@ -16,10 +16,7 @@
 use std::time::SystemTime;
 
 use gpui::{Context, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb};
-use moai_studio_agent::{
-    AgentRunId, CostSnapshot, CostTracker,
-    cost::unix_secs_to_system_time,
-};
+use moai_studio_agent::{AgentRunId, CostSnapshot, CostTracker, cost::unix_secs_to_system_time};
 
 use crate::design::tokens as tok;
 
@@ -87,12 +84,7 @@ impl Render for CostPanelView {
             .bg(rgb(tok::BG_ELEVATED))
             .p_3()
             .gap(px(4.))
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(tok::FG_MUTED))
-                    .child("Cost"),
-            )
+            .child(div().text_xs().text_color(rgb(tok::FG_MUTED)).child("Cost"))
             .child(
                 div()
                     .flex()
@@ -182,7 +174,9 @@ mod tests {
         view.record_snapshot(make_snap(0.02, "r1", 1_704_067_200 + 3600));
         view.record_snapshot(make_snap(0.03, "r1", 1_704_067_200 + 7200));
 
-        let daily = view.tracker.daily_total(unix_secs_to_system_time(1_704_067_200 + 3600));
+        let daily = view
+            .tracker
+            .daily_total(unix_secs_to_system_time(1_704_067_200 + 3600));
         let formatted = format!("${:.4}", daily);
         assert_eq!(formatted, "$0.0500");
     }

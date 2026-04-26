@@ -219,13 +219,12 @@ impl FindReplaceState {
 
     /// Plain / CaseSensitive 모드 매치 계산.
     fn recalculate_matches_plain(&mut self, source: &str) {
-        let (src_cmp, q_cmp) = if self.case_sensitive
-            || self.search_mode == SearchMode::CaseSensitive
-        {
-            (source.to_string(), self.query.clone())
-        } else {
-            (source.to_lowercase(), self.query.to_lowercase())
-        };
+        let (src_cmp, q_cmp) =
+            if self.case_sensitive || self.search_mode == SearchMode::CaseSensitive {
+                (source.to_string(), self.query.clone())
+            } else {
+                (source.to_lowercase(), self.query.to_lowercase())
+            };
 
         for (line_idx, cmp_line) in src_cmp.lines().enumerate() {
             let mut search_start = 0;
@@ -536,7 +535,11 @@ mod tests {
         let source = "foo bar";
         state.set_mode(SearchMode::Regex, source);
         state.set_query(r"\w+".to_string(), source);
-        assert_eq!(state.match_count(), 2, r"\w+ 는 foo, bar 두 단어를 매칭해야 한다");
+        assert_eq!(
+            state.match_count(),
+            2,
+            r"\w+ 는 foo, bar 두 단어를 매칭해야 한다"
+        );
         assert!(state.regex_error.is_none(), "유효한 regex 는 오류 없음");
     }
 
