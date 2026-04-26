@@ -10,6 +10,10 @@ on:
     paths:
       - 'core/**'
 
+concurrency:
+  group: ci-rust-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rust:
     runs-on: macos-14

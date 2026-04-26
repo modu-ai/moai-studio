@@ -17,6 +17,10 @@ on:
 env:
   HAS_SIGNING: ${{ secrets.BUILD_CERTIFICATE_BASE64 != '' }}
 
+concurrency:
+  group: ci-swift-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   swift:
     runs-on: macos-14
