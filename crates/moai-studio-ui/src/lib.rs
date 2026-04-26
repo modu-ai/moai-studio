@@ -20,6 +20,8 @@ pub mod explorer;
 // SPEC-V3-012 MS-1: Palette Surface 모듈 (Scrim + PaletteView core)
 pub mod palette;
 pub mod panes;
+// SPEC-V3-013 MS-1: Settings Surface 모듈 (SettingsModal + AppearancePane)
+pub mod settings;
 pub mod tabs;
 pub mod terminal;
 // SPEC-V3-006 MS-1: viewer surface 모듈
