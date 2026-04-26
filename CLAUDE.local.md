@@ -309,15 +309,20 @@ Phase 3 PR 생성 시:
 
 ## 8. Version 1차 확정 전 (v0.1.0 release까지) 임시 규칙
 
+> **2026-04-26 update**: PUBLIC visibility 전환은 GHA billing 차단 회피 + free tier 활용을 위해 v0.1.0 이전에 선제 완료됨 (모두 `gh repo edit ... --visibility public` 으로 처리). 본 §8 의 다른 항목 (release/v0.1.0 분기, main v0.1.0 tag, Release Drafter publish) 은 v0.1.0 시점까지 유효.
+>
+> 또한 `paths-ignore` 기반 `ci-required-stubs.yml` workflow 가 추가되어 doc-only PR 도 7 required contexts 를 자동 SUCCESS 로 보고 → admin override 없이 auto-merge 가능.
+
 현재는 v0.0.x pre-release 상태이므로:
-- `main` 은 아직 비어있거나 bootstrap 상태일 수 있음
+- `main` 은 v0.1.0 tag 까지 안정 release 만 포함 (현재는 PR #38 + d4d8fd1 release-drafter bootstrap 머지된 상태)
 - `release/v0.1.0` 분기 전까지는 `develop` 이 사실상 integration = stable
 - CHANGELOG 는 Release Drafter draft 로만 누적 (publish 안 함)
 
 v0.1.0 릴리스 시점에:
-- 본 문서 §8 삭제
-- §2 Branch protection rule 전원 활성
+- 본 문서 §8 전체 삭제
+- §2 Branch protection rule 전원 활성 (`enforce_admins: on` 포함 검토)
 - `main` 에 v0.1.0 tag 부착
+- public visibility 는 이미 완료 — 추가 조치 없음
 
 ---
 
@@ -374,18 +379,20 @@ v0.1.0 릴리스 시점에:
 | feature 브랜치가 develop 에서 오래 방치 → merge conflict 우려 | `git rebase develop` 또는 develop merge 로 최신화. 주기적 sync 권장. |
 | hotfix back-merge 누락 → develop 에 regression | PR 자동화: hotfix 머지 후 즉시 back-merge PR 자동 열기 (Release Drafter 외 별도 workflow 향후 도입). |
 | Release Drafter 가 라벨 없는 PR 을 미분류로 표시 | PR 작성자는 머지 전 3축 라벨 부착 필수. 미부착 PR 은 review 에서 reject. |
-| Release Drafter action 자체가 "Invalid config file" 로 실패 | `.github/release-drafter.yml` 이 default branch (`main`) 에 없어서 발생 (CLAUDE.local.md §8 의 "main 은 bootstrap 상태" 임시 규칙 부산물). v0.1.0 release 시 main 에 release-drafter.yml 동기화하면 해소. 그 전까지는 무시 가능. |
-| 실수로 main 에 직접 push | Branch protection rule 활성화 시 차단됨. 미설정 상태라면 즉시 revert + hotfix 브랜치로 이관. |
+| ~~Release Drafter action 자체가 "Invalid config file" 로 실패~~ | **2026-04-26 해소**: PR #38 + d4d8fd1 main commit 으로 main 에 release-drafter.yml 반영. PUBLIC 전환 (2026-04-26) 후 Release Drafter 정상 동작 (PR #45 머지 시점에 SUCCESS 확인). |
+| 실수로 main 에 직접 push | Branch protection rule 활성화로 차단됨. 우회 시 즉시 revert + hotfix 브랜치로 이관. |
 | 한국어 주석이 신규 코드에 들어감 | §9.1 위반. 머지 전 영어로 수정. agent 가 작성한 경우 위임 프롬프트에 §9.5 라인 누락 → 다음 위임에 추가. |
-| GitHub Actions billing 차단 | Pro 플랜 활성화 또는 spending limit 상향. 활성화 후 `gh run rerun <run-id>` 로 실패한 workflow 재실행. |
+| ~~GitHub Actions billing 차단~~ | **2026-04-26 해소**: PUBLIC 전환으로 standard runner GHA 무료 (org-level billing 영향 없음). private 환경 복귀 시 spending limit 재상향 필요. |
+| Doc-only PR (README, .moai/specs/, LICENSE) auto-merge 차단 | **해소**: `.github/workflows/ci-required-stubs.yml` (2026-04-26 추가) 가 7 required contexts 를 stub 으로 SUCCESS 보고. doc-only PR 도 추가 조치 없이 auto-merge 가능. |
 
 ---
 
-Version: 1.2.0
+Version: 1.3.0
 Last Updated: 2026-04-26
-Scope: github.com/modu-ai/moai-studio (transferred from GoosLab/moai-studio 2026-04-26)
+Scope: github.com/modu-ai/moai-studio (PUBLIC, transferred from GoosLab/moai-studio 2026-04-26)
 
 Changelog:
+- 1.3.0 (2026-04-26): PUBLIC visibility 전환 완료 (v0.1.0 이전 선제 처리). §8 에 PUBLIC 전환 메모 추가. §10 troubleshooting 에 doc-only PR auto-merge 해소 (`ci-required-stubs.yml`) + Release Drafter 정상 동작 + GHA billing 해소 항목 갱신. CLAUDE.local.md 자체는 PUBLIC repo 에 commit 되어 외부 노출 (정책 텍스트만, 민감 정보 0).
 - 1.2.0 (2026-04-26): §2 branch protection 활성 (main + develop, 7 required contexts), §2.4 Auto-merge 운영 가이드 신설. §7.2 sync subcommand 에 auto-merge 패턴 주입. Repo transfer (GoosLab → modu-ai).
 - 1.1.0 (2026-04-26): §9 Code Comments Policy 신설 (HARD: 모든 코드 주석 영어). Troubleshooting → §10 이동. CI billing / Release Drafter config troubleshooting 항목 추가.
 - 1.0.0 (2026-04-24): 초안. Enhanced GitHub Flow + 3축 라벨 + Release Drafter + branch protection 가이드.
