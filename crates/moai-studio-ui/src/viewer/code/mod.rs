@@ -9,6 +9,7 @@
 pub mod highlight;
 pub mod languages;
 
+use crate::design::tokens::{self as tok, semantic};
 use crate::viewer::scroll::VirtualScroll;
 use gpui::{Context, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb};
 use highlight::{HighlightedLine, HighlightedSpan, highlight_source, scope_to_color};
@@ -139,8 +140,8 @@ fn render_loading() -> impl IntoElement {
         .flex()
         .justify_center()
         .items_center()
-        .bg(rgb(0x1a1a1a))
-        .child(div().text_color(rgb(0x888888)).child("로딩 중..."))
+        .bg(rgb(tok::BG_APP))
+        .child(div().text_color(rgb(tok::FG_MUTED)).child("로딩 중..."))
 }
 
 fn render_error(msg: &str) -> impl IntoElement {
@@ -149,13 +150,13 @@ fn render_error(msg: &str) -> impl IntoElement {
         .flex()
         .justify_center()
         .items_center()
-        .bg(rgb(0x1a1a1a))
+        .bg(rgb(tok::BG_APP))
         .child(
             div()
                 .p(px(16.))
-                .bg(rgb(0x3a1a1a))
+                .bg(rgb(tok::BG_SURFACE))
                 .rounded_md()
-                .text_color(rgb(0xff5555))
+                .text_color(rgb(semantic::DANGER))
                 .child(format!("오류: {}", msg)),
         )
 }
@@ -169,7 +170,7 @@ fn render_highlighted_lines(
         .flex_col()
         .size_full()
         .p(px(8.))
-        .bg(rgb(0x1e1e1e));
+        .bg(rgb(tok::BG_PANEL));
 
     let end = visible.end.min(lines.len());
     for line in &lines[visible.start..end] {
@@ -180,7 +181,7 @@ fn render_highlighted_lines(
                 .as_ref()
                 .map(scope_to_color)
                 .map(|[r, g, b]| (r as u32) << 16 | (g as u32) << 8 | b as u32)
-                .unwrap_or(0xd4d4d4); // 기본 텍스트 색상
+                .unwrap_or(tok::FG_SECONDARY); // 기본 텍스트 색상
             row = row.child(div().text_color(rgb(color)).child(span.text.clone()));
         }
         container = container.child(row);

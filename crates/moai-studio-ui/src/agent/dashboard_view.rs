@@ -7,7 +7,7 @@ use gpui::{
     AppContext, Context, Entity, IntoElement, ParentElement, Render, Styled, Window, div, rgb,
 };
 
-use crate::tokens;
+use crate::design::tokens as tok;
 
 use super::timeline_view::EventTimelineView;
 
@@ -37,7 +37,7 @@ impl Render for AgentDashboardView {
             .flex_col()
             .w_full()
             .h_full()
-            .bg(rgb(tokens::BG_BASE))
+            .bg(rgb(tok::BG_APP))
             // timeline placeholder — MS-2/3 에서 split layout 으로 교체
             .child(self.timeline.clone())
     }

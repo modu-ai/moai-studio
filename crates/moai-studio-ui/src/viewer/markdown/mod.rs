@@ -12,6 +12,7 @@ pub mod parser;
 //   MarkdownViewer 의 lifecycle 진입점이다.
 //   fan_in >= 3: MarkdownViewer::open, impl Render, unit tests.
 
+use crate::design::tokens::{self as tok, semantic, syntax};
 use crate::viewer::code::highlight::{HighlightedLine, scope_to_color};
 use gpui::{AnyElement, Context, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb};
 use parser::{MarkdownBlock, parse_markdown};
@@ -140,8 +141,8 @@ fn render_loading() -> impl IntoElement {
         .flex()
         .justify_center()
         .items_center()
-        .bg(rgb(0x1a1a1a))
-        .child(div().text_color(rgb(0x888888)).child("로딩 중..."))
+        .bg(rgb(tok::BG_APP))
+        .child(div().text_color(rgb(tok::FG_MUTED)).child("로딩 중..."))
 }
 
 fn render_error(msg: &str) -> impl IntoElement {
@@ -150,13 +151,13 @@ fn render_error(msg: &str) -> impl IntoElement {
         .flex()
         .justify_center()
         .items_center()
-        .bg(rgb(0x1a1a1a))
+        .bg(rgb(tok::BG_APP))
         .child(
             div()
                 .p(px(16.))
-                .bg(rgb(0x3a1a1a))
+                .bg(rgb(tok::BG_SURFACE))
                 .rounded_md()
-                .text_color(rgb(0xff5555))
+                .text_color(rgb(semantic::DANGER))
                 .child(format!("오류: {}", msg)),
         )
 }
@@ -172,7 +173,7 @@ fn render_blocks(
         .flex_col()
         .size_full()
         .p(px(16.))
-        .bg(rgb(0x1e1e1e))
+        .bg(rgb(tok::BG_PANEL))
         .gap(px(4.));
 
     // USER-DECISION (c) 배너 (1 회만 표시)
@@ -193,9 +194,9 @@ fn render_fallback_banner() -> impl IntoElement {
     div()
         .p(px(8.))
         .mb(px(8.))
-        .bg(rgb(0x3a3218))
+        .bg(rgb(tok::BG_ELEVATED))
         .rounded_md()
-        .text_color(rgb(0xffc107))
+        .text_color(rgb(semantic::WARNING))
         .child("수식/다이어그램 렌더 비활성화 (USER-DECISION c: MS-3 에서 WebView 활성화 예정)")
 }
 
@@ -204,14 +205,14 @@ fn render_block(block: &MarkdownBlock) -> AnyElement {
         MarkdownBlock::Heading { level, text } => {
             let size_px = heading_size_px(*level);
             div()
-                .text_color(rgb(0xf4f4f5))
+                .text_color(rgb(tok::FG_PRIMARY))
                 .text_size(px(size_px))
                 .mb(px(4.))
                 .child(text.clone())
                 .into_any_element()
         }
         MarkdownBlock::Paragraph(text) => div()
-            .text_color(rgb(0xb5b5bb))
+            .text_color(rgb(tok::FG_SECONDARY))
             .text_size(px(14.))
             .mb(px(4.))
             .child(text.clone())
@@ -229,37 +230,37 @@ fn render_block(block: &MarkdownBlock) -> AnyElement {
                 div()
                     .p(px(8.))
                     .mb(px(4.))
-                    .bg(rgb(0x252526))
+                    .bg(rgb(tok::BG_SURFACE))
                     .rounded_md()
-                    .text_color(rgb(0xd4d4d4))
+                    .text_color(rgb(tok::FG_SECONDARY))
                     .text_size(px(12.))
                     .child(format!("[{}]\n{}", label, code))
                     .into_any_element()
             }
         }
         MarkdownBlock::InlineCode(code) => div()
-            .bg(rgb(0x252526))
+            .bg(rgb(tok::BG_SURFACE))
             .rounded_sm()
             .px(px(4.))
-            .text_color(rgb(0xce9178))
+            .text_color(rgb(syntax::dark::STRING))
             .text_size(px(13.))
             .child(format!("`{}`", code))
             .into_any_element(),
         MarkdownBlock::Math(math) => div()
             .p(px(8.))
             .mb(px(4.))
-            .bg(rgb(0x252526))
+            .bg(rgb(tok::BG_SURFACE))
             .rounded_md()
-            .text_color(rgb(0xd4d4d4))
+            .text_color(rgb(tok::FG_SECONDARY))
             .text_size(px(12.))
             .child(format!("[math]\n{}", math))
             .into_any_element(),
         MarkdownBlock::Mermaid(diagram) => div()
             .p(px(8.))
             .mb(px(4.))
-            .bg(rgb(0x252526))
+            .bg(rgb(tok::BG_SURFACE))
             .rounded_md()
-            .text_color(rgb(0x9cdcfe))
+            .text_color(rgb(syntax::VARIABLE))
             .text_size(px(12.))
             .child(format!("[mermaid]\n{}", diagram))
             .into_any_element(),
@@ -268,7 +269,7 @@ fn render_block(block: &MarkdownBlock) -> AnyElement {
             for item in items {
                 list = list.child(
                     div()
-                        .text_color(rgb(0xb5b5bb))
+                        .text_color(rgb(tok::FG_SECONDARY))
                         .text_size(px(14.))
                         .child(format!("• {}", item)),
                 );
@@ -278,16 +279,16 @@ fn render_block(block: &MarkdownBlock) -> AnyElement {
         MarkdownBlock::Quote(text) => div()
             .pl(px(12.))
             .border_l_2()
-            .border_color(rgb(0x555566))
+            .border_color(rgb(tok::BORDER_SUBTLE))
             .mb(px(4.))
-            .text_color(rgb(0x888888))
+            .text_color(rgb(tok::FG_MUTED))
             .text_size(px(14.))
             .child(text.clone())
             .into_any_element(),
         MarkdownBlock::Rule => div()
             .w_full()
             .h(px(1.))
-            .bg(rgb(0x3a3a40))
+            .bg(rgb(tok::BORDER_STRONG))
             .mb(px(8.))
             .into_any_element(),
     }
@@ -298,7 +299,7 @@ fn render_highlighted_code(lines: &[HighlightedLine], label: &str) -> impl IntoE
     let mut container = div()
         .p(px(8.))
         .mb(px(4.))
-        .bg(rgb(0x252526))
+        .bg(rgb(tok::BG_SURFACE))
         .rounded_md()
         .text_size(px(12.))
         .flex()
@@ -307,7 +308,7 @@ fn render_highlighted_code(lines: &[HighlightedLine], label: &str) -> impl IntoE
     // 언어 레이블
     container = container.child(
         div()
-            .text_color(rgb(0x555566))
+            .text_color(rgb(tok::BORDER_SUBTLE))
             .text_size(px(10.))
             .mb(px(4.))
             .child(format!("[{}]", label)),
