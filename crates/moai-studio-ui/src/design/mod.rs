@@ -6,6 +6,8 @@
 //!   토큰 변경 시 반드시 tokens.json 과 동기화 필수.
 
 pub mod layout;
+// SPEC-V3-013 MS-3: ActiveTheme 런타임 dispatch wrapper
+pub mod runtime;
 pub mod tokens;
 pub mod typography;
 

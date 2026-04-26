@@ -3,6 +3,8 @@
 //! 영속화 대상이 아닌 순수 런타임 뷰 상태만 보유한다.
 //! UserSettings 영속화 + ActiveTheme 런타임 적용은 MS-3 단계.
 
+use serde::{Deserialize, Serialize};
+
 // ============================================================
 // Section 열거형 (6 sections)
 // ============================================================
@@ -59,7 +61,7 @@ impl SettingsSection {
 // ============================================================
 
 /// 테마 선택 (dark/light/system).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum ThemeMode {
     /// 다크 테마 (기본값)
     #[default]
@@ -71,7 +73,7 @@ pub enum ThemeMode {
 }
 
 /// 밀도 선택 (compact/comfortable).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Density {
     /// 컴팩트 — 패딩/행 높이 0.85x 축소
     Compact,
@@ -81,7 +83,7 @@ pub enum Density {
 }
 
 /// 액센트 색상 선택 (4종).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum AccentColor {
     /// 틸 청록 (브랜드 기본 — 0x144a46) (기본값)
     #[default]

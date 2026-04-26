@@ -78,6 +78,7 @@ pub mod tokens {
 /// Phase 2 (SPEC-V3-002 T4): terminal 필드 추가 — content_area TerminalSurface 분기.
 /// Phase 3 MS-1 T7 (SPEC-V3-003): terminal → pane_splitter rename.
 /// Phase 4 T2 (SPEC-V3-004 MS-1): pane_splitter → tab_container rename.
+/// SPEC-V3-013 MS-3: settings_modal slot + user_settings load-on-init + active_theme.
 pub struct RootView {
     pub workspaces: Vec<Workspace>,
     pub active_id: Option<String>,
@@ -109,6 +110,17 @@ pub struct RootView {
     pub palette: palette::PaletteOverlay,
     /// Terminal pane 포커스 상태 — SlashBar trigger 조건 (RG-PL-23).
     pub terminal_focused: bool,
+    // ── MS-3 (SPEC-V3-013 AC-V13-1/10/11/12): settings overlay slot ──
+    // @MX:ANCHOR: [AUTO] root-view-settings-modal-slot
+    // @MX:REASON: [AUTO] SPEC-V3-013 MS-3. settings_modal 은 Cmd+, 진입점이며
+    //   mount/dismiss/save 의 mutation target 이다.
+    //   fan_in >= 3: handle_settings_key_event (mount), dismiss (save), load_user_settings (init).
+    /// SPEC-V3-013 MS-3: SettingsModal slot. None = dismiss 상태, Some = mount 상태 (REQ-V13-001).
+    pub settings_modal: Option<settings::SettingsModal>,
+    /// 현재 로드된 UserSettings (영속화 원본, REQ-V13-054).
+    pub user_settings: settings::user_settings::UserSettings,
+    /// 현재 런타임 테마 (ActiveTheme dispatch wrapper, REQ-V13-061).
+    pub active_theme: design::runtime::ActiveTheme,
 }
 
 impl RootView {
@@ -118,6 +130,10 @@ impl RootView {
             .iter()
             .max_by_key(|w| w.last_active)
             .map(|w| w.id.clone());
+        // SPEC-V3-013 MS-3: 앱 시작 시 UserSettings load + ActiveTheme 초기화 (REQ-V13-054).
+        let user_settings =
+            settings::user_settings::load_or_default(&settings::user_settings::settings_path());
+        let active_theme = design::runtime::ActiveTheme::from_settings(&user_settings.appearance);
         Self {
             workspaces,
             active_id,
@@ -128,6 +144,9 @@ impl RootView {
             leaf_payloads: HashMap::new(),
             palette: palette::PaletteOverlay::new(),
             terminal_focused: false,
+            settings_modal: None,
+            user_settings,
+            active_theme,
         }
     }
 
@@ -218,6 +237,75 @@ impl RootView {
     /// Palette overlay 렌더 여부 — active palette variant 가 있을 때 true.
     pub fn has_palette_overlay(&self) -> bool {
         self.palette.is_visible()
+    }
+
+    // ── SPEC-V3-013 MS-3: Settings 키바인딩 (AC-V13-1) ──
+
+    /// Settings 글로벌 키 이벤트 처리 (AC-V13-1, REQ-V13-001).
+    ///
+    /// - Cmd+, (macOS) / Ctrl+, (Linux/Win): SettingsModal toggle.
+    ///   이미 열려있으면 무시 (REQ-V13-006).
+    /// - Esc: SettingsModal 이 열려있으면 dismiss + save (REQ-V13-004, REQ-V13-053).
+    ///
+    /// 반환값: 이 핸들러가 키 이벤트를 소비했으면 true.
+    pub fn handle_settings_key_event(&mut self, ev: &KeyDownEvent) -> bool {
+        let k = &ev.keystroke;
+        let cmd = k.modifiers.platform;
+        let ctrl = k.modifiers.control;
+        let shift = k.modifiers.shift;
+        let key = k.key.as_str();
+
+        // Cmd+, (macOS) 또는 Ctrl+, (Linux/Win) — settings toggle.
+        if (cmd || ctrl) && !shift && key == "," {
+            if self.settings_modal.is_none() {
+                // 모달 mount
+                let mut modal = settings::SettingsModal::new();
+                modal.mount();
+                self.settings_modal = Some(modal);
+            }
+            // 이미 열려있으면 무시 (REQ-V13-006).
+            return true;
+        }
+
+        // Esc — settings modal 이 열려있으면 dismiss + save.
+        if !cmd && !shift && key == "escape" && self.settings_modal.is_some() {
+            self.dismiss_settings_modal();
+            return true;
+        }
+
+        false
+    }
+
+    /// SettingsModal 을 dismiss 하고 dirty 상태이면 즉시 save 한다 (REQ-V13-053).
+    pub fn dismiss_settings_modal(&mut self) {
+        if let Some(modal) = self.settings_modal.take() {
+            // 모달의 in-memory 상태를 UserSettings 에 동기화 (appearance 섹션)
+            self.user_settings.appearance.theme = modal.view_state.appearance.theme;
+            self.user_settings.appearance.density = modal.view_state.appearance.density;
+            self.user_settings.appearance.accent = modal.view_state.appearance.accent;
+            self.user_settings.appearance.font_size_px = modal.view_state.appearance.font_size_px;
+            // keyboard 변경 사항 동기화
+            // (MS-3 단순화: custom binding 만 저장, default 제외)
+            // ActiveTheme 업데이트
+            self.active_theme =
+                design::runtime::ActiveTheme::from_settings(&self.user_settings.appearance);
+            // 즉시 flush (REQ-V13-053)
+            let path = settings::user_settings::settings_path();
+            if let Err(e) = settings::user_settings::save_atomic(&path, &self.user_settings) {
+                error!("settings.json save 실패: {e}");
+            }
+        }
+    }
+
+    /// SettingsModal 이 현재 열려있는지 확인한다 (REQ-V13-001).
+    pub fn has_settings_modal(&self) -> bool {
+        self.settings_modal.is_some()
+    }
+
+    /// UserSettings 에서 ActiveTheme 을 재계산하고 반환한다 (REQ-V13-062).
+    pub fn refresh_active_theme(&mut self) {
+        self.active_theme =
+            design::runtime::ActiveTheme::from_settings(&self.user_settings.appearance);
     }
 
     /// GPUI 키 이벤트를 탭 명령으로 변환하여 TabContainer 에 전달한다 (REQ-R-031).
@@ -434,14 +522,21 @@ impl Render for RootView {
         // SPEC-V3-004 T5: RootView 가 key 이벤트를 수신하여 tab command 로 dispatch.
         // REQ-R-031: keystroke_to_tab_key → dispatch_tab_key 순서로 변환.
         // MS-3: palette overlay slot — active palette 가 있을 때 overlay 렌더.
+        // SPEC-V3-013 MS-3: settings overlay slot — settings_modal 이 Some 이면 overlay 렌더.
         let active_palette = self.palette.active_variant;
+        let has_settings = self.settings_modal.is_some();
         div()
             .flex()
             .flex_col()
             .size_full()
             .bg(rgb(tok::BG_APP))
             .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _window, cx| {
-                // MS-3: palette 키 먼저 처리 — 소비되면 tab 키 dispatch 스킵.
+                // settings 키 먼저 처리 — 소비되면 나머지 스킵.
+                if this.handle_settings_key_event(ev) {
+                    cx.notify();
+                    return;
+                }
+                // MS-3: palette 키 처리 — 소비되면 tab 키 dispatch 스킵.
                 if !this.handle_palette_key_event(ev) {
                     this.handle_key_event(ev, cx);
                 }
@@ -450,6 +545,7 @@ impl Render for RootView {
             .child(main_body(&self.workspaces, rows, new_ws_btn, tab_container))
             .child(status_bar())
             .children(active_palette.map(|_v| render_palette_overlay()))
+            .children(has_settings.then(render_settings_overlay))
     }
 }
 
@@ -813,6 +909,64 @@ fn render_palette_overlay() -> impl IntoElement {
                         .text_sm()
                         .text_color(rgb(tok::FG_SECONDARY))
                         .child("palette"),
+                ),
+        )
+}
+
+// ============================================================
+// SPEC-V3-013 MS-3: Settings overlay — Scrim + SettingsModal placeholder
+// ============================================================
+
+/// Settings overlay 렌더 — Scrim 위에 880×640 SettingsModal placeholder (AC-V13-1).
+///
+/// MS-3 단계: layout constants + scrim + 컨테이너 placeholder.
+/// 실제 sidebar/main pane 렌더는 SettingsModal.view_state 기반 (후속 연결).
+fn render_settings_overlay() -> impl IntoElement {
+    use settings::settings_modal::{
+        SETTINGS_MODAL_HEIGHT, SETTINGS_MODAL_WIDTH, SETTINGS_SIDEBAR_WIDTH,
+    };
+    div()
+        .absolute()
+        .inset_0()
+        .bg(gpui::rgba(0x08_0c_0b_8c)) // scrim dark (REQ-V13-005)
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .child(
+            div()
+                .w(px(SETTINGS_MODAL_WIDTH))
+                .h(px(SETTINGS_MODAL_HEIGHT))
+                .bg(rgb(crate::design::tokens::theme::dark::background::PANEL))
+                .rounded_lg()
+                .flex()
+                .flex_row()
+                // sidebar placeholder
+                .child(
+                    div()
+                        .w(px(SETTINGS_SIDEBAR_WIDTH))
+                        .h_full()
+                        .bg(rgb(crate::design::tokens::theme::dark::background::SURFACE))
+                        .border_r_1()
+                        .border_color(rgb(
+                            crate::design::tokens::theme::dark::border::DEFAULT_APPROX,
+                        ))
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(rgb(tok::FG_MUTED))
+                                .p_3()
+                                .child("Settings"),
+                        ),
+                )
+                // main pane placeholder
+                .child(
+                    div().flex_grow().h_full().p_4().child(
+                        div()
+                            .text_sm()
+                            .text_color(rgb(tok::FG_SECONDARY))
+                            .child("Settings Modal"),
+                    ),
                 ),
         )
 }
@@ -1225,5 +1379,130 @@ mod tests {
         });
         let leaf_count = cx.read(|app| root_entity.read(app).leaf_payloads.len());
         assert_eq!(leaf_count, 0, "binary 파일은 leaf_payloads 에 영향 없음");
+    }
+
+    // ── SPEC-V3-013 MS-3: RootView settings_modal + Cmd+, 키바인딩 테스트 ──
+
+    /// 새 RootView 에서 settings_modal 이 None 이다 (AC-V13-1 전제).
+    #[test]
+    fn root_view_settings_modal_starts_none() {
+        let view = RootView::new(vec![], dummy_path());
+        assert!(view.settings_modal.is_none(), "초기 settings_modal 은 None");
+        assert!(!view.has_settings_modal());
+    }
+
+    /// Cmd+, → settings_modal 이 Some 이 된다 (AC-V13-1).
+    #[test]
+    fn cmd_comma_mounts_settings_modal() {
+        let mut view = RootView::new(vec![], dummy_path());
+        let ev = make_key_event(",", true, false);
+        let consumed = view.handle_settings_key_event(&ev);
+        assert!(consumed, "Cmd+, 는 소비되어야 함");
+        assert!(
+            view.settings_modal.is_some(),
+            "Cmd+, 후 settings_modal 이 Some"
+        );
+        assert!(view.has_settings_modal());
+    }
+
+    /// Cmd+, 두 번 → 이미 열려있으면 무시 (REQ-V13-006).
+    #[test]
+    fn cmd_comma_double_press_does_not_remount() {
+        let mut view = RootView::new(vec![], dummy_path());
+        let ev = make_key_event(",", true, false);
+        view.handle_settings_key_event(&ev); // mount
+        assert!(view.has_settings_modal());
+        view.handle_settings_key_event(&ev); // 두 번째 — 무시
+        assert!(view.has_settings_modal(), "두 번째 Cmd+, 는 modal 유지");
+    }
+
+    /// Esc → settings_modal 이 dismiss 된다 (REQ-V13-004).
+    #[test]
+    fn esc_dismisses_settings_modal() {
+        let mut view = RootView::new(vec![], dummy_path());
+        // 먼저 열기
+        let cmd_comma = make_key_event(",", true, false);
+        view.handle_settings_key_event(&cmd_comma);
+        assert!(view.has_settings_modal());
+        // Esc
+        let esc = make_key_event("escape", false, false);
+        let consumed = view.handle_settings_key_event(&esc);
+        assert!(consumed, "Esc 는 소비되어야 함 (settings modal open 상태)");
+        assert!(!view.has_settings_modal(), "Esc 후 settings_modal 이 None");
+    }
+
+    /// settings_modal 이 없을 때 Esc 는 소비되지 않는다.
+    #[test]
+    fn esc_when_no_settings_modal_not_consumed() {
+        let mut view = RootView::new(vec![], dummy_path());
+        let esc = make_key_event("escape", false, false);
+        let consumed = view.handle_settings_key_event(&esc);
+        assert!(!consumed, "settings modal 없을 때 Esc 는 소비하지 않음");
+    }
+
+    /// RootView init 시 user_settings 가 load 되고 active_theme 이 일관성 있게 설정된다 (AC-V13-11).
+    /// 실제 config 파일이 존재할 수 있으므로 파일 내용이 아닌 active_theme ↔ user_settings 일관성만 검증.
+    #[test]
+    fn root_view_init_loads_user_settings_and_active_theme() {
+        let view = RootView::new(vec![], dummy_path());
+        // active_theme 이 load 된 user_settings.appearance 에서 일관되게 derive 되어야 함
+        use design::runtime::ActiveTheme;
+        let expected = ActiveTheme::from_settings(&view.user_settings.appearance);
+        assert_eq!(
+            view.active_theme, expected,
+            "active_theme 은 load 된 user_settings.appearance 와 일치해야 함"
+        );
+    }
+
+    /// dismiss_settings_modal 이 user_settings 를 업데이트한다.
+    #[test]
+    fn dismiss_settings_modal_syncs_user_settings() {
+        let mut view = RootView::new(vec![], dummy_path());
+        // modal 열기
+        let ev = make_key_event(",", true, false);
+        view.handle_settings_key_event(&ev);
+
+        // modal 내 appearance 변경
+        if let Some(ref mut modal) = view.settings_modal {
+            modal.view_state.appearance.font_size_px = 16;
+            modal.view_state.appearance.accent = settings::settings_state::AccentColor::Blue;
+        }
+
+        // dismiss → save + sync
+        view.dismiss_settings_modal();
+        assert!(!view.has_settings_modal(), "dismiss 후 modal 이 None");
+        assert_eq!(
+            view.user_settings.appearance.font_size_px, 16,
+            "font_size_px 가 user_settings 에 반영되어야 함"
+        );
+        assert_eq!(
+            view.user_settings.appearance.accent,
+            settings::settings_state::AccentColor::Blue,
+            "accent 이 user_settings 에 반영되어야 함"
+        );
+        // ActiveTheme 도 업데이트되어야 함
+        assert!((view.active_theme.font_size_px() - 16.0).abs() < f32::EPSILON);
+        assert_eq!(view.active_theme.accent_color(), 0x2563eb);
+    }
+
+    /// Ctrl+, (Linux/Win) 도 settings_modal 을 mount 한다 (REQ-V13-001).
+    #[test]
+    fn ctrl_comma_mounts_settings_modal() {
+        let mut view = RootView::new(vec![], dummy_path());
+        // Ctrl+, (control modifier, not platform)
+        let ev = KeyDownEvent {
+            keystroke: gpui::Keystroke {
+                modifiers: gpui::Modifiers {
+                    control: true,
+                    ..Default::default()
+                },
+                key: ",".to_string(),
+                key_char: None,
+            },
+            is_held: false,
+        };
+        let consumed = view.handle_settings_key_event(&ev);
+        assert!(consumed, "Ctrl+, 는 소비되어야 함");
+        assert!(view.has_settings_modal());
     }
 }

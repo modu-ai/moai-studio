@@ -12,11 +12,15 @@
 //! - `panes/agent.rs` — AgentPane (skeleton + auto_approve)
 //! - `panes/advanced.rs` — AdvancedPane (skeleton + experimental_flags)
 //!
-//! ActiveTheme global + UserSettings 영속화는 MS-3.
+//! SPEC-V3-013 MS-3 산출:
+//! - `user_settings.rs` — UserSettings struct + serde + atomic write + fail-soft load
+//! - `design/runtime.rs` — ActiveTheme global dispatch wrapper
 
 pub mod panes;
 pub mod settings_modal;
 pub mod settings_state;
+// SPEC-V3-013 MS-3: UserSettings 영속화 + ActiveTheme
+pub mod user_settings;
 
 pub use panes::{AdvancedPane, AgentPane, AppearancePane, EditorPane, KeyboardPane, TerminalPane};
 pub use settings_modal::SettingsModal;
@@ -25,3 +29,4 @@ pub use settings_state::{
     KeyBinding, KeyboardState, SettingsSection, SettingsViewState, TerminalState, ThemeMode,
     default_key_bindings,
 };
+pub use user_settings::{UserSettings, load_or_default, save_atomic, settings_path};

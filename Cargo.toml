@@ -16,3 +16,5 @@ serde_yaml = "0.9"
 tracing = "0.1"
 thiserror = "2"
 axum = "0.8"
+# SPEC-V3-013 MS-3: UserSettings 영속화 경로 (platform-appropriate config dir)
+dirs = "5"
