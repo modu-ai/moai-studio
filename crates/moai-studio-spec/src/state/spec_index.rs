@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 use tracing::{info, warn};
 
+use crate::branch::list_spec_branches;
 use crate::parser::parse_spec_md;
 use crate::state::ac_state::parse_ac_states_from_progress;
 use crate::state::kanban_persist;
@@ -121,6 +122,33 @@ impl SpecIndex {
         // ID 순 정렬 (일관된 표시 순서)
         records.sort_by(|a, b| a.id.cmp(&b.id));
         self.records = records;
+    }
+
+    /// `scan` 이후 git branch 상태를 SPEC record 에 매핑한다 (REQ-SU-030 ~ REQ-SU-032).
+    ///
+    /// 기존 `scan` 시그니처를 유지하기 위한 새로운 메서드.
+    /// repo_root 에서 `list_spec_branches` 를 호출하여 각 SpecRecord.branch 를 설정한다.
+    /// git 명령 실패 시 graceful empty 처리 (NEVER panic).
+    pub fn scan_with_branches(&mut self, specs_dir: &Path, repo_root: &Path) {
+        // 1단계: 기존 scan 으로 SPEC 목록 구성
+        self.scan(specs_dir);
+
+        // 2단계: git branch 목록 수집
+        let branches = list_spec_branches(repo_root);
+        if branches.is_empty() {
+            return;
+        }
+
+        // 3단계: 각 record 에 매칭 branch 연결
+        for record in &mut self.records {
+            // record.id 와 branch.spec_id 가 일치하는 branch 를 찾는다
+            if let Some(matched) = branches
+                .iter()
+                .find(|b| b.spec_id.as_ref() == Some(&record.id))
+            {
+                record.branch = Some(matched.clone());
+            }
+        }
     }
 
     /// SPEC ID 로 record 를 찾는다.
@@ -371,5 +399,76 @@ mod tests {
         let mut index = SpecIndex::new();
         index.scan(Path::new("/nonexistent/path/specs"));
         assert!(index.is_empty(), "존재하지 않는 경로는 graceful empty");
+    }
+
+    // ── scan_with_branches 테스트 (REQ-SU-030 ~ REQ-SU-032) ─────
+
+    /// 테스트용 git repo 초기화 헬퍼.
+    fn init_git_repo_for_test(dir: &Path) {
+        for args in &[
+            vec!["init"],
+            vec!["config", "user.email", "t@t.com"],
+            vec!["config", "user.name", "T"],
+            vec!["commit", "--allow-empty", "-m", "init"],
+        ] {
+            std::process::Command::new("git")
+                .current_dir(dir)
+                .args(args)
+                .output()
+                .unwrap();
+        }
+    }
+
+    fn create_git_branch(dir: &Path, name: &str) {
+        std::process::Command::new("git")
+            .current_dir(dir)
+            .args(["branch", name])
+            .output()
+            .unwrap();
+    }
+
+    #[test]
+    fn scan_with_branches_assigns_branch_to_matching_record() {
+        // scan_with_branches: SPEC record 에 branch 매핑
+        let tmp = make_specs_dir();
+        make_spec_dir(tmp.path(), "SPEC-V3-009");
+
+        // git repo 초기화 + feature branch 생성
+        init_git_repo_for_test(tmp.path());
+        create_git_branch(tmp.path(), "feature/SPEC-V3-009-ms3");
+
+        let mut index = SpecIndex::new();
+        index.scan_with_branches(tmp.path(), tmp.path());
+
+        let record = index
+            .records
+            .iter()
+            .find(|r| r.id.as_str() == "SPEC-V3-009")
+            .unwrap();
+
+        assert!(
+            record.branch.is_some(),
+            "SPEC-V3-009 는 feature branch 가 있어야 함"
+        );
+        assert_eq!(
+            record.branch.as_ref().unwrap().branch_name,
+            "feature/SPEC-V3-009-ms3"
+        );
+    }
+
+    #[test]
+    fn scan_with_branches_graceful_when_no_git() {
+        // git 없어도 scan 결과는 유지 (branch 만 None)
+        let tmp = make_specs_dir();
+        make_spec_dir(tmp.path(), "SPEC-V3-001");
+
+        let mut index = SpecIndex::new();
+        index.scan_with_branches(tmp.path(), tmp.path());
+
+        assert_eq!(index.len(), 1);
+        assert!(
+            index.records[0].branch.is_none(),
+            "git 없는 경우 branch 는 None"
+        );
     }
 }

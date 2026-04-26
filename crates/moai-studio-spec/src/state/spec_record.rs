@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use crate::branch::BranchState;
 use crate::parser::{AcRow, ParsedSpec, RequirementGroup, SprintContractRevision};
 use crate::state::{AcRecord, AcSummary, KanbanStage};
 
@@ -99,6 +100,8 @@ pub struct SpecRecord {
     pub kanban_stage: KanbanStage,
     /// spec.md 상태 문자열 (frontmatter.status)
     pub spec_status: Option<String>,
+    /// 이 SPEC 에 매핑된 git branch 상태 (MS-3 scan_with_branches 이후 설정)
+    pub branch: Option<BranchState>,
 }
 
 impl SpecRecord {
@@ -115,6 +118,7 @@ impl SpecRecord {
             sprint_contract_revisions: Vec::new(),
             kanban_stage: KanbanStage::Todo,
             spec_status: None,
+            branch: None,
         }
     }
 

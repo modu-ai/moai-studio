@@ -7,10 +7,14 @@
 //!
 //! RootView 통합은 MS-3 에서 수행 (N6 — lib.rs 미수정).
 
+pub mod command_client;
 pub mod detail_view;
 pub mod kanban_view;
 pub mod list_view;
+pub mod sprint_panel;
 
+pub use command_client::{CommandStatus, MoaiCommandClient, MoaiSubcommand};
 pub use detail_view::SpecDetailView;
 pub use kanban_view::KanbanBoardView;
 pub use list_view::SpecListView;
+pub use sprint_panel::SprintContractPanel;

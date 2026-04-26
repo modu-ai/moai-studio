@@ -7,11 +7,13 @@
 //! - [`state`] — AcState enum + AcStateTracker + SpecIndex
 //! - [`watch`] — polling 기반 SPEC 디렉터리 변경 감시 + debounce
 
+pub mod branch;
 pub mod parser;
 pub mod state;
 pub mod watch;
 
 // ── 공개 API 재export (SPEC-V3-009 §12 외부 인터페이스) ──
+pub use branch::{BranchState, active_branch, list_spec_branches, parse_spec_id_from_branch};
 pub use parser::{ParsedSpec, parse_spec_md};
 pub use state::{
     AcRecord, AcState, AcSummary, KanbanStage, SpecFileKind, SpecId, SpecIndex, SpecRecord,
