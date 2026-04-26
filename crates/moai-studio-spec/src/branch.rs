@@ -50,7 +50,15 @@ pub fn parse_spec_id_from_branch(branch: &str) -> Option<SpecId> {
 /// repo_root 의 활성 branch 이름을 반환한다.
 ///
 /// `.git` 이 없거나 git 명령 실패 시 None 반환 (NEVER panic).
+///
+/// `.git` 존재를 명시적으로 확인하여 git 이 부모 디렉터리로 올라가
+/// ancestor repo 의 branch 를 반환하는 false-positive 를 방지한다
+/// (GHA Linux runner 에서 TempDir 이 workspace 하위에 위치할 때 발생).
 pub fn active_branch(repo_root: &Path) -> Option<String> {
+    if !repo_root.join(".git").exists() {
+        return None;
+    }
+
     let output = std::process::Command::new("git")
         .current_dir(repo_root)
         .args(["branch", "--show-current"])
@@ -69,7 +77,14 @@ pub fn active_branch(repo_root: &Path) -> Option<String> {
 ///
 /// `.git` 이 없거나 git 명령 실패 시 빈 Vec 반환 (NEVER panic).
 /// 활성 branch 는 `is_active = true` 로 표시한다 (REQ-SU-032).
+///
+/// `active_branch` 와 동일하게 `.git` 존재를 먼저 확인해 ancestor
+/// repo 로의 walk-up 을 차단한다.
 pub fn list_spec_branches(repo_root: &Path) -> Vec<BranchState> {
+    if !repo_root.join(".git").exists() {
+        return Vec::new();
+    }
+
     // git 명령 실패 시 graceful empty 반환
     let output = match std::process::Command::new("git")
         .current_dir(repo_root)
