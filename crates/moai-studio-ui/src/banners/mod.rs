@@ -14,9 +14,11 @@
 
 pub mod banner_stack;
 pub mod banner_view;
+pub mod variants;
 
 pub use banner_stack::BannerStack;
 pub use banner_view::BannerView;
+pub use variants::{CrashBanner, LspBanner, PtyBanner, UpdateBanner, WorkspaceBanner};
 
 // ============================================================
 // banner 레이아웃 치수 상수 (design::tokens 에 이전 전까지 임시 보유)
