@@ -134,6 +134,12 @@ pub struct RootView {
     //   fan_in >= 3: RootView::render (mount), push_crash/update/lsp/pty/workspace helpers, tick loop.
     /// SPEC-V3-014 MS-3: BannerStack Entity. None = 미초기화 (테스트 호환), Some = 활성 (REQ-V14-026).
     pub banner_stack: Option<Entity<banners::BannerStack>>,
+    // ── SPEC-V3-015 MS-1: SpecPanelView overlay slot ──
+    // @MX:ANCHOR: [AUTO] root-view-spec-panel-slot
+    // @MX:REASON: [AUTO] SPEC-V3-015 MS-1. spec_panel 은 3개 spec_ui 컴포넌트의 단일 overlay 진입점.
+    //   fan_in >= 3: RootView::new (init=None), handle_spec_key_event (toggle), Render::render (mount).
+    /// SPEC-V3-015 MS-1: SpecPanelView overlay. None = dismiss 상태, Some = mount 상태 (REQ-RV-002).
+    pub spec_panel: Option<spec_ui::SpecPanelView>,
 }
 
 impl RootView {
@@ -162,6 +168,7 @@ impl RootView {
             active_theme,
             find_bar_open: false,
             banner_stack: None,
+            spec_panel: None,
         }
     }
 
@@ -354,6 +361,62 @@ impl RootView {
     pub fn refresh_active_theme(&mut self) {
         self.active_theme =
             design::runtime::ActiveTheme::from_settings(&self.user_settings.appearance);
+    }
+
+    // ── SPEC-V3-015 MS-1: SpecPanelView 키바인딩 (AC-RV-2) ──
+
+    /// SpecPanelView 글로벌 키 이벤트 처리 (AC-RV-2, REQ-RV-003).
+    ///
+    /// - Cmd+Shift+S (macOS) / Ctrl+Shift+S (Linux/Win): SpecPanelView toggle.
+    ///   dismiss 상태이면 mount, mount 상태이면 dismiss.
+    /// - Tab (SpecPanel 열린 상태): mode cycle (List → Kanban → Sprint → List).
+    /// - 다른 overlay (palette, settings_modal) 활성 중에는 무시 (single-overlay invariant).
+    ///
+    /// 반환값: 이 핸들러가 키 이벤트를 소비했으면 true.
+    pub fn handle_spec_key_event(&mut self, ev: &KeyDownEvent) -> bool {
+        let k = &ev.keystroke;
+        let cmd = k.modifiers.platform;
+        let ctrl = k.modifiers.control;
+        let shift = k.modifiers.shift;
+        let key = k.key.as_str();
+
+        // Cmd+Shift+S (macOS) 또는 Ctrl+Shift+S (Linux/Win) — spec panel toggle.
+        if (cmd || ctrl) && shift && key == "s" {
+            // single-overlay invariant: 다른 overlay 가 활성이면 무시 (REQ-RV-007).
+            if self.palette.is_visible() || self.settings_modal.is_some() {
+                return true; // 소비는 하되 action 없음
+            }
+            if self.spec_panel.is_none() {
+                // mount: specs_dir 은 storage_path 기준 .moai/specs
+                let specs_dir = self.storage_path.join(".moai").join("specs");
+                self.spec_panel = Some(spec_ui::SpecPanelView::new(specs_dir));
+            } else {
+                // dismiss
+                self.spec_panel = None;
+            }
+            return true;
+        }
+
+        // Tab — spec panel 열린 상태에서 mode cycle.
+        if key == "tab" && self.spec_panel.is_some() {
+            if let Some(panel) = self.spec_panel.as_mut() {
+                panel.cycle_mode();
+            }
+            return true;
+        }
+
+        // Esc — spec panel 이 열려있으면 dismiss.
+        if !cmd && !ctrl && !shift && key == "escape" && self.spec_panel.is_some() {
+            self.spec_panel = None;
+            return true;
+        }
+
+        false
+    }
+
+    /// SpecPanelView 가 현재 mount 되어 있는지 확인한다 (REQ-RV-002).
+    pub fn has_spec_panel(&self) -> bool {
+        self.spec_panel.is_some()
     }
 
     /// GPUI 키 이벤트를 탭 명령으로 변환하여 TabContainer 에 전달한다 (REQ-R-031).
@@ -573,6 +636,8 @@ impl Render for RootView {
         // SPEC-V3-013 MS-3: settings overlay slot — settings_modal 이 Some 이면 overlay 렌더.
         let active_palette = self.palette.active_variant;
         let has_settings = self.settings_modal.is_some();
+        // SPEC-V3-015 MS-1: spec_panel — overlay mount 상태.
+        let has_spec_panel = self.spec_panel.is_some();
         // SPEC-V3-014 MS-3: banner_stack — entries 를 읽어 Entity<BannerView> 목록 생성.
         // 두 단계로 분리: (1) 불변 참조로 data 복사, (2) 가변 참조로 entity 생성.
         let banner_view_data: Vec<banners::banner_view::BannerView> = self
@@ -602,6 +667,11 @@ impl Render for RootView {
                     cx.notify();
                     return;
                 }
+                // SPEC-V3-015: spec panel 키 처리 — 소비되면 나머지 스킵.
+                if this.handle_spec_key_event(ev) {
+                    cx.notify();
+                    return;
+                }
                 // MS-3: palette 키 처리 — 소비되면 tab 키 dispatch 스킵.
                 if this.handle_palette_key_event(ev) {
                     return;
@@ -620,6 +690,7 @@ impl Render for RootView {
             .child(status_bar())
             .children(active_palette.map(|_v| render_palette_overlay()))
             .children(has_settings.then(render_settings_overlay))
+            .children(has_spec_panel.then(render_spec_panel_overlay))
     }
 }
 
@@ -1059,6 +1130,80 @@ fn render_settings_overlay() -> impl IntoElement {
                             .text_color(rgb(tok::FG_SECONDARY))
                             .child("Settings Modal"),
                     ),
+                ),
+        )
+}
+
+/// SPEC-V3-015 MS-1: SpecPanelView overlay 렌더 (AC-RV-2, REQ-RV-003).
+///
+/// Scrim (반투명 backdrop) + 중앙 정렬 컨테이너 (640×480).
+/// palette/settings 패턴과 동일한 구조.
+fn render_spec_panel_overlay() -> impl IntoElement {
+    div()
+        .absolute()
+        .inset_0()
+        .bg(gpui::rgba(0x08_0c_0b_8c)) // scrim dark — palette/settings 와 동일
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .child(
+            div()
+                .w(px(640.))
+                .h(px(480.))
+                .bg(rgb(tok::BG_PANEL))
+                .rounded_lg()
+                .flex()
+                .flex_col()
+                // 헤더: mode selector
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .gap_1()
+                        .px_3()
+                        .py_2()
+                        .bg(rgb(tok::BG_SURFACE))
+                        .border_b_1()
+                        .border_color(rgb(tok::BORDER_SUBTLE))
+                        .child(
+                            div()
+                                .px_2()
+                                .py_1()
+                                .text_sm()
+                                .text_color(rgb(tok::ACCENT))
+                                .child("List"),
+                        )
+                        .child(
+                            div()
+                                .px_2()
+                                .py_1()
+                                .text_sm()
+                                .text_color(rgb(tok::FG_MUTED))
+                                .child("Kanban"),
+                        )
+                        .child(
+                            div()
+                                .px_2()
+                                .py_1()
+                                .text_sm()
+                                .text_color(rgb(tok::FG_MUTED))
+                                .child("Sprint"),
+                        ),
+                )
+                // 본문
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .flex_grow()
+                        .p_3()
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(rgb(tok::FG_SECONDARY))
+                                .child("SpecListView"),
+                        ),
                 ),
         )
 }
@@ -1676,7 +1821,88 @@ mod tests {
 
     // ── SPEC-V3-014 MS-3: RootView + BannerStack 통합 테스트 (AC-V14-11, AC-V14-12) ──
 
-    /// AC-V14-11: RootView::new 초기 상태 — banner_stack = None (cx 없이 생성).
+    // ── SPEC-V3-015 MS-1: SpecPanelView 키바인딩 테스트 (AC-RV-1, AC-RV-2) ──
+
+    /// AC-RV-1: RootView::new 초기 상태 — spec_panel = None.
+    #[test]
+    fn spec_panel_initially_none() {
+        let view = RootView::new(vec![], dummy_path());
+        assert!(
+            view.spec_panel.is_none(),
+            "초기 spec_panel 은 None 이어야 한다 (AC-RV-1)"
+        );
+    }
+
+    /// AC-RV-2: Cmd+Shift+S → spec_panel mount (None → Some).
+    #[test]
+    fn cmd_shift_s_mounts_spec_panel() {
+        let mut view = RootView::new(vec![], dummy_path());
+        assert!(!view.has_spec_panel());
+        let ev = make_key_event("s", true, true);
+        let consumed = view.handle_spec_key_event(&ev);
+        assert!(consumed, "Cmd+Shift+S 는 소비되어야 한다");
+        assert!(
+            view.has_spec_panel(),
+            "Cmd+Shift+S 후 spec_panel 이 mount 되어야 한다"
+        );
+    }
+
+    /// AC-RV-2 (toggle): Cmd+Shift+S 두 번 → mount → dismiss.
+    #[test]
+    fn cmd_shift_s_toggles_spec_panel() {
+        let mut view = RootView::new(vec![], dummy_path());
+        let ev = make_key_event("s", true, true);
+        view.handle_spec_key_event(&ev); // mount
+        assert!(view.has_spec_panel(), "첫 번째 Cmd+Shift+S 후 mount");
+        view.handle_spec_key_event(&ev); // dismiss
+        assert!(
+            !view.has_spec_panel(),
+            "두 번째 Cmd+Shift+S 후 dismiss"
+        );
+    }
+
+    /// AC-RV-2 (mutual exclusion): palette 열려있을 때 Cmd+Shift+S → noop.
+    #[test]
+    fn cmd_shift_s_noop_when_palette_active() {
+        let mut view = RootView::new(vec![], dummy_path());
+        view.palette.open(palette::PaletteVariant::CmdPalette);
+        let ev = make_key_event("s", true, true);
+        view.handle_spec_key_event(&ev);
+        assert!(
+            !view.has_spec_panel(),
+            "palette 열려있을 때 spec_panel 은 mount 되지 않아야 한다"
+        );
+    }
+
+    /// AC-RV-2 (mutual exclusion): settings modal 열려있을 때 Cmd+Shift+S → noop.
+    #[test]
+    fn cmd_shift_s_noop_when_settings_active() {
+        let mut view = RootView::new(vec![], dummy_path());
+        let mut modal = settings::SettingsModal::new();
+        modal.mount();
+        view.settings_modal = Some(modal);
+        let ev = make_key_event("s", true, true);
+        view.handle_spec_key_event(&ev);
+        assert!(
+            !view.has_spec_panel(),
+            "settings modal 열려있을 때 spec_panel 은 mount 되지 않아야 한다"
+        );
+    }
+
+    /// Esc → spec_panel dismiss.
+    #[test]
+    fn esc_dismisses_spec_panel() {
+        let mut view = RootView::new(vec![], dummy_path());
+        let open_ev = make_key_event("s", true, true);
+        view.handle_spec_key_event(&open_ev);
+        assert!(view.has_spec_panel());
+        let esc = make_key_event("escape", false, false);
+        let consumed = view.handle_spec_key_event(&esc);
+        assert!(consumed, "Esc 는 소비되어야 한다 (spec_panel 열려있을 때)");
+        assert!(!view.has_spec_panel(), "Esc 후 spec_panel dismiss");
+    }
+
+    /// AC-RV-1: RootView::new 초기 상태 — banner_stack = None (cx 없이 생성).
     #[test]
     fn rootview_banner_stack_none_when_created_without_cx() {
         let view = RootView::new(vec![], dummy_path());
