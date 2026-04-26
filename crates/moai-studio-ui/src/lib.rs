@@ -14,6 +14,8 @@
 //! - TerminalSurface 가 Some 이면 content_area 는 빈 상태 대신 터미널을 렌더한다.
 
 pub mod agent;
+// SPEC-V3-014 MS-1: Banners Surface 모듈 (Banner trait + BannerView + BannerStack)
+pub mod banners;
 // tokens.json v2.0.0 GPUI Rust 상수 모듈 (chore: design-tokens-rust-A-B)
 pub mod design;
 pub mod explorer;
