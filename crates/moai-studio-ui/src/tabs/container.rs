@@ -9,6 +9,7 @@
 //! SPEC-V3-004 MS-1 T3: impl Render for TabContainer 추가 (placeholder render).
 //! SPEC-V3-004 MS-3 T7: DividerDragState + render_pane_tree_cx + mouse handler 배선.
 
+use crate::design::tokens::{self as tok};
 use crate::panes::{GpuiDivider, PaneId, PaneTree, ResizableDivider, SplitDirection, SplitNodeId};
 use gpui::{
     Context, CursorStyle, Div, ElementId, InteractiveElement, IntoElement, MouseButton,
@@ -371,12 +372,15 @@ impl Default for TabContainer {
 // GPUI Render 구현 (SPEC-V3-004 MS-1 T3, MS-3 T7)
 // ============================================================
 
-// 탭 바 색상 토큰 (SPEC-V3-003 design token carry)
-const TAB_ACTIVE_BG: u32 = 0x232327;
-const TAB_INACTIVE_BG: u32 = 0x131315;
-const TAB_FG_ACTIVE: u32 = 0xf4f4f5;
-const TAB_FG_INACTIVE: u32 = 0xb5b5bb;
-const CONTENT_BG: u32 = 0x0a0a0b;
+// 탭 바 색상 토큰 — design::tokens (tokens.json v2.0.0) 참조
+// @MX:NOTE: [AUTO] tab-bar-color-tokens
+// design::tokens 로 이관 완료. 이전 매직 숫자 폐기.
+use crate::design::tokens::theme::dark::{background, text};
+const TAB_ACTIVE_BG: u32 = background::ELEVATED; // 0x182320
+const TAB_INACTIVE_BG: u32 = background::PANEL; // 0x0e1513
+const TAB_FG_ACTIVE: u32 = text::PRIMARY; // 0xe6ebe9
+const TAB_FG_INACTIVE: u32 = text::SECONDARY; // 0x98a09d
+const CONTENT_BG: u32 = background::APP; // 0x0a100e
 
 /// `Styled::style()` 은 `&mut self` 를 받아 체이닝 불가 — 이 헬퍼로 임의 flex_grow 값 설정.
 fn set_flex_grow(mut d: Div, v: f32) -> Div {
@@ -409,7 +413,7 @@ fn render_pane_tree_cx(
                 .flex_grow()
                 .bg(rgb(CONTENT_BG))
                 .text_sm()
-                .text_color(rgb(0x6b6b73))
+                .text_color(rgb(tok::FG_MUTED))
                 .p_2()
                 .child(leaf.payload.clone())
         }
@@ -438,10 +442,10 @@ fn render_pane_tree_cx(
                         .w(px(4.0))
                         .h_full()
                         .flex_shrink_0()
-                        .bg(rgb(0x2a2a2e))
+                        .bg(rgb(tok::BORDER_SUBTLE))
                         .hover(|s: StyleRefinement| {
                             let mut s = s;
-                            s.background = Some(rgb(0x3a3a40).into());
+                            s.background = Some(rgb(tok::BORDER_STRONG).into());
                             s
                         })
                         .cursor(CursorStyle::ResizeLeftRight)
@@ -508,10 +512,10 @@ fn render_pane_tree_cx(
                         .h(px(4.0))
                         .w_full()
                         .flex_shrink_0()
-                        .bg(rgb(0x2a2a2e))
+                        .bg(rgb(tok::BORDER_SUBTLE))
                         .hover(|s: StyleRefinement| {
                             let mut s = s;
-                            s.background = Some(rgb(0x3a3a40).into());
+                            s.background = Some(rgb(tok::BORDER_STRONG).into());
                             s
                         })
                         .cursor(CursorStyle::ResizeUpDown)
@@ -587,7 +591,7 @@ impl Render for TabContainer {
                 .child(
                     div()
                         .text_sm()
-                        .text_color(rgb(0x6b6b73))
+                        .text_color(rgb(tok::FG_MUTED))
                         .child("MS-1 TabContainer placeholder — no tabs"),
                 );
         }

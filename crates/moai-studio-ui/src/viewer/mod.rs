@@ -16,6 +16,7 @@ pub mod scroll;
 //   fan_in >= 3: render_pane_tree<LeafKind>, RootView::handle_open_file,
 //   integration 테스트, MS-2 CodeViewer 배선.
 
+use crate::design::tokens as tok;
 use code::CodeViewer;
 use gpui::{Context, Div, Entity, IntoElement, ParentElement, Render, Styled, Window, div};
 use markdown::MarkdownViewer;
@@ -105,11 +106,15 @@ impl Render for LeafKind {
 fn leaf_placeholder(msg: &str) -> Div {
     div()
         .size_full()
-        .bg(gpui::rgb(0x1a1a1a))
+        .bg(gpui::rgb(tok::BG_APP))
         .flex()
         .justify_center()
         .items_center()
-        .child(div().text_color(gpui::rgb(0x555566)).child(msg.to_string()))
+        .child(
+            div()
+                .text_color(gpui::rgb(tok::BORDER_SUBTLE))
+                .child(msg.to_string()),
+        )
 }
 
 // ============================================================

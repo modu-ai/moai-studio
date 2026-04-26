@@ -13,6 +13,7 @@
 //! 실제 GPUI element 생성은 `render_pane_tree` 가 담당하고,
 //! AC-R-2/R-4 는 `count_*` 헬퍼를 통한 logic-level 검증으로 커버한다.
 
+use crate::design::tokens as tok;
 use crate::panes::{PaneTree, SplitDirection};
 use gpui::{IntoElement, ParentElement, Styled, div};
 
@@ -82,7 +83,7 @@ pub fn divider_vertical() -> impl IntoElement {
     div()
         .w(gpui::px(4.0))
         .h_full()
-        .bg(rgb(0x2a2a2e))
+        .bg(rgb(tok::BORDER_SUBTLE))
         .flex_shrink_0()
 }
 
@@ -94,7 +95,7 @@ pub fn divider_horizontal() -> impl IntoElement {
     div()
         .h(gpui::px(4.0))
         .w_full()
-        .bg(rgb(0x2a2a2e))
+        .bg(rgb(tok::BORDER_SUBTLE))
         .flex_shrink_0()
 }
 

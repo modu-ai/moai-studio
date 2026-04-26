@@ -8,6 +8,7 @@
 pub mod clipboard;
 pub mod input;
 
+use crate::design::tokens::{self as tok, ide_accent};
 use gpui::{Context, IntoElement, Keystroke, ParentElement, Render, Styled, Window, div, px, rgb};
 
 // ============================================================
@@ -274,7 +275,7 @@ impl Render for TerminalSurface {
 
         let mut area = div()
             .size_full()
-            .bg(rgb(0x1a1a1a)) // 터미널 배경색 (design token 은 T5 에서 연동)
+            .bg(rgb(tok::BG_APP)) // 터미널 배경 — tokens.json theme.dark.background.app
             .flex()
             .flex_col()
             .p_2();
@@ -286,22 +287,27 @@ impl Render for TerminalSurface {
             area = area.child(
                 div()
                     .text_xs()
-                    .text_color(rgb(0x88ccff))
-                    .bg(rgb(0x2244aa))
+                    .text_color(rgb(ide_accent::CYAN))
+                    .bg(rgb(ide_accent::BLUE))
                     .child(sel_info),
             );
         }
 
         // 커서 위치 + 첫 번째 행 텍스트 표시 (T5 에서 실제 셀 그리드로 교체)
-        area.child(div().text_sm().text_color(rgb(0xd4d4d4)).child(cursor_info))
-            .child(
-                // 커서 표시 (blink 는 T5 에서 GPUI timer 기반으로 구현)
-                div().w(px(8.)).h(px(16.)).bg(rgb(if self.cursor_visible {
-                    0xd4d4d4
-                } else {
-                    0x1a1a1a
-                })),
-            )
+        area.child(
+            div()
+                .text_sm()
+                .text_color(rgb(tok::FG_SECONDARY))
+                .child(cursor_info),
+        )
+        .child(
+            // 커서 표시 (blink 는 T5 에서 GPUI timer 기반으로 구현)
+            div().w(px(8.)).h(px(16.)).bg(rgb(if self.cursor_visible {
+                tok::FG_SECONDARY
+            } else {
+                tok::BG_APP
+            })),
+        )
     }
 }
 

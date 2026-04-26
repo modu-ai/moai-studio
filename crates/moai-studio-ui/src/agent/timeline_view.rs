@@ -6,7 +6,7 @@
 use gpui::{Context, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb};
 use moai_studio_agent::events::AgentEvent;
 
-use crate::tokens;
+use crate::design::tokens as tok;
 
 // @MX:ANCHOR: [AUTO] timeline-view-entity-ui
 // @MX:REASON: [AUTO] GPUI 렌더 진입점. fan_in >= 3:
@@ -71,13 +71,13 @@ impl Render for EventTimelineView {
             .flex_col()
             .w_full()
             .h_full()
-            .bg(rgb(tokens::BG_SURFACE))
+            .bg(rgb(tok::BG_SURFACE))
             .p_3()
             .gap_1()
             .child(
                 div()
                     .text_sm()
-                    .text_color(rgb(tokens::FG_MUTED))
+                    .text_color(rgb(tok::FG_MUTED))
                     .child(format!("Events: {}", count)),
             );
 
@@ -85,7 +85,7 @@ impl Render for EventTimelineView {
             container = container.child(
                 div()
                     .text_xs()
-                    .text_color(rgb(tokens::FG_SECONDARY))
+                    .text_color(rgb(tok::FG_SECONDARY))
                     .py(px(1.))
                     .child(kind_str),
             );

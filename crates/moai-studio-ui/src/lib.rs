@@ -14,6 +14,8 @@
 //! - TerminalSurface 가 Some 이면 content_area 는 빈 상태 대신 터미널을 렌더한다.
 
 pub mod agent;
+// tokens.json v2.0.0 GPUI Rust 상수 모듈 (chore: design-tokens-rust-A-B)
+pub mod design;
 pub mod explorer;
 pub mod panes;
 pub mod tabs;
@@ -21,6 +23,7 @@ pub mod terminal;
 // SPEC-V3-006 MS-1: viewer surface 모듈
 pub mod viewer;
 
+use design::tokens::{self as tok, traffic};
 use gpui::{
     App, Application, Context, Entity, IntoElement, KeyDownEvent, MouseButton, ParentElement,
     Render, Styled, Window, WindowOptions, div, prelude::*, px, rgb, size,
@@ -34,40 +37,33 @@ use tracing::{error, info};
 use viewer::LeafKind;
 
 // ============================================================
-// Design tokens — `system.md` §4 dark primary.
+// Design tokens — design::tokens (tokens.json v2.0.0) alias.
+// 구 `tokens` 모듈은 design::tokens 로 통합되었습니다.
 // ============================================================
 
+/// 하위 호환 alias — 기존 코드가 `tokens::XXX` 패턴으로 참조할 경우 사용.
+/// 새 코드는 `design::tokens::*` 또는 `design::tokens::theme::dark::*` 를 직접 사용할 것.
+#[deprecated(
+    since = "0.2.0",
+    note = "design::tokens 모듈로 이관. crate::design::tokens::* 를 직접 사용하세요."
+)]
+#[allow(dead_code)]
 pub mod tokens {
-    /// 기본 배경 (윈도우 전체)
-    pub const BG_BASE: u32 = 0x0a0a0b;
-    /// 1차 surface (TitleBar, Sidebar, StatusBar, 카드)
-    pub const BG_SURFACE: u32 = 0x131315;
-    /// 2차 surface (hover, selected row)
-    pub const BG_SURFACE_2: u32 = 0x1b1b1e;
-    /// 3차 surface (active row)
-    pub const BG_SURFACE_3: u32 = 0x232327;
-
-    /// 제목 / 강조 텍스트
-    pub const FG_PRIMARY: u32 = 0xf4f4f5;
-    /// 본문
-    pub const FG_SECONDARY: u32 = 0xb5b5bb;
-    /// 메타 / 캡션 / 힌트
-    pub const FG_MUTED: u32 = 0x6b6b73;
-    /// 비활성
-    pub const FG_DIM: u32 = 0x3f3f46;
-
-    /// 기본 경계선
-    pub const BORDER_SUBTLE: u32 = 0x2a2a2e;
-    /// 강조 경계 (modal 등)
-    pub const BORDER_STRONG: u32 = 0x3a3a40;
-
-    /// MoAI 브랜드 오렌지
-    pub const ACCENT_MOAI: u32 = 0xff6a3d;
-
-    /// macOS traffic lights
-    pub const TRAFFIC_RED: u32 = 0xff5f57;
-    pub const TRAFFIC_YELLOW: u32 = 0xfebc2e;
-    pub const TRAFFIC_GREEN: u32 = 0x28c840;
+    pub use crate::design::tokens::BG_ELEVATED as BG_SURFACE_2;
+    pub use crate::design::tokens::BG_ELEVATED as BG_SURFACE_3;
+    pub use crate::design::tokens::BG_PANEL as BG_BASE;
+    pub use crate::design::tokens::BG_SURFACE;
+    pub use crate::design::tokens::BORDER_STRONG;
+    pub use crate::design::tokens::BORDER_SUBTLE;
+    pub use crate::design::tokens::FG_DISABLED as FG_DIM;
+    pub use crate::design::tokens::FG_MUTED;
+    pub use crate::design::tokens::FG_PRIMARY;
+    pub use crate::design::tokens::FG_SECONDARY;
+    /// ACCENT_MOAI (오렌지) 폐기 → 다크 모드 청록 PRIMARY_DARK 로 교체
+    pub use crate::design::tokens::brand::PRIMARY_DARK as ACCENT_MOAI;
+    pub use crate::design::tokens::traffic::GREEN as TRAFFIC_GREEN;
+    pub use crate::design::tokens::traffic::RED as TRAFFIC_RED;
+    pub use crate::design::tokens::traffic::YELLOW as TRAFFIC_YELLOW;
 }
 
 // ============================================================
@@ -388,7 +384,7 @@ impl Render for RootView {
             .flex()
             .flex_col()
             .size_full()
-            .bg(rgb(tokens::BG_BASE))
+            .bg(rgb(tok::BG_APP))
             .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _window, cx| {
                 this.handle_key_event(ev, cx);
             }))
@@ -409,10 +405,10 @@ fn new_workspace_button() -> gpui::Stateful<gpui::Div> {
         .px_2()
         .py_2()
         .rounded_md()
-        .bg(rgb(tokens::BG_SURFACE_2))
-        .text_color(rgb(tokens::FG_SECONDARY))
+        .bg(rgb(tok::BG_ELEVATED))
+        .text_color(rgb(tok::FG_SECONDARY))
         .text_sm()
-        .hover(|s| s.bg(rgb(tokens::BG_SURFACE_3)))
+        .hover(|s| s.bg(rgb(tok::BG_ELEVATED)))
         .cursor_pointer()
         .child("+ New Workspace")
 }
@@ -430,25 +426,25 @@ fn title_bar(active_label: &str) -> impl IntoElement {
         .h(px(44.))
         .px_4()
         .gap_3()
-        .bg(rgb(tokens::BG_SURFACE))
+        .bg(rgb(tok::BG_SURFACE))
         .border_b_1()
-        .border_color(rgb(tokens::BORDER_SUBTLE))
+        .border_color(rgb(tok::BORDER_SUBTLE))
         // 좌측 — traffic lights placeholder (native 윈도우 chrome 사용 시 숨김 가능)
         .child(traffic_lights())
         // 프로젝트 이름 (현재 활성 워크스페이스)
         .child(
             div()
                 .text_sm()
-                .text_color(rgb(tokens::FG_PRIMARY))
+                .text_color(rgb(tok::FG_PRIMARY))
                 .child("MoAI Studio"),
         )
         // 구분자
-        .child(div().text_sm().text_color(rgb(tokens::FG_DIM)).child("/"))
+        .child(div().text_sm().text_color(rgb(tok::FG_DISABLED)).child("/"))
         // 활성 워크스페이스 이름 (empty state 시에는 placeholder)
         .child(
             div()
                 .text_sm()
-                .text_color(rgb(tokens::FG_SECONDARY))
+                .text_color(rgb(tok::FG_SECONDARY))
                 .child(active_label.to_string()),
         )
 }
@@ -466,21 +462,21 @@ fn traffic_lights() -> impl IntoElement {
                 .w(px(12.))
                 .h(px(12.))
                 .rounded_full()
-                .bg(rgb(tokens::TRAFFIC_RED)),
+                .bg(rgb(traffic::RED)),
         )
         .child(
             div()
                 .w(px(12.))
                 .h(px(12.))
                 .rounded_full()
-                .bg(rgb(tokens::TRAFFIC_YELLOW)),
+                .bg(rgb(traffic::YELLOW)),
         )
         .child(
             div()
                 .w(px(12.))
                 .h(px(12.))
                 .rounded_full()
-                .bg(rgb(tokens::TRAFFIC_GREEN)),
+                .bg(rgb(traffic::GREEN)),
         )
 }
 
@@ -515,30 +511,29 @@ fn sidebar(
         .flex_col()
         .w(px(260.))
         .h_full()
-        .bg(rgb(tokens::BG_SURFACE))
+        .bg(rgb(tok::BG_SURFACE))
         .border_r_1()
-        .border_color(rgb(tokens::BORDER_SUBTLE))
+        .border_color(rgb(tok::BORDER_SUBTLE))
         .px_3()
         .py_4()
         .gap_4()
         .child(workspace_section(is_empty, rows))
         .child(sidebar_section(
             "GIT WORKTREES",
-            vec![("—", tokens::FG_DIM)],
+            vec![("—", tok::FG_DISABLED)],
         ))
-        .child(sidebar_section("SPECS", vec![("—", tokens::FG_DIM)]))
+        .child(sidebar_section("SPECS", vec![("—", tok::FG_DISABLED)]))
         .child(div().flex_grow())
         .child(new_ws_btn)
 }
 
 /// Sidebar 내부 섹션 (ALL-CAPS 라벨 + 항목 리스트).
 fn sidebar_section(label: &'static str, items: Vec<(&'static str, u32)>) -> impl IntoElement {
-    let mut section = div().flex().flex_col().gap_2().child(
-        div()
-            .text_xs()
-            .text_color(rgb(tokens::FG_MUTED))
-            .child(label),
-    );
+    let mut section = div()
+        .flex()
+        .flex_col()
+        .gap_2()
+        .child(div().text_xs().text_color(rgb(tok::FG_MUTED)).child(label));
     for (text, color) in items {
         section = section.child(
             div()
@@ -557,7 +552,7 @@ fn workspace_section(is_empty: bool, rows: Vec<gpui::Stateful<gpui::Div>>) -> im
     let mut section = div().flex().flex_col().gap_2().child(
         div()
             .text_xs()
-            .text_color(rgb(tokens::FG_MUTED))
+            .text_color(rgb(tok::FG_MUTED))
             .child("WORKSPACE"),
     );
 
@@ -565,7 +560,7 @@ fn workspace_section(is_empty: bool, rows: Vec<gpui::Stateful<gpui::Div>>) -> im
         section = section.child(
             div()
                 .text_sm()
-                .text_color(rgb(tokens::FG_MUTED))
+                .text_color(rgb(tok::FG_MUTED))
                 .px_2()
                 .py_1()
                 .child("No workspace yet"),
@@ -581,14 +576,14 @@ fn workspace_section(is_empty: bool, rows: Vec<gpui::Stateful<gpui::Div>>) -> im
 /// 단일 워크스페이스 row — Stateful (id=ws.id). 컬러 dot + 이름. Active 시 하이라이트.
 fn workspace_row(ws: &Workspace, is_active: bool) -> gpui::Stateful<gpui::Div> {
     let bg = if is_active {
-        tokens::BG_SURFACE_3
+        tok::BG_ELEVATED
     } else {
-        tokens::BG_SURFACE
+        tok::BG_SURFACE
     };
     let fg = if is_active {
-        tokens::FG_PRIMARY
+        tok::FG_PRIMARY
     } else {
-        tokens::FG_SECONDARY
+        tok::FG_SECONDARY
     };
     div()
         .id(gpui::SharedString::from(format!("ws-row-{}", ws.id)))
@@ -600,7 +595,7 @@ fn workspace_row(ws: &Workspace, is_active: bool) -> gpui::Stateful<gpui::Div> {
         .py_1()
         .rounded_md()
         .bg(rgb(bg))
-        .hover(|s| s.bg(rgb(tokens::BG_SURFACE_2)))
+        .hover(|s| s.bg(rgb(tok::BG_ELEVATED)))
         .cursor_pointer()
         .child(div().w(px(8.)).h(px(8.)).rounded_full().bg(rgb(ws.color)))
         .child(div().text_sm().text_color(rgb(fg)).child(ws.name.clone()))
@@ -621,7 +616,7 @@ fn content_area(
         .flex_col()
         .flex_grow()
         .h_full()
-        .bg(rgb(tokens::BG_BASE));
+        .bg(rgb(tok::BG_APP));
 
     if let Some(tc) = tab_container {
         // REQ-R-001/002: tab_container 존재 시 TabContainer 렌더.
@@ -641,7 +636,7 @@ fn content_area(
         area = area.justify_center().items_center().child(
             div()
                 .text_sm()
-                .text_color(rgb(tokens::FG_MUTED))
+                .text_color(rgb(tok::FG_MUTED))
                 .child("Workspace selected — tab container initializing"),
         );
     }
@@ -658,13 +653,13 @@ fn empty_state_hero() -> impl IntoElement {
         .child(
             div()
                 .text_3xl()
-                .text_color(rgb(tokens::FG_PRIMARY))
+                .text_color(rgb(tok::FG_PRIMARY))
                 .child("Welcome to MoAI Studio"),
         )
         .child(
             div()
                 .text_sm()
-                .text_color(rgb(tokens::FG_MUTED))
+                .text_color(rgb(tok::FG_MUTED))
                 .child("SPEC-first native shell for Claude Code agents"),
         )
 }
@@ -680,8 +675,8 @@ fn empty_state_primary_cta() -> impl IntoElement {
         .px_6()
         .py_3()
         .rounded_lg()
-        .bg(rgb(tokens::ACCENT_MOAI))
-        .text_color(rgb(0xffffff))
+        .bg(rgb(tok::ACCENT))
+        .text_color(rgb(crate::design::tokens::theme::dark::text::ON_PRIMARY))
         .text_sm()
         .child("+ Create First Workspace")
 }
@@ -705,19 +700,19 @@ fn secondary_btn(label: &'static str, subtitle: &'static str) -> impl IntoElemen
         .px_5()
         .py_3()
         .rounded_lg()
-        .bg(rgb(tokens::BG_SURFACE))
+        .bg(rgb(tok::BG_SURFACE))
         .border_1()
-        .border_color(rgb(tokens::BORDER_SUBTLE))
+        .border_color(rgb(tok::BORDER_SUBTLE))
         .child(
             div()
                 .text_sm()
-                .text_color(rgb(tokens::FG_PRIMARY))
+                .text_color(rgb(tok::FG_PRIMARY))
                 .child(label),
         )
         .child(
             div()
                 .text_xs()
-                .text_color(rgb(tokens::FG_MUTED))
+                .text_color(rgb(tok::FG_MUTED))
                 .child(subtitle),
         )
 }
@@ -727,7 +722,7 @@ fn empty_state_tip() -> impl IntoElement {
     div()
         .mt_8()
         .text_xs()
-        .text_color(rgb(tokens::FG_MUTED))
+        .text_color(rgb(tok::FG_MUTED))
         .child("Tip: ⌘K opens Command Palette anytime")
 }
 
@@ -744,20 +739,20 @@ fn status_bar() -> impl IntoElement {
         .h(px(28.))
         .px_3()
         .gap_3()
-        .bg(rgb(tokens::BG_SURFACE_2))
+        .bg(rgb(tok::BG_ELEVATED))
         .border_t_1()
-        .border_color(rgb(tokens::BORDER_SUBTLE))
+        .border_color(rgb(tok::BORDER_SUBTLE))
         .child(
             div()
                 .text_xs()
-                .text_color(rgb(tokens::FG_MUTED))
+                .text_color(rgb(tok::FG_MUTED))
                 .child("no git"),
         )
-        .child(div().text_xs().text_color(rgb(tokens::FG_DIM)).child("·"))
+        .child(div().text_xs().text_color(rgb(tok::FG_DISABLED)).child("·"))
         .child(
             div()
                 .text_xs()
-                .text_color(rgb(tokens::FG_MUTED))
+                .text_color(rgb(tok::FG_MUTED))
                 .child("moai-studio v0.1.0"),
         )
         .child(div().flex_grow())
@@ -765,7 +760,7 @@ fn status_bar() -> impl IntoElement {
         .child(
             div()
                 .text_xs()
-                .text_color(rgb(tokens::FG_MUTED))
+                .text_color(rgb(tok::FG_MUTED))
                 .child("⌘K to search"),
         )
 }
@@ -825,7 +820,7 @@ mod tests {
             name: name.to_string(),
             project_path: PathBuf::from(format!("/tmp/{}", name)),
             moai_config: PathBuf::from(".moai"),
-            color: 0xff6a3d,
+            color: crate::design::tokens::brand::PRIMARY_DARK,
             last_active,
         }
     }
