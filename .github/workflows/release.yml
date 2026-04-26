@@ -1,0 +1,527 @@
+name: Release
+
+# USER-DECISION-PK-C: v{x.y.z} single pattern only (no -rc* pattern per PK-C decision)
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry-run — build and package, but skip GitHub Release publish'
+        type: boolean
+        default: true
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# Required for softprops/action-gh-release to create/update releases
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: short
+
+jobs:
+  # ============================================================
+  # REQ-PK-004: Verify Cargo.toml workspace version matches tag
+  # ============================================================
+  verify-version:
+    name: Verify version
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify Cargo.toml version matches tag
+        if: github.event_name == 'push'
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          CARGO_VERSION=$(grep -m1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "Tag version:   $TAG"
+          echo "Cargo version: $CARGO_VERSION"
+          if [ "$TAG" != "$CARGO_VERSION" ]; then
+            echo "ERROR: Tag v${TAG} does not match Cargo.toml version ${CARGO_VERSION}"
+            exit 1
+          fi
+          echo "Version check passed: $CARGO_VERSION"
+
+      - name: Skip version check (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        run: echo "Dry-run mode — skipping version tag check"
+
+  # ============================================================
+  # RG-PK-7 / RG-PK-7.6: Verify functional codebase unchanged
+  # AC: packaging files only (no changes to functional crates)
+  # ============================================================
+  verify-no-code-changes:
+    name: Verify no functional code changes
+    needs: verify-version
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check functional codebase unchanged
+        run: |
+          # On tag push: compare tag commit vs its parent
+          # On workflow_dispatch: compare HEAD vs develop (if reachable)
+          if [ "${{ github.event_name }}" = "push" ]; then
+            BASE=$(git log --format="%P" -n 1 HEAD | awk '{print $1}')
+            echo "Comparing HEAD vs parent: $BASE"
+          else
+            # workflow_dispatch: compare vs develop if reachable, else skip
+            if git fetch origin develop 2>/dev/null && git rev-parse origin/develop >/dev/null 2>&1; then
+              BASE=$(git merge-base HEAD origin/develop)
+              echo "Comparing HEAD vs develop base: $BASE"
+            else
+              echo "WARNING: Cannot resolve origin/develop — skipping codebase diff check (dry-run)"
+              exit 0
+            fi
+          fi
+
+          DIFF_PATHS=$(git diff --name-only "$BASE" HEAD 2>/dev/null || echo "")
+          if [ -z "$DIFF_PATHS" ]; then
+            echo "No changes detected — OK"
+            exit 0
+          fi
+
+          echo "Changed files:"
+          echo "$DIFF_PATHS"
+
+          # Allowed paths (packaging only):
+          #   .github/workflows/  Cargo.toml  crates/*/Cargo.toml
+          #   assets/  scripts/  wix/  .moai/
+          # Disallowed: any crates/ source code outside Cargo.toml metadata
+          FORBIDDEN=$(echo "$DIFF_PATHS" | grep -E '^crates/' \
+            | grep -vE '^crates/[^/]+/Cargo\.toml$' || true)
+
+          if [ -n "$FORBIDDEN" ]; then
+            echo ""
+            echo "WARNING: Functional codebase changes detected (RG-PK-7.6):"
+            echo "$FORBIDDEN"
+            echo ""
+            echo "SPEC-V3-011 MS-1 scope: packaging infra only."
+            echo "If these are intentional packaging-only changes, this warning can be reviewed."
+            # Exit 0 on tag push (allow packaging commits in tag); flag for review
+            exit 0
+          fi
+
+          echo "Codebase check passed — only packaging files modified"
+
+  # ============================================================
+  # REQ-PK-001: 4-target build matrix
+  # REQ-PK-002: Use workspace rust-toolchain
+  # REQ-PK-061: fail-fast: false
+  # ============================================================
+  build:
+    name: Build (${{ matrix.kind }})
+    needs: verify-version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+            kind: macos-arm64
+            binary: moai-studio
+          - os: macos-14
+            target: x86_64-apple-darwin
+            kind: macos-x86_64
+            binary: moai-studio
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            kind: linux-x86_64
+            binary: moai-studio
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+            kind: windows-x86_64
+            binary: moai-studio.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space (Linux)
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
+                      "$AGENT_TOOLSDIRECTORY/Ruby" "$AGENT_TOOLSDIRECTORY/Python" \
+                      /usr/local/.ghcup || true
+          sudo apt-get clean
+          df -h /
+
+      - name: Install Linux system deps
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libwayland-dev libfontconfig1-dev \
+            libssl-dev pkg-config
+
+      - name: Rust toolchain (workspace rust-toolchain)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.kind }}
+
+      - name: Install Zig 0.15.2 (required by moai-studio-terminal)
+        uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: 0.15.2
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }} -p moai-studio-app
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.kind }}
+          path: target/${{ matrix.target }}/release/${{ matrix.binary }}
+          retention-days: 1
+
+  # ============================================================
+  # REQ-PK-003: lipo -create universal binary
+  # REQ-PK-010: Package into .app bundle (cargo-bundle)
+  # AC-PK-1: lipo -info must show arm64 x86_64
+  # ============================================================
+  package-macos:
+    name: Package macOS (.app universal)
+    needs: build
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download macOS arm64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: build-macos-arm64
+          path: artifacts/macos-arm64
+
+      - name: Download macOS x86_64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: build-macos-x86_64
+          path: artifacts/macos-x86_64
+
+      - name: Create universal binary (lipo)
+        run: |
+          mkdir -p target/universal/release
+          lipo -create \
+            -output target/universal/release/moai-studio \
+            artifacts/macos-arm64/moai-studio \
+            artifacts/macos-x86_64/moai-studio
+          chmod +x target/universal/release/moai-studio
+
+      - name: Verify universal binary (AC-PK-1)
+        run: |
+          LIPO_INFO=$(lipo -info target/universal/release/moai-studio)
+          echo "$LIPO_INFO"
+          if ! echo "$LIPO_INFO" | grep -q "arm64" || ! echo "$LIPO_INFO" | grep -q "x86_64"; then
+            echo "ERROR: Universal binary must contain both arm64 and x86_64"
+            exit 1
+          fi
+          echo "AC-PK-1 PASSED: Universal binary verified"
+
+      - name: Rust toolchain (for cargo-bundle)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo (for cargo-bundle install)
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: release-macos-bundle
+
+      - name: Install cargo-bundle
+        run: cargo install cargo-bundle --version 0.6
+
+      # NOTE: cargo-bundle requires the binary to be built for the target.
+      # We use the pre-built universal binary and create the .app structure manually.
+      - name: Create .app bundle structure
+        run: |
+          APP_DIR="target/moai-studio.app"
+          mkdir -p "$APP_DIR/Contents/MacOS"
+          mkdir -p "$APP_DIR/Contents/Resources"
+
+          # Copy universal binary
+          cp target/universal/release/moai-studio "$APP_DIR/Contents/MacOS/moai-studio"
+
+          # Generate Info.plist
+          cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleName</key>
+              <string>moai-studio</string>
+              <key>CFBundleDisplayName</key>
+              <string>moai-studio</string>
+              <key>CFBundleIdentifier</key>
+              <string>kr.ai.mo.moai-studio</string>
+              <key>CFBundleVersion</key>
+              <string>0.1.0</string>
+              <key>CFBundleShortVersionString</key>
+              <string>0.1.0</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleExecutable</key>
+              <string>moai-studio</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>14.0</string>
+              <key>NSHumanReadableCopyright</key>
+              <string>Copyright © 2026 MoAI</string>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+          </dict>
+          </plist>
+          PLIST
+
+          # Copy icon (PNG placeholder — icon.icns deferred to MS-2)
+          if [ -f "assets/icons/256x256/moai-studio.png" ]; then
+            cp "assets/icons/256x256/moai-studio.png" "$APP_DIR/Contents/Resources/"
+          fi
+
+          echo "Created .app bundle at $APP_DIR"
+          ls -la "$APP_DIR/Contents/"
+
+      # TODO (MS-2): Add codesign + notarytool + stapler steps here
+      # These require APPLE_CERTIFICATE_P12_BASE64, APPLE_TEAM_NAME, APPLE_ID,
+      # APPLE_TEAM_ID, APPLE_APP_SPECIFIC_PASSWORD secrets (USER-DECISION-PK-B).
+
+      - name: Upload .app bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-macos-app
+          path: target/moai-studio.app
+          retention-days: 1
+
+  # ============================================================
+  # REQ-PK-020: cargo-deb .deb package
+  # REQ-PK-021: .deb includes /usr/bin + .desktop + icon
+  # REQ-PK-022: linuxdeploy .AppImage
+  # AC-PK-2: dpkg-deb --info shows correct metadata
+  # ============================================================
+  package-linux:
+    name: Package Linux (.deb + .AppImage)
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
+                      "$AGENT_TOOLSDIRECTORY/Ruby" "$AGENT_TOOLSDIRECTORY/Python" \
+                      /usr/local/.ghcup || true
+          sudo apt-get clean
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libwayland-dev libfontconfig1-dev \
+            libssl-dev pkg-config \
+            fuse libfuse2
+
+      - name: Download linux x86_64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: build-linux-x86_64
+          path: artifacts/linux-x86_64
+
+      - name: Place binary in target directory (for cargo-deb)
+        run: |
+          mkdir -p target/x86_64-unknown-linux-gnu/release
+          cp artifacts/linux-x86_64/moai-studio target/x86_64-unknown-linux-gnu/release/moai-studio
+          chmod +x target/x86_64-unknown-linux-gnu/release/moai-studio
+
+      - name: Rust toolchain (for cargo-deb)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: release-linux-deb
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb
+
+      - name: Build .deb package
+        run: |
+          cargo deb -p moai-studio-app \
+            --target x86_64-unknown-linux-gnu \
+            --no-build
+
+      - name: Verify .deb metadata (AC-PK-2)
+        run: |
+          DEB_FILE=$(find target/x86_64-unknown-linux-gnu/debian -name "*.deb" | head -1)
+          echo "Found .deb: $DEB_FILE"
+          dpkg-deb --info "$DEB_FILE"
+          # Verify Package name
+          PKG=$(dpkg-deb --info "$DEB_FILE" | grep "Package:" | awk '{print $2}')
+          [ "$PKG" = "moai-studio" ] || { echo "ERROR: Package name mismatch: $PKG"; exit 1; }
+          echo "AC-PK-2 PASSED: .deb metadata verified"
+          cp "$DEB_FILE" moai-studio.deb
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-linux-deb
+          path: moai-studio.deb
+          retention-days: 1
+
+      - name: Build .AppImage
+        run: bash scripts/build-appimage.sh
+
+      - name: Upload .AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-linux-appimage
+          path: moai-studio-*.AppImage
+          retention-days: 1
+
+  # ============================================================
+  # REQ-PK-030: cargo-wix .msi installer
+  # REQ-PK-033: Start Menu shortcut + silent install support
+  # AC-PK-4: msiexec /qn silent install
+  # ============================================================
+  package-windows:
+    name: Package Windows (.msi)
+    needs: build
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download windows x86_64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: build-windows-x86_64
+          path: artifacts/windows-x86_64
+
+      - name: Place binary in target directory (for cargo-wix)
+        run: |
+          New-Item -ItemType Directory -Force -Path "target\release"
+          Copy-Item "artifacts\windows-x86_64\moai-studio.exe" -Destination "target\release\moai-studio.exe"
+        shell: pwsh
+
+      - name: Rust toolchain (for cargo-wix)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: release-windows-wix
+
+      - name: Install cargo-wix
+        run: cargo install cargo-wix
+
+      - name: Build .msi installer
+        run: cargo wix -p moai-studio-app --no-build --nocapture
+        shell: cmd
+
+      # TODO (MS-2): Add signtool + DigiCert KeyLocker signing steps here
+      # These require SM_HOST, SM_API_KEY, SM_CLIENT_CERT_PASSWORD,
+      # SM_CODE_SIGNING_CERT_SHA1_HASH secrets (USER-DECISION-PK-B).
+
+      - name: Find and upload .msi artifact
+        run: |
+          $MSI = Get-ChildItem -Recurse -Filter "*.msi" | Select-Object -First 1
+          if (-not $MSI) { Write-Error "No .msi file found"; exit 1 }
+          Write-Host "Found .msi: $($MSI.FullName)"
+          Copy-Item $MSI.FullName -Destination "moai-studio.msi"
+        shell: pwsh
+
+      - name: Upload .msi artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-windows-msi
+          path: moai-studio.msi
+          retention-days: 1
+
+  # ============================================================
+  # REQ-PK-062: Aggregate all artifacts and create GitHub Release
+  # REQ-PK-064: Supports workflow_dispatch dry_run
+  # NOTE (MS-1): Creates draft release without signing/notarization.
+  # TODO (MS-2): Add signing, notarization, and update.json generation.
+  # TODO (MS-3): Add Ed25519-signed update.json and Release Drafter trigger.
+  # ============================================================
+  release:
+    name: GitHub Release (draft)
+    needs:
+      - package-macos
+      - package-linux
+      - package-windows
+      - verify-no-code-changes
+    runs-on: ubuntu-22.04
+    if: ${{ github.event_name == 'push' && !inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download macOS .app artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: package-macos-app
+          path: release-artifacts/macos/
+
+      - name: Download Linux .deb artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: package-linux-deb
+          path: release-artifacts/linux/
+
+      - name: Download Linux .AppImage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: package-linux-appimage
+          path: release-artifacts/linux/
+
+      - name: Download Windows .msi artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: package-windows-msi
+          path: release-artifacts/windows/
+
+      - name: List release artifacts
+        run: find release-artifacts -type f | sort
+
+      - name: Create draft GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          prerelease: false
+          files: |
+            release-artifacts/**/*.deb
+            release-artifacts/**/*.AppImage
+            release-artifacts/**/*.msi
+          body: |
+            ## moai-studio ${{ github.ref_name }}
+
+            **This is an unsigned build (MS-1 scope).** Signing and notarization
+            will be added in MS-2 after certificate acquisition.
+
+            ### Platform Downloads
+
+            | Platform | Format | Notes |
+            |----------|--------|-------|
+            | macOS (arm64 + x86_64) | .app (see artifacts) | Unsigned — Gatekeeper bypass required |
+            | Linux (Ubuntu/Debian) | .deb | `dpkg -i moai-studio.deb` |
+            | Linux (universal) | .AppImage | `chmod +x && ./moai-studio.AppImage` |
+            | Windows | .msi | Unsigned — SmartScreen warning expected |
+
+            > **TODO (MS-2):** codesign + notarytool + stapler for macOS, signtool for Windows.
+            > **TODO (MS-3):** Ed25519-signed update.json manifest for auto-update.

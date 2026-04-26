@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="windows-1252"?>
+<!--
+  WiX installer for moai-studio (Windows x86_64)
+  Generated for SPEC-V3-011 MS-1 (unsigned build)
+
+  Stable GUIDs (pre-generated, do not change):
+  - UpgradeCode (upgrade-guid): 66AF0EF7-3C7D-4225-9A81-E1A54574F7AC
+  - MainExe Component (path-guid): 65B7D893-8E3C-478F-8E0E-0F7A27244F8B
+
+  TODO (MS-2): Add signtool EV signing step in release.yml after this file is produced.
+  TODO (MS-3): Embed application manifest for dpiAware + requestedExecutionLevel.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <!--
+      Product Id="*" means auto-generated per build (minor/patch upgrades).
+      UpgradeCode is FIXED — must not change across upgrades.
+      REQ-PK-030: cargo-wix honors [package.metadata.wix] upgrade-guid / path-guid.
+    -->
+    <Product
+        Id="*"
+        Name="moai-studio"
+        Language="1033"
+        Version="0.1.0"
+        Manufacturer="MoAI"
+        UpgradeCode="66AF0EF7-3C7D-4225-9A81-E1A54574F7AC">
+
+        <Package
+            InstallerVersion="500"
+            Compressed="yes"
+            InstallScope="perMachine"
+            Description="MoAI Studio — GUI shell for MoAI-ADK"
+            Comments="Copyright (C) 2026 MoAI" />
+
+        <!-- Allow upgrade / reinstall without requiring manual uninstall -->
+        <MajorUpgrade
+            DowngradeErrorMessage="A newer version of moai-studio is already installed." />
+
+        <MediaTemplate EmbedCab="yes" />
+
+        <!--
+          REQ-PK-031: Application manifest with requestedExecutionLevel=asInvoker,
+          dpiAware=true/PM, supportedOS Windows 10/11 GUIDs.
+          The manifest is referenced via a separate file to keep this WXS clean.
+        -->
+
+        <!-- Installation directory: %ProgramFiles%\moai-studio -->
+        <Directory Id="TARGETDIR" Name="SourceDir">
+            <Directory Id="ProgramFiles64Folder">
+                <Directory Id="INSTALLFOLDER" Name="moai-studio" />
+            </Directory>
+            <!-- Start Menu Programs folder -->
+            <Directory Id="ProgramMenuFolder">
+                <Directory Id="ApplicationProgramsFolder" Name="moai-studio" />
+            </Directory>
+        </Directory>
+
+        <!-- Main executable component (path-guid fixed per REQ-PK-030) -->
+        <DirectoryRef Id="INSTALLFOLDER">
+            <Component Id="MainExe" Guid="65B7D893-8E3C-478F-8E0E-0F7A27244F8B">
+                <File
+                    Id="moai_studio_exe"
+                    Source="target\release\moai-studio.exe"
+                    KeyPath="yes" />
+            </Component>
+        </DirectoryRef>
+
+        <!-- REQ-PK-033: Start Menu shortcut -->
+        <DirectoryRef Id="ApplicationProgramsFolder">
+            <Component Id="StartMenuShortcut" Guid="F7AC070E-7285-4CDC-9EEB-B4A27B4577A1">
+                <Shortcut
+                    Id="StartMenuShortcutEntry"
+                    Name="moai-studio"
+                    Description="MoAI Studio — GUI shell for MoAI-ADK"
+                    Target="[INSTALLFOLDER]moai-studio.exe"
+                    WorkingDirectory="INSTALLFOLDER" />
+                <RemoveFolder Id="RemoveApplicationProgramsFolder" On="uninstall" />
+                <RegistryValue
+                    Root="HKCU"
+                    Key="Software\MoAI\moai-studio"
+                    Name="StartMenuInstalled"
+                    Type="integer"
+                    Value="1"
+                    KeyPath="yes" />
+            </Component>
+        </DirectoryRef>
+
+        <!-- Feature set -->
+        <Feature Id="Main" Title="moai-studio" Level="1">
+            <ComponentRef Id="MainExe" />
+            <ComponentRef Id="StartMenuShortcut" />
+        </Feature>
+
+        <!-- REQ-PK-033: Silent install support via msiexec /qn -->
+        <!-- No custom UI required for silent install — WiX default handles /qn -->
+
+        <!-- WixUI_Minimal provides minimal install dialog -->
+        <UIRef Id="WixUI_Minimal" />
+
+        <!-- License file: skip for MS-1 (license = false in metadata.wix) -->
+
+    </Product>
+</Wix>
