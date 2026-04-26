@@ -6,6 +6,8 @@
 
 use std::path::PathBuf;
 
+use crate::explorer::git_status::GitStatus;
+
 // ============================================================
 // FsError — ChildState::Failed 페이로드
 // ============================================================
@@ -66,6 +68,8 @@ pub enum FsNode {
         rel_path: PathBuf,
         /// 표시 이름
         name: String,
+        /// git 상태 배지 (MS-3, REQ-FE-020)
+        git_status: GitStatus,
         /// fuzzy filter 가시성 플래그 (쿼리 빈 상태에서 true)
         is_visible_under_filter: bool,
     },
@@ -79,6 +83,8 @@ pub enum FsNode {
         children: ChildState,
         /// 트리에서 펼쳐진 상태 여부
         is_expanded: bool,
+        /// git 상태 배지 (자식 roll-up, MS-3, REQ-FE-020)
+        git_status: GitStatus,
         /// fuzzy filter 가시성 플래그
         is_visible_under_filter: bool,
     },
@@ -90,6 +96,7 @@ impl FsNode {
         FsNode::File {
             rel_path,
             name,
+            git_status: GitStatus::Clean,
             is_visible_under_filter: true,
         }
     }
@@ -101,6 +108,7 @@ impl FsNode {
             name,
             children: ChildState::NotLoaded,
             is_expanded: false,
+            git_status: GitStatus::Clean,
             is_visible_under_filter: true,
         }
     }
@@ -238,6 +246,7 @@ mod tests {
             name: "src".to_string(),
             children: ChildState::Loaded(vec![child_file, child_dir_unloaded]),
             is_expanded: true,
+            git_status: GitStatus::Clean,
             is_visible_under_filter: true,
         };
 
