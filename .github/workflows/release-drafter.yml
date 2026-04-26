@@ -1,0 +1,30 @@
+name: Release Drafter
+
+# Release Drafter CHANGELOG 자동 초안
+# 운영 규칙: CLAUDE.local.md §5
+
+on:
+  push:
+    branches:
+      - develop
+      - 'release/**'
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+    branches:
+      - develop
+      - 'release/**'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update_release_draft:
+    name: Update draft release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: release-drafter/release-drafter@v6
+        with:
+          config-name: release-drafter.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
