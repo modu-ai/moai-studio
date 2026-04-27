@@ -2,8 +2,18 @@
 //!
 //! 워크스페이스 관리를 위한 Git 작업(워크트리, 상태, 브랜치)을 제공한다.
 
+pub mod branch;
+pub mod commit;
+pub mod diff;
+pub mod log;
+pub mod stash;
 pub mod worktree;
 
+// Re-export public types
+pub use branch::BranchInfo;
+pub use commit::CommitInfo;
+pub use diff::{Diff, Hunk, Line};
+pub use stash::StashInfo;
 pub use worktree::{WorktreeManager, WorktreeSummary};
 
 use std::path::Path;
@@ -39,6 +49,13 @@ pub struct GitRepo {
 
 impl GitRepo {
     /// 기존 Git 저장소를 연다.
+    ///
+    /// # [MX:ANCHOR] 공개 API 진입점
+    ///
+    /// **이유**: SPEC-V3-008 도입 후 fan_in이 1→7로 증가예정
+    /// (status_panel, diff_viewer, commit_composer, branch_switcher, log_view, merge_resolver, stash_panel)
+    ///
+    /// [MX:SPEC: SPEC-V3-008]
     pub fn open(path: &Path) -> Result<Self, GitError> {
         let repo = git2::Repository::open(path)?;
         Ok(Self { inner: repo })
@@ -76,6 +93,13 @@ impl GitRepo {
     /// 값: "clean" | "modified" | "added" | "untracked" | "deleted"
     ///
     /// git 저장소가 아니거나 오류 시 빈 HashMap 반환.
+    ///
+    /// # [MX:ANCHOR] 상태 조회 핵심 함수
+    ///
+    /// **이유**: SPEC-V3-008 도입 후 fan_in이 0→3으로 증가예정
+    /// (status_panel, file_explorer, merge_resolver)
+    ///
+    /// [MX:SPEC: SPEC-V3-008]
     pub fn status_map(&self) -> Result<std::collections::HashMap<String, String>, GitError> {
         let statuses = self.inner.statuses(None)?;
         let mut map = std::collections::HashMap::new();

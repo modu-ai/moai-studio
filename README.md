@@ -190,15 +190,17 @@ chmod +x moai-studio-v0.1.0.AppImage
 ./moai-studio-v0.1.0.AppImage
 ```
 
-### 향후 패키지 매니저 채널 (post-v0.1.0)
+### 패키지 매니저 채널 (v0.1.1+)
 
-[SPEC-V3-DIST-001](./.moai/specs/SPEC-V3-DIST-001/spec.md) (status: ready, 2026-04-27) 구현 시 다음 채널을 통해 quarantine / SmartScreen 우회가 자동 처리됩니다:
+[SPEC-V3-DIST-001](./.moai/specs/SPEC-V3-DIST-001/spec.md) 구현 완료 (v0.1.1). 다음 채널을 통해 quarantine / SmartScreen 우회가 자동 처리됩니다:
 
 - **macOS**: `brew tap modu-ai/tap && brew install --cask moai-studio` (`modu-ai/homebrew-tap`)
 - **Windows**: `scoop bucket add moai https://github.com/modu-ai/scoop-bucket && scoop install moai-studio` (`modu-ai/scoop-bucket`)
-- **Arch Linux**: `yay -S moai-studio-bin` (AUR, 등록 예정)
+- **Arch Linux**: `yay -S moai-studio-bin` (AUR `moai-studio-bin`)
+- **AppImage**: [dist/appimage/README.md](./dist/appimage/README.md) 참조
 
-진행 상황은 SPEC-V3-DIST-001 의 milestone 표를 참고하세요.
+**Manual Download**:
+- GitHub Releases: https://github.com/modu-ai/moai-studio/releases
 
 ### 알려진 carry-over 제약
 
