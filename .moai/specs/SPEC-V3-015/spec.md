@@ -1,7 +1,7 @@
 ---
 id: SPEC-V3-015
 version: 1.0.0
-status: draft
+status: ms1-implemented
 created: 2026-04-26
 updated: 2026-04-26
 author: manager-spec

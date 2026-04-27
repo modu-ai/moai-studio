@@ -1,8 +1,8 @@
 language:
     conversation_language: ko
-    conversation_language_name: ko
+    conversation_language_name: Korean (한국어)
     agent_prompt_language: en
-    git_commit_messages: ko
-    code_comments: ko
+    git_commit_messages: en
+    code_comments: en
     documentation: ko
     error_messages: en
