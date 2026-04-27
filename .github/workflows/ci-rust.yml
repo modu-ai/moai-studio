@@ -24,6 +24,10 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: short
 
+concurrency:
+  group: ci-rust-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # ============================================================
   # 3 플랫폼 매트릭스 빌드 (SPEC-V3-001 RG-V3-4)
