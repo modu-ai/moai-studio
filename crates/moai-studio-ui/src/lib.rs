@@ -114,6 +114,13 @@ pub struct RootView {
     pub palette: palette::PaletteOverlay,
     /// Terminal pane 포커스 상태 — SlashBar trigger 조건 (RG-PL-23).
     pub terminal_focused: bool,
+    // ── F-1: fuzzy search query state ──
+    /// Current text query typed inside the open palette (F-1, PARTIAL → DONE).
+    /// Reset to empty when palette is dismissed.
+    pub palette_query: String,
+    /// Active CmdPalette instance wired to the fuzzy file source (F-1).
+    /// Populated on CmdPalette open; reset to None on dismiss.
+    pub cmd_palette: Option<palette::variants::CmdPalette>,
     // ── MS-3 (SPEC-V3-013 AC-V13-1/10/11/12): settings overlay slot ──
     // @MX:ANCHOR: [AUTO] root-view-settings-modal-slot
     // @MX:REASON: [AUTO] SPEC-V3-013 MS-3. settings_modal 은 Cmd+, 진입점이며
@@ -163,6 +170,8 @@ impl RootView {
             leaf_payloads: HashMap::new(),
             palette: palette::PaletteOverlay::new(),
             terminal_focused: false,
+            palette_query: String::new(),
+            cmd_palette: None,
             settings_modal: None,
             user_settings,
             active_theme,
@@ -238,7 +247,12 @@ impl RootView {
         let key = k.key.as_str();
 
         if cmd && !shift && key == "p" {
-            self.palette.toggle(palette::PaletteVariant::CmdPalette);
+            self.toggle_cmd_palette();
+            return true;
+        }
+        // F-1: Cmd+K is an alias for Cmd+P (VS Code / Zed quick-open convention).
+        if cmd && !shift && key == "k" {
+            self.toggle_cmd_palette();
             return true;
         }
         if cmd && shift && key == "p" {
@@ -247,6 +261,7 @@ impl RootView {
         }
         if !cmd && !shift && key == "escape" && self.palette.is_visible() {
             self.palette.dismiss();
+            self.reset_palette_query();
             return true;
         }
         if !cmd && !shift && key == "/" && self.terminal_focused && !self.palette.is_visible() {
@@ -259,6 +274,57 @@ impl RootView {
     /// Palette overlay 렌더 여부 — active palette variant 가 있을 때 true.
     pub fn has_palette_overlay(&self) -> bool {
         self.palette.is_visible()
+    }
+
+    // ── F-1: CmdPalette toggle + query wire ──
+
+    /// Toggle CmdPalette: open with fresh CmdPalette instance, or dismiss if same variant visible.
+    ///
+    /// On open: creates a new CmdPalette with the default mock file index and stores it in
+    /// `self.cmd_palette`. On dismiss: resets query and cmd_palette.
+    fn toggle_cmd_palette(&mut self) {
+        if self.palette.active_variant == Some(palette::PaletteVariant::CmdPalette) {
+            // Already open — dismiss (toggle semantics per AC-PL-14 Q2 default).
+            self.palette.dismiss();
+            self.reset_palette_query();
+        } else {
+            // Open (also replaces other variants due to mutual exclusion).
+            self.palette.open(palette::PaletteVariant::CmdPalette);
+            self.cmd_palette = Some(palette::variants::CmdPalette::new());
+            self.palette_query = String::new();
+        }
+    }
+
+    /// Update palette query and re-filter CmdPalette items (F-1 fuzzy wire).
+    ///
+    /// Called on every keystroke while CmdPalette is open. Delegates to
+    /// `CmdPalette::set_query` which applies fuzzy matching.
+    pub fn handle_palette_text_input(&mut self, query: String) {
+        self.palette_query = query.clone();
+        if let Some(ref mut cp) = self.cmd_palette {
+            cp.set_query(query);
+        }
+    }
+
+    /// Reset palette query and cmd_palette state (called on dismiss).
+    pub fn reset_palette_query(&mut self) {
+        self.palette_query = String::new();
+        self.cmd_palette = None;
+    }
+
+    /// Handle Enter key inside active CmdPalette — returns selected file path or None.
+    ///
+    /// Callers dispatch the returned path as an open-file action (or log it in tests).
+    pub fn on_palette_enter(&mut self) -> Option<String> {
+        if let Some(ref mut cp) = self.cmd_palette
+            && let Some(palette::variants::cmd_palette::CmdPaletteEvent::FileOpened(path)) =
+                cp.on_enter()
+        {
+            self.palette.dismiss();
+            self.reset_palette_query();
+            return Some(path);
+        }
+        None
     }
 
     // ── SPEC-V3-006 MS-3a: Find/Replace 글로벌 키바인딩 ──
@@ -1595,6 +1661,57 @@ mod tests {
         assert!(view.has_palette_overlay());
         view.palette.dismiss();
         assert!(!view.has_palette_overlay());
+    }
+
+    // ── F-1 additional tests: Cmd+K binding + query wire ──
+
+    /// F-1: Cmd+K → CmdPalette opens (same as Cmd+P, VS Code / Zed pattern).
+    #[test]
+    fn cmd_k_opens_cmd_palette() {
+        let mut view = RootView::new(vec![], dummy_path());
+        assert!(view.palette.active_variant.is_none());
+        let ev = make_key_event("k", true, false);
+        let consumed = view.handle_palette_key_event(&ev);
+        assert!(consumed, "Cmd+K must be consumed");
+        assert_eq!(
+            view.palette.active_variant,
+            Some(palette::PaletteVariant::CmdPalette),
+            "Cmd+K must open CmdPalette"
+        );
+    }
+
+    /// F-1: Cmd+K toggle — second press dismisses.
+    #[test]
+    fn cmd_k_toggles_dismisses_cmd_palette() {
+        let mut view = RootView::new(vec![], dummy_path());
+        let ev = make_key_event("k", true, false);
+        view.handle_palette_key_event(&ev); // open
+        view.handle_palette_key_event(&ev); // toggle → close
+        assert!(
+            view.palette.active_variant.is_none(),
+            "second Cmd+K must dismiss CmdPalette"
+        );
+    }
+
+    /// F-1: palette_query is empty on initial open, resets on dismiss.
+    #[test]
+    fn palette_query_resets_on_dismiss() {
+        let mut view = RootView::new(vec![], dummy_path());
+        view.palette.open(palette::PaletteVariant::CmdPalette);
+        view.handle_palette_text_input("src".to_string());
+        assert_eq!(view.palette_query, "src", "query must update");
+        view.palette.dismiss();
+        view.reset_palette_query();
+        assert_eq!(view.palette_query, "", "query must reset after dismiss");
+    }
+
+    /// F-1: handle_palette_text_input updates palette_query.
+    #[test]
+    fn palette_text_input_updates_query() {
+        let mut view = RootView::new(vec![], dummy_path());
+        view.palette.open(palette::PaletteVariant::CmdPalette);
+        view.handle_palette_text_input("palette".to_string());
+        assert_eq!(view.palette_query, "palette");
     }
 
     #[test]
