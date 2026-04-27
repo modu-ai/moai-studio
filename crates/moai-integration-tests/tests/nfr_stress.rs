@@ -166,6 +166,7 @@ async fn nfr_store_crud_under_5ms() {
                 name: format!("ws-{i}"),
                 project_path: format!("/tmp/p{i}"),
                 spec_id: None,
+                color_tag: None,
             })
             .unwrap();
         inserted.push(row.id);

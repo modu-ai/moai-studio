@@ -70,6 +70,7 @@ pub async fn create_workspace(
         name: req.name.clone(),
         project_path: req.project_path.to_string_lossy().into(),
         spec_id: req.spec_id.clone(),
+        color_tag: None,
     })?;
     let ws_id = WorkspaceId(row.id);
 

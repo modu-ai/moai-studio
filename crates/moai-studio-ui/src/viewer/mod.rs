@@ -8,6 +8,8 @@
 //!   (RG-MV-4 async-lsp + lsp-types 통합).
 
 pub mod code;
+// C-5: Image Viewer with zoom/pan
+pub mod image;
 // SPEC-V3-006 MS-3a: Find/Replace (CodeViewer + MarkdownViewer 공통)
 // SPEC-V3-006 MS-3b: SearchMode::Regex 추가
 pub mod find_replace;
@@ -84,6 +86,8 @@ pub enum LeafKind {
     /// SPEC-V3-006 MS-2: tree-sitter syntax highlight CodeViewer.
     // @MX:TODO(MS-3-lsp-diagnostic): LSP 진단 (squiggly underline) 은 MS-3 에서 추가.
     Code(Entity<CodeViewer>),
+    /// C-5: Image viewer with zoom/pan support.
+    Image(Entity<image::ImageViewer>),
     /// SPEC-V3-007 carry-over: Web viewer (컴파일 전용 placeholder).
     Web,
     /// Binary 파일 — viewer 마운트 없이 안내 메시지 표시.
@@ -101,6 +105,7 @@ impl Render for LeafKind {
             LeafKind::Terminal(e) => e.clone().into_any_element(),
             LeafKind::Markdown(e) => e.clone().into_any_element(),
             LeafKind::Code(e) => e.clone().into_any_element(),
+            LeafKind::Image(e) => e.clone().into_any_element(),
             LeafKind::Web => leaf_placeholder("Web viewer — SPEC-V3-007 예정").into_any_element(),
             LeafKind::Binary(k) => {
                 let msg = format!("바이너리 파일 ({:?}) — viewer 열 수 없음", k);

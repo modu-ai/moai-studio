@@ -14,6 +14,10 @@
 //! - TerminalSurface 가 Some 이면 content_area 는 빈 상태 대신 터미널을 렌더한다.
 
 pub mod agent;
+// SPEC-V0-1-2-MENUS-001 F-3: Toolbar 모듈
+pub mod toolbar;
+// G-2: Project Wizard 모듈
+pub mod wizard;
 // SPEC-V3-014 MS-1: Banners Surface 모듈 (Banner trait + BannerView + BannerStack)
 pub mod banners;
 // tokens.json v2.0.0 GPUI Rust 상수 모듈 (chore: design-tokens-rust-A-B)
@@ -34,7 +38,7 @@ pub mod spec_ui;
 use design::tokens::{self as tok, traffic};
 use gpui::{
     App, Application, Context, Entity, InteractiveElement, IntoElement, KeyDownEvent, Menu,
-    MenuItem, MouseButton, OsAction, ParentElement, PathPromptOptions, Render, Styled,
+    MenuItem, MouseButton, OsAction, ParentElement, Render, Styled,
     SystemMenuType, Window, WindowOptions, actions, div, prelude::*, px, rgb, size,
 };
 
@@ -189,6 +193,12 @@ pub struct RootView {
     //   fan_in >= 3: RootView::new (init=None), handle_spec_key_event (toggle), Render::render (mount).
     /// SPEC-V3-015 MS-1: SpecPanelView overlay. None = dismiss 상태, Some = mount 상태 (REQ-RV-002).
     pub spec_panel: Option<spec_ui::SpecPanelView>,
+    // ── F-3: Toolbar Entity (SPEC-V0-1-2-MENUS-001) ──
+    /// Main app toolbar with 7 action buttons (Option because created in run_app)
+    pub toolbar: Option<Entity<toolbar::Toolbar>>,
+    // ── G-2: Project Wizard Entity ──
+    /// 5-step workspace creation wizard (Option because created in run_app)
+    pub project_wizard: Option<Entity<wizard::ProjectWizard>>,
 }
 
 impl RootView {
@@ -220,6 +230,8 @@ impl RootView {
             find_bar_open: false,
             banner_stack: None,
             spec_panel: None,
+            toolbar: None, // F-3: toolbar created in run_app after App context available
+            project_wizard: None, // G-2: wizard created in run_app after App context available
         }
     }
 
@@ -732,58 +744,13 @@ impl RootView {
     /// `cx.spawn` async task 에서 receiver 를 await — main thread 안전성 + GPUI tick 재진입
     /// 회피.
     fn handle_add_workspace(&mut self, cx: &mut Context<Self>) {
-        let storage_path = self.storage_path.clone();
-        let receiver = cx.prompt_for_paths(PathPromptOptions {
-            files: false,
-            directories: true,
-            multiple: false,
-            prompt: Some("프로젝트 폴더 선택".into()),
-        });
-        cx.spawn(async move |entity, cx| {
-            let path = match receiver.await {
-                Ok(Ok(Some(paths))) => match paths.into_iter().next() {
-                    Some(p) => p,
-                    None => return,
-                },
-                Ok(Ok(None)) => {
-                    info!("프로젝트 폴더 선택 취소");
-                    return;
-                }
-                Ok(Err(e)) => {
-                    error!("prompt_for_paths 실패: {e}");
-                    return;
-                }
-                Err(_) => {
-                    error!("prompt_for_paths channel 닫힘");
-                    return;
-                }
-            };
-            let mut store = match WorkspacesStore::load(&storage_path) {
-                Ok(s) => s,
-                Err(e) => {
-                    error!("WorkspacesStore::load 실패: {e}");
-                    return;
-                }
-            };
-            let ws = match Workspace::from_path(&path) {
-                Ok(w) => w,
-                Err(e) => {
-                    error!("Workspace::from_path 실패: {e}");
-                    return;
-                }
-            };
-            if let Err(e) = store.add(ws.clone()) {
-                error!("store.add 실패: {e}");
-                return;
-            }
-            let all = store.list().to_vec();
-            let _ = entity.update(cx, |this, cx| {
-                this.apply_added_workspace(&ws, all);
-                this.ensure_tab_container(cx);
-                cx.notify();
+        // G-2: Show project wizard instead of direct file picker
+        if let Some(wizard) = &self.project_wizard {
+            let _ = wizard.update(cx, |w, _cx| {
+                w.mount();
             });
-        })
-        .detach();
+        }
+        cx.notify();
     }
 }
 
@@ -884,6 +851,8 @@ impl Render for RootView {
                 this.handle_key_event(ev, cx);
             }))
             .child(title_bar(self.title_label()))
+            // F-3: Toolbar — main app action buttons (SPEC-V0-1-2-MENUS-001)
+            .children(self.toolbar.clone())
             // SPEC-V3-014 REQ-V14-027: banner_stack — TabContainer 위, 정상 flow (overlay 아님).
             .child(render_banner_strip(banner_view_entities))
             .child(main_body(
@@ -897,6 +866,8 @@ impl Render for RootView {
             .children(active_palette.map(|_v| render_palette_overlay()))
             .children(has_settings.then(render_settings_overlay))
             .children(has_spec_panel.then(render_spec_panel_overlay))
+            // G-2: Project Wizard overlay (rendered when visible)
+            .children(self.project_wizard.clone())
     }
 }
 
@@ -1622,6 +1593,10 @@ pub fn run_app(workspaces: Vec<Workspace>, storage_path: PathBuf) {
                 let mut rv = RootView::new(ws, path);
                 // SPEC-V3-014 REQ-V14-026: banner_stack 초기화 (empty BannerStack).
                 rv.banner_stack = Some(cx.new(|_| banners::BannerStack::new()));
+                // F-3: Toolbar Entity 초기화 (SPEC-V0-1-2-MENUS-001 REQ-F3-001)
+                rv.toolbar = Some(cx.new(|_| toolbar::Toolbar::new(true)));
+                // G-2: Project Wizard 초기화
+                rv.project_wizard = Some(cx.new(|_| wizard::ProjectWizard::new()));
                 rv
             })
         })

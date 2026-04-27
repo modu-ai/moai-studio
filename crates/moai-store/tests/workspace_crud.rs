@@ -10,6 +10,7 @@ fn new_ws(name: &str, path: &str) -> NewWorkspace {
         name: name.to_string(),
         project_path: path.to_string(),
         spec_id: None,
+        color_tag: None,
     }
 }
 
@@ -104,6 +105,7 @@ fn concurrent_writes_do_not_deadlock() {
                     name: format!("t{i}-{j}"),
                     project_path: format!("/p/{i}/{j}"),
                     spec_id: None,
+                    color_tag: None,
                 };
                 dao.insert(&ws).unwrap();
             }

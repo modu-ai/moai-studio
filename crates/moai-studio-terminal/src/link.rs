@@ -31,6 +31,8 @@ pub enum LinkKind {
     Url(String),
     /// OSC 8 hyperlink -- takes precedence over regex matches (AC-LK-3).
     Osc8(String),
+    /// SPEC-ID pattern: SPEC-<AREA>-<NNN> (B-4 feature).
+    SpecId(String),
 }
 
 /// A detected link span within a line of terminal output.
@@ -68,6 +70,12 @@ pub struct OpenUrl {
     pub url: String,
 }
 
+/// Action dispatched when the user clicks a SPEC-ID span (B-4 feature).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpenSpec {
+    pub spec_id: String,
+}
+
 // ============================================================
 // Compiled regex patterns -- compiled once via OnceLock (AC-LK-6)
 // ============================================================
@@ -97,6 +105,18 @@ fn path_regex() -> &'static Regex {
     RE.get_or_init(|| {
         Regex::new(r"(?P<path>[\w./\\_-]+\.[a-zA-Z]{1,5})(?::(?P<line>\d+))?(?::(?P<col>\d+))?")
             .expect("path_regex must be valid")
+    })
+}
+
+/// SPEC-ID pattern: SPEC-<AREA>-<NNN> (B-4 feature).
+///
+/// Matches patterns like SPEC-V3-001, SPEC-AUTH-012, SPEC-M1-001.
+/// AREA is uppercase alphanumeric + hyphens, NNN is 1+ digits.
+fn spec_id_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"SPEC-[A-Z0-9][A-Z0-9-]*-\d+")
+            .expect("spec_id_regex must be valid")
     })
 }
 
@@ -156,6 +176,20 @@ pub fn detect_links(text: &str) -> Vec<LinkSpan> {
                 line,
                 col,
             },
+            start,
+            end,
+        });
+    }
+
+    // Pass 3: detect SPEC-IDs, skipping ranges already covered.
+    for m in spec_id_regex().find_iter(text) {
+        let start = m.start();
+        let end = m.end();
+        if overlaps_any(&spans, start, end) {
+            continue;
+        }
+        spans.push(LinkSpan {
+            kind: LinkKind::SpecId(m.as_str().to_owned()),
             start,
             end,
         });
@@ -228,6 +262,58 @@ fn is_version_number(s: &str) -> bool {
         && stripped
             .split('.')
             .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()))
+}
+
+// ============================================================
+// Click resolution (B-1 feature)
+// ============================================================
+
+/// Action to dispatch when a link is clicked (B-1 feature).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClickAction {
+    OpenCodeViewer(OpenCodeViewer),
+    OpenUrl(OpenUrl),
+    OpenSpec(OpenSpec),
+}
+
+/// Resolves a byte offset within `text` to a clickable link action (B-1).
+///
+/// Runs `detect_links()` on the text and returns the action for the first
+/// span containing `byte_offset`. Returns `None` if no link spans cover
+/// the offset.
+pub fn resolve_click(text: &str, byte_offset: usize) -> Option<ClickAction> {
+    let spans = detect_links(text);
+    resolve_click_from_spans(&spans, byte_offset)
+}
+
+/// Resolves a click using pre-computed spans (avoids re-detecting).
+pub fn resolve_click_from_spans(spans: &[LinkSpan], byte_offset: usize) -> Option<ClickAction> {
+    for span in spans {
+        if byte_offset >= span.start && byte_offset < span.end {
+            return Some(match &span.kind {
+                LinkKind::FilePath { path, line, col } => ClickAction::OpenCodeViewer(OpenCodeViewer {
+                    path: path.clone(),
+                    line: *line,
+                    col: *col,
+                }),
+                LinkKind::Url(url) => ClickAction::OpenUrl(OpenUrl { url: url.clone() }),
+                LinkKind::Osc8(url) => ClickAction::OpenUrl(OpenUrl { url: url.clone() }),
+                LinkKind::SpecId(id) => ClickAction::OpenSpec(OpenSpec { spec_id: id.clone() }),
+            });
+        }
+    }
+    None
+}
+
+/// Converts a cell column index to an approximate byte offset in a text line.
+///
+/// For ASCII text this is a direct mapping. For UTF-8, the offset is
+/// the byte position of the `col`-th character boundary.
+pub fn col_to_byte_offset(text: &str, col: usize) -> usize {
+    text.char_indices()
+        .nth(col)
+        .map(|(i, _)| i)
+        .unwrap_or(text.len())
 }
 
 // ============================================================
@@ -467,5 +553,119 @@ mod tests {
         };
         let b = a.clone();
         assert_eq!(a, b);
+    }
+
+    // ---- B-4: SPEC-ID detection ----
+
+    #[test]
+    fn test_spec_id_basic() {
+        let spans = detect_links("Working on SPEC-V3-001 today");
+        assert_eq!(spans.len(), 1);
+        match &spans[0].kind {
+            LinkKind::SpecId(id) => assert_eq!(id, "SPEC-V3-001"),
+            other => panic!("expected SpecId, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_spec_id_with_area_hyphens() {
+        let spans = detect_links("See SPEC-AUTH-DB-012 for details");
+        assert_eq!(spans.len(), 1);
+        match &spans[0].kind {
+            LinkKind::SpecId(id) => assert_eq!(id, "SPEC-AUTH-DB-012"),
+            other => panic!("expected SpecId, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_spec_id_not_matched_without_prefix() {
+        let spans = detect_links("the V3-001 spec");
+        let spec_spans: Vec<_> = spans
+            .iter()
+            .filter(|s| matches!(&s.kind, LinkKind::SpecId(_)))
+            .collect();
+        assert!(spec_spans.is_empty(), "should not match without SPEC- prefix");
+    }
+
+    // ---- B-1: Click resolution ----
+
+    #[test]
+    fn test_resolve_click_on_url() {
+        let text = "see https://example.com/foo for details";
+        let offset = text.find("example").unwrap();
+        let action = resolve_click(text, offset).expect("should resolve");
+        match action {
+            ClickAction::OpenUrl(OpenUrl { url }) => assert_eq!(url, "https://example.com/foo"),
+            other => panic!("expected OpenUrl, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_resolve_click_on_file_path() {
+        let text = s("error at src/main.rs:42:10");
+        let offset = text.find("main").unwrap();
+        let action = resolve_click(&text, offset).expect("should resolve");
+        match action {
+            ClickAction::OpenCodeViewer(OpenCodeViewer { path, line, col }) => {
+                assert_eq!(path, PathBuf::from("src/main.rs"));
+                assert_eq!(line, Some(42));
+                assert_eq!(col, Some(10));
+            }
+            other => panic!("expected OpenCodeViewer, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_resolve_click_on_spec_id() {
+        let text = "Working on SPEC-V3-001 today";
+        let offset = text.find("V3").unwrap();
+        let action = resolve_click(text, offset).expect("should resolve");
+        match action {
+            ClickAction::OpenSpec(OpenSpec { spec_id }) => {
+                assert_eq!(spec_id, "SPEC-V3-001");
+            }
+            other => panic!("expected OpenSpec, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_resolve_click_no_link() {
+        let text = "plain text no links";
+        assert!(resolve_click(text, 5).is_none());
+    }
+
+    #[test]
+    fn test_resolve_click_at_boundary_start() {
+        let spans = detect_links("https://example.com");
+        // Click at exact start offset
+        let action = resolve_click_from_spans(&spans, 0);
+        assert!(action.is_some(), "click at start should resolve");
+    }
+
+    #[test]
+    fn test_resolve_click_at_boundary_end_excluded() {
+        let spans = detect_links("https://example.com");
+        let end = spans[0].end;
+        // Click at end offset (exclusive) should NOT resolve
+        let action = resolve_click_from_spans(&spans, end);
+        assert!(action.is_none(), "click at end (exclusive) should not resolve");
+    }
+
+    #[test]
+    fn test_col_to_byte_offset_ascii() {
+        assert_eq!(col_to_byte_offset("hello world", 0), 0);
+        assert_eq!(col_to_byte_offset("hello world", 6), 6);
+    }
+
+    #[test]
+    fn test_col_to_byte_offset_beyond_end() {
+        assert_eq!(col_to_byte_offset("hi", 10), 2);
+    }
+
+    #[test]
+    fn test_col_to_byte_offset_utf8() {
+        let text = "한글test";
+        // '한' is 3 bytes, '글' is 3 bytes. col=2 → byte offset 6
+        assert_eq!(col_to_byte_offset(text, 2), 6);
     }
 }

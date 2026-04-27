@@ -23,7 +23,7 @@ use thiserror::Error;
 pub use pane::{NewPane, PaneDao, PaneRow, PaneStoreExt, SplitKind};
 pub use state::{InvalidTransition, WorkspaceStatus};
 pub use surface::{NewSurface, SurfaceDao, SurfaceKind, SurfaceRow, SurfaceStoreExt};
-pub use workspace::{NewWorkspace, WorkspaceDao, WorkspaceRow, WorkspaceStoreExt};
+pub use workspace::{ColorTag, NewWorkspace, WorkspaceDao, WorkspaceRow, WorkspaceStoreExt};
 
 /// 스토어 오류 타입
 #[derive(Debug, Error)]
@@ -149,6 +149,17 @@ impl Store {
                 .map_err(|e| StoreError::MigrationError(format!("V3: {e}")))?;
             guard
                 .execute("INSERT INTO schema_version (version) VALUES (3)", [])
+                .map_err(|e| StoreError::MigrationError(e.to_string()))?;
+        }
+
+        // V4: workspace color tags (D-5 feature)
+        if current < 4 {
+            let v4_sql = include_str!("../migrations/V4__workspace_color_tag.sql");
+            guard
+                .execute_batch(v4_sql)
+                .map_err(|e| StoreError::MigrationError(format!("V4: {e}")))?;
+            guard
+                .execute("INSERT INTO schema_version (version) VALUES (4)", [])
                 .map_err(|e| StoreError::MigrationError(e.to_string()))?;
         }
         Ok(())

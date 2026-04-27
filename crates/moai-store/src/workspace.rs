@@ -29,10 +29,71 @@ pub struct WorkspaceRow {
     pub spec_id: Option<String>,
     /// 현재 Claude 세션 id (subprocess 가 spawn 되면 세팅)
     pub claude_session_id: Option<String>,
+    /// 색상 태그 — 시각적 워크스페이스 식별용 (D-5 feature, 8 preset colors)
+    pub color_tag: Option<ColorTag>,
     /// 생성 시각 (ISO8601)
     pub created_at: String,
     /// 마지막 수정 시각 (ISO8601)
     pub updated_at: String,
+}
+
+/// Workspace color tag presets (D-5 feature).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ColorTag {
+    Red,
+    Orange,
+    Yellow,
+    Green,
+    Blue,
+    Purple,
+    Pink,
+    Gray,
+}
+
+impl ColorTag {
+    /// All available color tag variants.
+    pub const ALL: [ColorTag; 8] = [
+        ColorTag::Red,
+        ColorTag::Orange,
+        ColorTag::Yellow,
+        ColorTag::Green,
+        ColorTag::Blue,
+        ColorTag::Purple,
+        ColorTag::Pink,
+        ColorTag::Gray,
+    ];
+
+    /// Returns the string representation stored in SQLite.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ColorTag::Red => "red",
+            ColorTag::Orange => "orange",
+            ColorTag::Yellow => "yellow",
+            ColorTag::Green => "green",
+            ColorTag::Blue => "blue",
+            ColorTag::Purple => "purple",
+            ColorTag::Pink => "pink",
+            ColorTag::Gray => "gray",
+        }
+    }
+}
+
+impl std::str::FromStr for ColorTag {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "red" => Ok(ColorTag::Red),
+            "orange" => Ok(ColorTag::Orange),
+            "yellow" => Ok(ColorTag::Yellow),
+            "green" => Ok(ColorTag::Green),
+            "blue" => Ok(ColorTag::Blue),
+            "purple" => Ok(ColorTag::Purple),
+            "pink" => Ok(ColorTag::Pink),
+            "gray" => Ok(ColorTag::Gray),
+            _ => Err(format!("unknown color_tag: {s}")),
+        }
+    }
 }
 
 /// 신규 삽입용 파라미터.
@@ -44,6 +105,8 @@ pub struct NewWorkspace {
     pub project_path: String,
     /// 연결된 SPEC id (없을 수 있음)
     pub spec_id: Option<String>,
+    /// 색상 태그 (D-5 feature)
+    pub color_tag: Option<ColorTag>,
 }
 
 /// 워크스페이스 CRUD 파사드.
@@ -61,14 +124,15 @@ impl WorkspaceDao {
         let guard = self.conn.lock().map_err(|_| StoreError::PoisonedLock)?;
         // v1 호환을 위해 working_dir 에도 project_path 를 채운다.
         guard.execute(
-            "INSERT INTO workspaces (working_dir, name, project_path, status, spec_id) \
-             VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO workspaces (working_dir, name, project_path, status, spec_id, color_tag) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 new.project_path,
                 new.name,
                 new.project_path,
                 WorkspaceStatus::Created.as_str(),
                 new.spec_id,
+                new.color_tag.as_ref().map(|c| c.as_str()),
             ],
         )?;
         let id = guard.last_insert_rowid();
@@ -82,7 +146,7 @@ impl WorkspaceDao {
         let row = guard
             .query_row(
                 "SELECT id, name, project_path, worktree_path, status, spec_id, \
-                 claude_session_id, created_at, updated_at FROM workspaces WHERE id = ?1",
+                 claude_session_id, color_tag, created_at, updated_at FROM workspaces WHERE id = ?1",
                 params![id],
                 map_row,
             )
@@ -95,7 +159,7 @@ impl WorkspaceDao {
         let guard = self.conn.lock().map_err(|_| StoreError::PoisonedLock)?;
         let mut stmt = guard.prepare(
             "SELECT id, name, project_path, worktree_path, status, spec_id, \
-             claude_session_id, created_at, updated_at \
+             claude_session_id, color_tag, created_at, updated_at \
              FROM workspaces WHERE status != 'Deleted' ORDER BY id",
         )?;
         let rows = stmt
@@ -154,6 +218,19 @@ impl WorkspaceDao {
         Ok(())
     }
 
+    /// Color tag 업데이트 (D-5 feature).
+    pub fn set_color_tag(&self, id: i64, color: Option<ColorTag>) -> Result<(), StoreError> {
+        let guard = self.conn.lock().map_err(|_| StoreError::PoisonedLock)?;
+        let n = guard.execute(
+            "UPDATE workspaces SET color_tag = ?1, updated_at = datetime('now') WHERE id = ?2",
+            params![color.as_ref().map(|c| c.as_str()), id],
+        )?;
+        if n == 0 {
+            return Err(StoreError::NotFound(id));
+        }
+        Ok(())
+    }
+
     /// 관리자 API: 정상 전이 규칙을 우회하여 강제로 Paused 상태로 설정.
     ///
     /// 앱 재시작 복원 시 dangling Running 상태를 처리하거나, UI 관리자 메뉴에서 긴급 정지할 때 사용.
@@ -192,6 +269,12 @@ fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Result<WorkspaceRow, Sto
     let status_str: String = row.get("status")?;
     let status = WorkspaceStatus::from_str(&status_str)
         .map_err(|e| StoreError::Corrupt(format!("invalid status: {e}")));
+    let color_tag_str: Option<String> = row.get("color_tag")?;
+    let color_tag = color_tag_str
+        .as_deref()
+        .map(ColorTag::from_str)
+        .transpose()
+        .map_err(|e| StoreError::Corrupt(format!("invalid color_tag: {e}")));
     let id: i64 = row.get("id")?;
     let name: String = row.get("name")?;
     let project_path: String = row.get("project_path")?;
@@ -200,16 +283,19 @@ fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Result<WorkspaceRow, Sto
     let claude_session_id: Option<String> = row.get("claude_session_id")?;
     let created_at: String = row.get("created_at")?;
     let updated_at: String = row.get("updated_at")?;
-    Ok(status.map(|s| WorkspaceRow {
-        id,
-        name,
-        project_path,
-        worktree_path,
-        status: s,
-        spec_id,
-        claude_session_id,
-        created_at,
-        updated_at,
+    Ok(status.and_then(|s| {
+        color_tag.map(|ct| WorkspaceRow {
+            id,
+            name,
+            project_path,
+            worktree_path,
+            status: s,
+            spec_id,
+            claude_session_id,
+            color_tag: ct,
+            created_at,
+            updated_at,
+        })
     }))
 }
 

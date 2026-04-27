@@ -9,6 +9,7 @@ fn new_ws(name: &str) -> NewWorkspace {
         name: name.to_string(),
         project_path: "/tmp".to_string(),
         spec_id: None,
+        color_tag: None,
     }
 }
 
