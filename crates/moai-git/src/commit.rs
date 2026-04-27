@@ -28,6 +28,10 @@ impl crate::GitRepo {
     /// # Arguments
     ///
     /// * `path` - 스테이징할 파일의 절대 또는 상대 경로
+    ///
+    /// # Errors
+    ///
+    /// Returns `GitError` if the path is invalid or the index cannot be written.
     pub fn stage(&self, path: &Path) -> Result<(), GitError> {
         let mut index = self.inner.index()?;
         // git2 requires relative paths from repository root
@@ -58,6 +62,10 @@ impl crate::GitRepo {
     /// # Arguments
     ///
     /// * `path` - 언스테이징할 파일의 절대 또는 상대 경로
+    ///
+    /// # Errors
+    ///
+    /// Returns `GitError` if the path is not in the index or the index cannot be written.
     pub fn unstage(&self, path: &Path) -> Result<(), GitError> {
         let mut index = self.inner.index()?;
         // git2 requires relative paths from repository root
@@ -87,6 +95,10 @@ impl crate::GitRepo {
     /// * `message` - 커밋 메시지
     /// * `author_name` - 작성자 이름
     /// * `author_email` - 작성자 이메일
+    ///
+    /// # Errors
+    ///
+    /// Returns `GitError` if there are no staged changes or the commit fails.
     pub fn commit(
         &self,
         message: &str,
@@ -124,6 +136,10 @@ impl crate::GitRepo {
     /// # Arguments
     ///
     /// * `limit` - 가져올 최대 커밋 수
+    ///
+    /// # Errors
+    ///
+    /// Returns `GitError` if the revision walk fails.
     pub fn log(&self, limit: usize) -> Result<Vec<CommitInfo>, GitError> {
         let mut revwalk = self.inner.revwalk()?;
         revwalk.push_head()?;
@@ -152,8 +168,6 @@ impl crate::GitRepo {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_stage_and_commit() {
         let temp_dir = tempfile::tempdir().unwrap();

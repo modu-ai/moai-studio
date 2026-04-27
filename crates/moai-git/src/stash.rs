@@ -23,6 +23,10 @@ impl crate::GitRepo {
     /// # Arguments
     ///
     /// * `message` - stash 메시지 (선택 사항)
+    ///
+    /// # Errors
+    ///
+    /// Returns `GitError` if the index or commit operations fail.
     pub fn stash_push(&self, message: Option<&str>) -> Result<String, GitError> {
         let sig = self.inner.signature()?;
         let mut index = self.inner.index()?;
@@ -92,8 +96,6 @@ impl crate::GitRepo {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_stash_push_creates_stash() {
         let temp_dir = tempfile::tempdir().unwrap();

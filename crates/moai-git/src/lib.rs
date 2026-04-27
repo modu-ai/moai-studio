@@ -9,7 +9,7 @@ pub mod log;
 pub mod stash;
 pub mod worktree;
 
-// Re-export public types
+// Re-export public types from submodules
 pub use branch::BranchInfo;
 pub use commit::CommitInfo;
 pub use diff::{Diff, Hunk, Line};

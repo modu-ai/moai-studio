@@ -50,6 +50,10 @@ impl GitRepo {
     /// # Returns
     ///
     /// 해당 파일의 diff 정보
+    ///
+    /// # Errors
+    ///
+    /// Returns `GitError` if the index or tree operations fail.
     pub fn diff_file(&self, path: &Path) -> Result<Diff, GitError> {
         // 워킹 트리와 인덱스 사이의 diff를 생성한다
         let mut index = self.inner.index()?;
@@ -116,8 +120,6 @@ impl GitRepo {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_diff_file_clean_repo() {
         // 깨끗한 저장소에서는 빈 diff를 반환해야 한다

@@ -11,6 +11,10 @@ impl crate::GitRepo {
     /// # Arguments
     ///
     /// * `oid` - diff를 계산할 커밋의 OID
+    ///
+    /// # Errors
+    ///
+    /// Returns `GitError` if the OID is invalid or the commit/tree lookup fails.
     pub fn diff_commit(&self, oid: &str) -> Result<crate::diff::Diff, GitError> {
         let commit_oid = Oid::from_str(oid)?;
         let commit = self.inner.find_commit(commit_oid)?;
@@ -65,6 +69,10 @@ impl crate::GitRepo {
     /// # Arguments
     ///
     /// * `oid` - 조회할 커밋의 OID
+    ///
+    /// # Errors
+    ///
+    /// Returns `GitError` if the OID is invalid or the commit does not exist.
     pub fn show_commit(&self, oid: &str) -> Result<CommitInfo, GitError> {
         let commit_oid = Oid::from_str(oid)?;
         let commit = self.inner.find_commit(commit_oid)?;
@@ -83,8 +91,6 @@ impl crate::GitRepo {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_diff_commit() {
         let temp_dir = tempfile::tempdir().unwrap();

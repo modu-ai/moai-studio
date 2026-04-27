@@ -19,6 +19,10 @@ impl crate::GitRepo {
     /// 모든 브랜치 목록을 반환한다.
     ///
     /// 로컬 브랜치와 원격 브랜치를 모두 포함한다.
+    ///
+    /// # Errors
+    ///
+    /// Returns `GitError` if the branch iteration or HEAD lookup fails.
     pub fn branches(&self) -> Result<Vec<BranchInfo>, GitError> {
         let mut branches = Vec::new();
 
@@ -58,6 +62,10 @@ impl crate::GitRepo {
     ///
     /// * `name` - 생성할 브랜치 이름
     /// * `target` - 시작 지점 (기본값: HEAD)
+    ///
+    /// # Errors
+    ///
+    /// Returns `GitError` if the branch name already exists or the target is invalid.
     pub fn create_branch(&self, name: &str, target: Option<&str>) -> Result<(), GitError> {
         let head = self.inner.head()?;
         let target_commit = if let Some(target_oid) = target {
@@ -74,7 +82,11 @@ impl crate::GitRepo {
     ///
     /// # Arguments
     ///
-    /// * `name` - 전환할 브랜치 이름
+    /// * `name` - 전환할 브랜치 이름 (예: "refs/heads/main")
+    ///
+    /// # Errors
+    ///
+    /// Returns `GitError` if the branch does not exist or checkout fails.
     pub fn checkout(&self, name: &str) -> Result<(), GitError> {
         let obj = self.inner.revparse_single(name)?;
         self.inner.checkout_tree(&obj, None)?;
@@ -85,8 +97,6 @@ impl crate::GitRepo {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_create_branch() {
         let temp_dir = tempfile::tempdir().unwrap();
