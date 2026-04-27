@@ -7,7 +7,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.93%2B-orange.svg)](https://www.rust-lang.org/)
 [![Pane CI](https://github.com/modu-ai/moai-studio/actions/workflows/ci-v3-pane.yml/badge.svg?branch=develop)](https://github.com/modu-ai/moai-studio/actions/workflows/ci-v3-pane.yml)
 [![Rust CI](https://github.com/modu-ai/moai-studio/actions/workflows/ci-rust.yml/badge.svg?branch=develop)](https://github.com/modu-ai/moai-studio/actions/workflows/ci-rust.yml)
-![Status](https://img.shields.io/badge/status-v0.1.0-green.svg)
+![Status](https://img.shields.io/badge/status-v0.1.1-green.svg)
 
 **저장소**: `github.com/modu-ai/moai-studio` (2026-04-26 GoosLab에서 modu-ai org로 이전)  
 **언어**: Pure Rust  
@@ -139,15 +139,75 @@ cargo build --release -p moai-studio-app
 ./target/release/moai-studio
 ```
 
-### 사전 컴파일된 바이너리
+## 설치 방법
 
-v0.1.0 릴리스 후 [GitHub Releases](https://github.com/modu-ai/moai-studio/releases)에서 다운로드:
+MoAI Studio는 다양한 채널을 통해 설치할 수 있습니다. 권장되는 방법부터 순서대로 안내합니다.
 
-- **macOS**: `moai-studio-v0.1.0.dmg` (universal binary: arm64 + x86_64)
-- **Linux**: `moai-studio-v0.1.0.deb`, `moai-studio-v0.1.0.AppImage`
-- **Windows**: `moai-studio-v0.1.0.msi`
+### 🍺 패키지 매니저 설치 (권장)
 
-**주의**: 현재는 unsigned 배포입니다 (MS-2에서 서명 예정). 첫 실행 시 OS별 우회 작업이 필요합니다 — 아래 [Known Limitations](#known-limitations-v010) 섹션 참조.
+#### macOS (Homebrew)
+```bash
+# Homebrew tap 추가
+brew tap modu-ai/tap
+
+# 설치
+brew install --cask moai-studio
+```
+
+#### Windows (Scoop)
+```bash
+# Scoop bucket 추가
+scoop bucket add moai https://github.com/modu-ai/scoop-bucket
+
+# 설치
+scoop install moai-studio
+```
+
+#### Arch Linux (AUR)
+```bash
+# yay를 사용한 설치
+yay -S moai-studio-bin
+
+# 또는 다른 AUR 헬러 사용
+paru -S moai-studio-bin
+```
+
+### 📦 직접 다운로드
+
+#### v0.1.1+ 릴리스 바이너리
+[GitHub Releases](https://github.com/modu-ai/moai-studio/releases)에서 최신 버전 다운로드:
+
+- **macOS**: `moai-studio-mac-*.dmg` (universal binary: arm64 + x86_64)
+- **Linux**: `moai-studio-linux-amd64.AppImage`
+- **Windows**: `moai-studio-windows-x64.msi`
+
+#### Linux AppImage
+```bash
+# 다운로드
+wget https://github.com/modu-ai/moai-studio/releases/latest/download/moai-studio-linux-amd64.AppImage
+
+# 실행 권한 부여
+chmod +x moai-studio-linux-amd64.AppImage
+
+# 실행
+./moai-studio-linux-amd64.AppImage
+```
+
+### 🚀 소스에서 빌드
+
+**필수 조건**: Rust 1.93+, git
+
+```bash
+# 저장소 클론
+git clone https://github.com/modu-ai/moai-studio.git
+cd moai-studio
+
+# 빌드
+cargo build --release -p moai-studio-app
+
+# 실행
+./target/release/moai-studio
+```
 
 ---
 
@@ -190,17 +250,54 @@ chmod +x moai-studio-v0.1.0.AppImage
 ./moai-studio-v0.1.0.AppImage
 ```
 
-### 패키지 매니저 채널 (v0.1.1+)
+### 알려진 제약사항
 
-[SPEC-V3-DIST-001](./.moai/specs/SPEC-V3-DIST-001/spec.md) 구현 완료 (v0.1.1). 다음 채널을 통해 quarantine / SmartScreen 우회가 자동 처리됩니다:
+**v0.1.0**: unsigned 배포로 인한 OS별 우회 작업이 필요합니다. 아래 내용 참조하시거나, **v0.1.1+ 로 업그레이드하여 패키지 매니저로 자동 처리**할 수 있습니다.
 
-- **macOS**: `brew tap modu-ai/tap && brew install --cask moai-studio` (`modu-ai/homebrew-tap`)
-- **Windows**: `scoop bucket add moai https://github.com/modu-ai/scoop-bucket && scoop install moai-studio` (`modu-ai/scoop-bucket`)
-- **Arch Linux**: `yay -S moai-studio-bin` (AUR `moai-studio-bin`)
-- **AppImage**: [dist/appimage/README.md](./dist/appimage/README.md) 참조
+#### macOS — v0.1.0: Gatekeeper quarantine 제거
 
-**Manual Download**:
-- GitHub Releases: https://github.com/modu-ai/moai-studio/releases
+다운로드한 `.dmg`를 마운트하고 `moai-studio.app`을 `/Applications/`로 드래그한 후, 터미널에서 다음 명령을 한 번 실행:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/moai-studio.app
+open /Applications/moai-studio.app
+```
+
+또는 `Finder → moai-studio.app 우클릭 → "열기" → "열기"` 1회. 이후 Spotlight/Launchpad에서 일반 앱처럼 실행 가능.
+
+#### Windows — v0.1.0: SmartScreen 우회
+
+`.msi` 더블클릭 시 "Windows protected your PC" 경고가 표시됩니다.
+
+```
+1. 경고 화면에서 "More info" 클릭
+2. "Run anyway" 클릭
+```
+
+이후 시작 메뉴에서 일반 앱처럼 실행 가능.
+
+#### Linux — v0.1.0: 무서명 표준
+
+`.deb` / `.AppImage` 모두 별 인증 작업 없이 실행됩니다.
+
+```bash
+# Debian/Ubuntu
+sudo dpkg -i moai-studio-v0.1.0.deb
+
+# AppImage (모든 distribution)
+chmod +x moai-studio-v0.1.0.AppImage
+./moai-studio-v0.1.0.AppImage
+```
+
+> **팁**: 패키지 매니저를 사용하면 위의 우회 작업이 필요 없습니다. **v0.1.1+ 부터는 Homebrew, Scoop, AUR에서 자동으로 설치됩니다.**
+
+---
+
+**v0.1.1+ 패키지 매니저 설치**: 패키지 매니저를 통해 설치 시 아래와 같은 이점이 있습니다:
+- 자동 서명 및 인증서 처리
+- 업데이트 알림 및 자동 업그레이드
+- 의존성 자동 관리
+- 표준 설치 경로 사용
 
 ### 알려진 carry-over 제약
 

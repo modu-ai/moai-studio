@@ -27,9 +27,7 @@ impl crate::GitRepo {
             let (branch, _) = branch?;
             if let Some(name) = branch.name()? {
                 let head_ref = self.inner.head()?;
-                let is_head = head_ref.name()
-                    .map(|n| n.ends_with(name))
-                    .unwrap_or(false);
+                let is_head = head_ref.name().map(|n| n.ends_with(name)).unwrap_or(false);
 
                 branches.push(BranchInfo {
                     name: name.to_string(),

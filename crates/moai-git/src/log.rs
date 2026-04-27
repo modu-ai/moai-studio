@@ -2,7 +2,7 @@
 //!
 //! 커밋 로그 조회 및 커밋 간 diff 계산 기능을 제공한다.
 
-use crate::{commit::CommitInfo, GitError};
+use crate::{GitError, commit::CommitInfo};
 use git2::Oid;
 
 impl crate::GitRepo {
@@ -19,7 +19,9 @@ impl crate::GitRepo {
             let parent = commit.parent(0)?;
             let tree_a = parent.tree()?;
             let tree_b = commit.tree()?;
-            let diff = self.inner.diff_tree_to_tree(Some(&tree_a), Some(&tree_b), None)?;
+            let diff = self
+                .inner
+                .diff_tree_to_tree(Some(&tree_a), Some(&tree_b), None)?;
 
             // 첫 번째 파일의 diff만 반환 (간단 구현)
             let mut hunks = Vec::new();
@@ -48,7 +50,7 @@ impl crate::GitRepo {
                 None,
             )?;
 
-                Ok(crate::diff::Diff { path, hunks })
+            Ok(crate::diff::Diff { path, hunks })
         } else {
             // 초기 커밋인 경우 빈 diff
             Ok(crate::diff::Diff {
@@ -117,7 +119,9 @@ mod tests {
         let file1 = temp_dir.path().join("file1.txt");
         std::fs::write(&file1, "content").unwrap();
         repo.stage(&file1).unwrap();
-        let oid = repo.commit("test message", "Test User", "test@example.com").unwrap();
+        let oid = repo
+            .commit("test message", "Test User", "test@example.com")
+            .unwrap();
 
         // 커밋 정보 조회
         let info = repo.show_commit(&oid).unwrap();

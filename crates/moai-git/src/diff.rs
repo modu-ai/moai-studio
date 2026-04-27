@@ -61,11 +61,10 @@ impl GitRepo {
             let workdir = self.inner.workdir().ok_or(GitError::DetachedHead)?;
             match path.strip_prefix(workdir) {
                 Ok(p) => p,
-                Err(_) => {
-                    path.file_name()
-                        .map(Path::new)
-                        .ok_or(GitError::Git(git2::Error::from_str("invalid filename")))?
-                }
+                Err(_) => path
+                    .file_name()
+                    .map(Path::new)
+                    .ok_or(GitError::Git(git2::Error::from_str("invalid filename")))?,
             }
         } else {
             path
@@ -74,7 +73,9 @@ impl GitRepo {
         // diff 생성 (워킹 트리 기준)
         let mut diff_opt = git2::DiffOptions::new();
         diff_opt.pathspec(relative_path);
-        let diff = self.inner.diff_tree_to_workdir(Some(&tree), Some(&mut diff_opt))?;
+        let diff = self
+            .inner
+            .diff_tree_to_workdir(Some(&tree), Some(&mut diff_opt))?;
 
         let hunks = Self::parse_diff(&diff, relative_path)?;
         Ok(Diff {
@@ -93,9 +94,7 @@ impl GitRepo {
         let mut hunks = Vec::new();
 
         diff.foreach(
-            &mut |_delta, _| {
-                true
-            },
+            &mut |_delta, _| true,
             None,
             Some(&mut |_, hunk| {
                 hunks.push(Hunk {

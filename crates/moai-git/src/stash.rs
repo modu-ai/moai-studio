@@ -31,10 +31,7 @@ impl crate::GitRepo {
         let tree_id = index.write_tree()?;
         let tree = self.inner.find_tree(tree_id)?;
 
-        let head_commit = self.inner.head().ok().and_then(|h| {
-            h.peel_to_commit()
-                .ok()
-        });
+        let head_commit = self.inner.head().ok().and_then(|h| h.peel_to_commit().ok());
 
         let oid = if let Some(parent) = head_commit {
             self.inner.commit(
@@ -46,14 +43,8 @@ impl crate::GitRepo {
                 &[&parent],
             )?
         } else {
-            self.inner.commit(
-                None,
-                &sig,
-                &sig,
-                message.unwrap_or("WIP"),
-                &tree,
-                &[],
-            )?
+            self.inner
+                .commit(None, &sig, &sig, message.unwrap_or("WIP"), &tree, &[])?
         };
 
         Ok(oid.to_string())

@@ -39,7 +39,8 @@ impl crate::GitRepo {
                 Ok(p) => p,
                 Err(_) => {
                     // Fallback: use file name only
-                    path.file_name().map(Path::new)
+                    path.file_name()
+                        .map(Path::new)
                         .ok_or(GitError::Git(git2::Error::from_str("invalid filename")))?
                 }
             }
@@ -64,11 +65,10 @@ impl crate::GitRepo {
             let workdir = self.inner.workdir().ok_or(GitError::DetachedHead)?;
             match path.strip_prefix(workdir) {
                 Ok(p) => p,
-                Err(_) => {
-                    path.file_name()
-                        .map(Path::new)
-                        .ok_or(GitError::Git(git2::Error::from_str("invalid filename")))?
-                }
+                Err(_) => path
+                    .file_name()
+                    .map(Path::new)
+                    .ok_or(GitError::Git(git2::Error::from_str("invalid filename")))?,
             }
         } else {
             path
@@ -99,35 +99,20 @@ impl crate::GitRepo {
         let tree = self.inner.find_tree(tree_id)?;
 
         // HEAD 커밋 찾기
-        let head_commit = self.inner.head().ok().and_then(|h| {
-            h.peel_to_commit()
-                .ok()
-        });
+        let head_commit = self.inner.head().ok().and_then(|h| h.peel_to_commit().ok());
 
         let sig = git2::Signature::now(author_name, author_email)?;
 
         let oid = match head_commit {
             Some(parent) => {
                 // 부모가 있으면 일반 커밋
-                self.inner.commit(
-                    Some("HEAD"),
-                    &sig,
-                    &sig,
-                    message,
-                    &tree,
-                    &[&parent],
-                )?
+                self.inner
+                    .commit(Some("HEAD"), &sig, &sig, message, &tree, &[&parent])?
             }
             None => {
                 // 부모가 없으면 초기 커밋
-                self.inner.commit(
-                    Some("HEAD"),
-                    &sig,
-                    &sig,
-                    message,
-                    &tree,
-                    &[],
-                )?
+                self.inner
+                    .commit(Some("HEAD"), &sig, &sig, message, &tree, &[])?
             }
         };
 
