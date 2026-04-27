@@ -3,14 +3,16 @@
 //! SPEC-V0-1-2-MENUS-001 REQ-F3-001: 7 action buttons in main toolbar.
 //! 각 버튼은 기존 Action type에 연결되어 menu/keyboard와 동일한 dispatch 경로 사용.
 
-use gpui::{div, px, rgb, Context, InteractiveElement, IntoElement, ParentElement, Render, Styled, Window};
+use gpui::{
+    Context, InteractiveElement, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb,
+};
 
 use crate::design::tokens as tok;
 
 // 기존 action type import
 use crate::{
-    NewWorkspace, ToggleSidebar, OpenSettings, OpenCommandPalette, ToggleFind,
-    NewTerminalSurface, OpenDocumentation
+    NewTerminalSurface, NewWorkspace, OpenCommandPalette, OpenDocumentation, OpenSettings,
+    ToggleFind, ToggleSidebar,
 };
 
 /// Toolbar Entity — 7 action buttons for main app
@@ -75,7 +77,11 @@ impl Render for Toolbar {
                     .on_action(cx.listener(|_this, _: &ToggleSidebar, _window, _cx| {
                         // ToggleSidebar action dispatch (handled by RootView)
                     }))
-                    .child(if self.sidebar_visible { "Hide Sidebar" } else { "Show Sidebar" }),
+                    .child(if self.sidebar_visible {
+                        "Hide Sidebar"
+                    } else {
+                        "Show Sidebar"
+                    }),
             )
             // 3. Settings (Cmd+,)
             .child(

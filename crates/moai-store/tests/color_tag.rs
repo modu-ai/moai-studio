@@ -81,12 +81,7 @@ fn all_color_tags_roundtrip() {
                 color_tag: Some(*ct),
             })
             .unwrap();
-        assert_eq!(
-            row.color_tag,
-            Some(*ct),
-            "roundtrip failed for {:?}",
-            ct
-        );
+        assert_eq!(row.color_tag, Some(*ct), "roundtrip failed for {:?}", ct);
     }
     assert_eq!(dao.list().unwrap().len(), 8);
 }

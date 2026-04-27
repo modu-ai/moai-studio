@@ -3,8 +3,8 @@
 //! SPEC: C-5 Image Surface zoom/pan.
 //! Features: Mouse wheel zoom, click-drag pan, fit-to-view reset.
 
-use gpui::{div, px, rgb, Context, IntoElement, ParentElement, Render, Styled, Window};
 use crate::design::tokens as tok;
+use gpui::{Context, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb};
 
 /// Image viewer state with zoom and pan.
 pub struct ImageViewer {
@@ -139,7 +139,7 @@ impl Render for ImageViewer {
                             .bg(rgb(0x00000080))
                             .text_color(rgb(0xFFFFFF))
                             .text_sm()
-                            .child(format!("Zoom: {:.0}%", self.zoom * 100.0))
+                            .child(format!("Zoom: {:.0}%", self.zoom * 100.0)),
                     )
                     // Controls hint
                     .child(
@@ -153,8 +153,8 @@ impl Render for ImageViewer {
                             .bg(rgb(0x00000080))
                             .text_color(rgb(0xFFFFFF))
                             .text_xs()
-                            .child("Scroll to zoom • Drag to pan")
-                    )
+                            .child("Scroll to zoom • Drag to pan"),
+                    ),
             )
             .into_any_element()
     }

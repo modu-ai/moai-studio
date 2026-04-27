@@ -38,8 +38,8 @@ pub mod spec_ui;
 use design::tokens::{self as tok, traffic};
 use gpui::{
     App, Application, Context, Entity, InteractiveElement, IntoElement, KeyDownEvent, Menu,
-    MenuItem, MouseButton, OsAction, ParentElement, Render, Styled,
-    SystemMenuType, Window, WindowOptions, actions, div, prelude::*, px, rgb, size,
+    MenuItem, MouseButton, OsAction, ParentElement, Render, Styled, SystemMenuType, Window,
+    WindowOptions, actions, div, prelude::*, px, rgb, size,
 };
 
 // SPEC-V0-1-1-UX-FIX (C-5 + audit §10): macOS menu bar 비어있던 상태 해결.
@@ -746,7 +746,7 @@ impl RootView {
     fn handle_add_workspace(&mut self, cx: &mut Context<Self>) {
         // G-2: Show project wizard instead of direct file picker
         if let Some(wizard) = &self.project_wizard {
-            let _ = wizard.update(cx, |w, _cx| {
+            wizard.update(cx, |w, _cx| {
                 w.mount();
             });
         }

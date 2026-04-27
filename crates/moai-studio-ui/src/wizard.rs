@@ -4,8 +4,10 @@
 //! Step 1: Directory picker, Step 2: Name input, Step 3: SPEC selection,
 //! Step 4: Color tag, Step 5: Confirm + create.
 
-use gpui::{div, px, rgb, Context, InteractiveElement, IntoElement, ParentElement, Render, Styled, Window};
 use crate::design::tokens as tok;
+use gpui::{
+    Context, InteractiveElement, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb,
+};
 
 // ColorTag enum values (from moai_store)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -184,7 +186,7 @@ impl ProjectWizard {
         match self.current_step {
             WizardStep::Step1Directory => self.selected_directory.is_some(),
             WizardStep::Step2Name => !self.project_name.is_empty(),
-            WizardStep::Step3Spec => true, // Optional
+            WizardStep::Step3Spec => true,  // Optional
             WizardStep::Step4Color => true, // Optional
             WizardStep::Step5Confirm => false,
         }
@@ -282,12 +284,8 @@ impl Render for ProjectWizard {
                                 } else {
                                     rgb(tok::BG_PANEL)
                                 };
-                                div()
-                                    .flex_1()
-                                    .h(px(4.))
-                                    .rounded_full()
-                                    .bg(bg_color)
-                            }))
+                                div().flex_1().h(px(4.)).rounded_full().bg(bg_color)
+                            })),
                     )
                     // Step title
                     .child(
@@ -309,17 +307,14 @@ impl Render for ProjectWizard {
                             .child(self.render_step_content()),
                     )
                     // Navigation buttons
-                    .child(self.render_navigation())
+                    .child(self.render_navigation()),
             )
     }
 }
 
 impl ProjectWizard {
     fn render_navigation(&self) -> gpui::Div {
-        let mut nav = div()
-            .flex()
-            .flex_row()
-            .justify_between();
+        let mut nav = div().flex().flex_row().justify_between();
 
         // Back button (conditional)
         if self.can_go_back() {
@@ -332,7 +327,7 @@ impl ProjectWizard {
                     .text_color(rgb(tok::FG_PRIMARY))
                     .cursor_pointer()
                     .hover(|s| s.opacity(0.8))
-                    .child("Back")
+                    .child("Back"),
             );
         } else {
             nav = nav.child(div().w(px(80.))); // Spacer
@@ -349,7 +344,7 @@ impl ProjectWizard {
                     .text_color(rgb(0xFFFFFF))
                     .cursor_pointer()
                     .hover(|s| s.opacity(0.9))
-                    .child("Create")
+                    .child("Create"),
             );
         } else if self.can_go_next() {
             nav = nav.child(
@@ -361,7 +356,7 @@ impl ProjectWizard {
                     .text_color(rgb(0xFFFFFF))
                     .cursor_pointer()
                     .hover(|s| s.opacity(0.9))
-                    .child("Next")
+                    .child("Next"),
             );
         } else {
             nav = nav.child(div().w(px(80.))); // Spacer
@@ -405,10 +400,7 @@ impl ProjectWizard {
             WizardStep::Step5Confirm => {
                 format!(
                     "Name: {}\nDir: {:?}\nSPEC: {:?}\nColor: {:?}",
-                    self.project_name,
-                    self.selected_directory,
-                    self.spec_id,
-                    self.selected_color
+                    self.project_name, self.selected_directory, self.spec_id, self.selected_color
                 )
             }
         }
