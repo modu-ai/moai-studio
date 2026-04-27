@@ -115,8 +115,7 @@ fn path_regex() -> &'static Regex {
 fn spec_id_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"SPEC-[A-Z0-9][A-Z0-9-]*-\d+")
-            .expect("spec_id_regex must be valid")
+        Regex::new(r"SPEC-[A-Z0-9][A-Z0-9-]*-\d+").expect("spec_id_regex must be valid")
     })
 }
 
@@ -291,14 +290,18 @@ pub fn resolve_click_from_spans(spans: &[LinkSpan], byte_offset: usize) -> Optio
     for span in spans {
         if byte_offset >= span.start && byte_offset < span.end {
             return Some(match &span.kind {
-                LinkKind::FilePath { path, line, col } => ClickAction::OpenCodeViewer(OpenCodeViewer {
-                    path: path.clone(),
-                    line: *line,
-                    col: *col,
-                }),
+                LinkKind::FilePath { path, line, col } => {
+                    ClickAction::OpenCodeViewer(OpenCodeViewer {
+                        path: path.clone(),
+                        line: *line,
+                        col: *col,
+                    })
+                }
                 LinkKind::Url(url) => ClickAction::OpenUrl(OpenUrl { url: url.clone() }),
                 LinkKind::Osc8(url) => ClickAction::OpenUrl(OpenUrl { url: url.clone() }),
-                LinkKind::SpecId(id) => ClickAction::OpenSpec(OpenSpec { spec_id: id.clone() }),
+                LinkKind::SpecId(id) => ClickAction::OpenSpec(OpenSpec {
+                    spec_id: id.clone(),
+                }),
             });
         }
     }
@@ -584,7 +587,10 @@ mod tests {
             .iter()
             .filter(|s| matches!(&s.kind, LinkKind::SpecId(_)))
             .collect();
-        assert!(spec_spans.is_empty(), "should not match without SPEC- prefix");
+        assert!(
+            spec_spans.is_empty(),
+            "should not match without SPEC- prefix"
+        );
     }
 
     // ---- B-1: Click resolution ----
@@ -648,7 +654,10 @@ mod tests {
         let end = spans[0].end;
         // Click at end offset (exclusive) should NOT resolve
         let action = resolve_click_from_spans(&spans, end);
-        assert!(action.is_none(), "click at end (exclusive) should not resolve");
+        assert!(
+            action.is_none(),
+            "click at end (exclusive) should not resolve"
+        );
     }
 
     #[test]

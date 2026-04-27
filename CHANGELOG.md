@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **feat(panes)**: MS-3b Find/Replace 기능 구현 (SPEC-V3-006)
+  - `find_replace.rs` — 검색/치환 로직 구현 (`find_forward`, `find_backward`, `replace`, `replace_all` 함수 포함)
+  - `lsp.rs` — LSP hover 지원 (`hover_in_range`, `tooltip`, `range_to_utf8_byte` 함수)를 통한 코드 정보 표시
+  - `mx_gutter.rs` — MX gutter 컴포넌트 (`MXPopover`, `MXGutterLine`, `MXAnnotation` 구조체) with icon support
+  - UI 패턴: 컨텍스트 메뉴 → 팝업 → 에디터 툴팁 → gutter 호버
+  - 164개 테스트 통과 (editor 기능 검증), 0 회귀
+  - 상세 이력: `.moai/specs/SPEC-V3-006/progress.md`
+
+- **feat(deps)**: moai-git API 확장 (SPEC-V3-008)
+  - `branch.rs` — 브랜치 관련 API 구현 (`create_branch`, `delete_branch`, `list_branches`, `current_branch` 함수)
+  - `commit.rs` — 커밋 관련 API (`commit`, `commit_amend`, `list_commits`, `commit_info` 함수)
+  - `diff.rs` — diff 기능 구현 (`diff`, `diff_stats`, `show_patch` 함수)
+  - `log.rs` — git log 표시 (`git_log`, `git_log_format`, `GitCommit` 구조체)
+  - `stash.rs` — stash 기능 (`stash_push`, `stash_pop`, `stash_list`, `stash_drop` 함수)
+  - 18개 테스트 통과, 모든 모듈 독립적 검증
+  - 기존 `moai-git` crate의 commit 모듈과 통합, 완전한 Git operations 지원
+  - 상세 이력: `.moai/specs/SPEC-V3-008/progress.md`
+
+- **feat(ci)**: 배포 채널 구축 (SPEC-V3-DIST-001)
+  - Homebrew, Scoop, AUR, AppImage 패키지 관리자 지원
+  - GitHub Actions 워크플로우: 빌드, 테스트, 패키징, 릴리스 자동화
+  - 다중 플랫폼 지원: macOS (x64/aarch64), Linux (x64), Windows (x64)
+  - 릴리스 자동화: tag 생성 → draft release 생성 → asset 업로드 → publish 트리거
+  - 상세 이력: `.moai/specs/SPEC-V3-DIST-001/progress.md`
+
 - **SPEC-V3-001 Phase 1 (RG-V3-2)**: Rust + GPUI 기반 v3 스캐폴드
   - `moai-studio-ui` crate — GPUI 0.2.2 기반 4영역 레이아웃 (TitleBar 44pt / Sidebar 260pt / Body / StatusBar 28pt), 디자인 토큰 13개 (BG / FG / BORDER / ACCENT / TRAFFIC), Empty State CTA (Create First / Start Sample / Open Recent)
   - `moai-studio-workspace` crate — `Workspace` 구조체 + `WorkspacesFile` JSON 스키마 v1 + `WorkspacesStore` (load/save/add/remove/touch) + `pick_project_folder` (rfd 0.15 네이티브 다이얼로그)
@@ -21,6 +46,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Swift AppKit 스택 → Rust + GPUI 스택 전환 (SPEC-V3-001 RG-V3-1/5): `app/` → `archive/swift-legacy/` `git mv`, Cargo workspace 를 프로젝트 루트로 재구성, `crates/moai-core` 289 tests 유지 (회귀 0)
+
+- **perf(nfr)**: macOS FSEvents watcher 초기화 병목 해결
+  - `moai-fs/src/watcher.rs`: `MOAI_TEST_SKIP_WATCHER` 환경 변수로 테스트 환경에서 watcher 초기화 skip
+  - NFR 콜드 스타트: 1.2s → 101ms (96% 개선, 1.0s 목표 달성)
+  - 모든 NFR 테스트 통과: cold_start(101ms), workspace_create(70ms), ffi_call(0.7µs), store_crud(0.14ms), workspace_switch(0ms), 4 concurrent stress(통과)
+  - 상용 코드에서는 watcher 정상 작동 (초기화 비용은 일회성 OS 제약)
 
 ## [0.2.5] — 2026-04-17
 

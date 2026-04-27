@@ -94,6 +94,7 @@ impl WorkspaceRegistry {
                 name: name.to_string(),
                 project_path: proj.to_string_lossy().into(),
                 spec_id: None,
+                color_tag: None,
             })
             .expect("store insert 실패");
         let id = WorkspaceId(row.id);

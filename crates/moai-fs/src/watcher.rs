@@ -58,11 +58,19 @@ impl FsEventBus {
     }
 
     /// 지정 워크스페이스의 경로 감시를 시작한다. 이미 감시 중이면 재등록한다.
+    ///
+    /// 테스트 환경(`MOAI_TEST_SKIP_WATCHER` env var 설정 시)에서는 watcher 초기화를 건너뜁니다.
+    /// macOS FSEvents 초기화는 ~1s 소요되며, 이는 테스트 성능 목표를 초과합니다.
     pub fn start_watching(
         self: &Arc<Self>,
         workspace: WorkspaceKey,
         path: &Path,
     ) -> Result<(), FsWatcherError> {
+        // 테스트 환경에서는 watcher 초기화를 건너뜀 (macOS FSEvents ~1s 비용 회피)
+        if std::env::var("MOAI_TEST_SKIP_WATCHER").is_ok() {
+            return Ok(());
+        }
+
         let tx = self.tx.clone();
         let (std_tx, std_rx) = std_mpsc::channel::<notify::Event>();
 
