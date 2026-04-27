@@ -47,7 +47,36 @@ use gpui::{
 // - ReportIssue: Help menu → GitHub issues URL
 actions!(
     moai_studio,
-    [Quit, About, NoOp, NewWorkspace, OpenSettings, ReportIssue]
+    [
+        Quit,
+        About,
+        NoOp,
+        NewWorkspace,
+        OpenSettings,
+        ReportIssue,
+        // SPEC-V0-1-2 menu expansion — View
+        ToggleSidebar,
+        ToggleBanner,
+        ReloadWorkspace,
+        ToggleTheme,
+        ToggleFind,
+        // Pane
+        SplitRight,
+        SplitDown,
+        ClosePane,
+        FocusNextPane,
+        FocusPrevPane,
+        // Surface
+        NewTerminalSurface,
+        NewMarkdownSurface,
+        NewCodeViewerSurface,
+        // Go
+        OpenCommandPalette,
+        OpenSpecPanel,
+        // Help
+        OpenDocumentation,
+        OpenAbout,
+    ]
 );
 use moai_studio_workspace::{Workspace, WorkspacesStore};
 use panes::PaneId;
@@ -1384,12 +1413,31 @@ pub fn run_app(workspaces: Vec<Workspace>, storage_path: PathBuf) {
         cx.on_action(|_: &ReportIssue, cx: &mut App| {
             cx.open_url("https://github.com/modu-ai/moai-studio/issues");
         });
-        // NewWorkspace + OpenSettings 는 RootView 가 .on_action 으로 받아 처리 (entity-level dispatch).
+        // SPEC-V0-1-2 menu expansion: app-level handlers for Help/Go items
+        cx.on_action(|_: &OpenDocumentation, cx: &mut App| {
+            cx.open_url("https://github.com/modu-ai/moai-studio#readme");
+        });
+        cx.on_action(|_: &OpenAbout, cx: &mut App| {
+            cx.open_url("https://github.com/modu-ai/moai-studio");
+        });
+        // NewWorkspace + OpenSettings + remaining actions (View/Pane/Surface/Go) are dispatched
+        // to RootView via entity-level on_action handlers in `Render::render`.
 
-        // 키바인딩 — Cmd+N (New Workspace), Cmd+, (Settings).
+        // SPEC-V0-1-2: full keybinding map covering view, pane, surface, go menus.
         cx.bind_keys([
             gpui::KeyBinding::new("cmd-n", NewWorkspace, None),
             gpui::KeyBinding::new("cmd-,", OpenSettings, None),
+            gpui::KeyBinding::new("cmd-b", ToggleSidebar, None),
+            gpui::KeyBinding::new("cmd-r", ReloadWorkspace, None),
+            gpui::KeyBinding::new("cmd-t", ToggleTheme, None),
+            gpui::KeyBinding::new("cmd-f", ToggleFind, None),
+            gpui::KeyBinding::new("cmd-\\", SplitRight, None),
+            gpui::KeyBinding::new("cmd-shift-\\", SplitDown, None),
+            gpui::KeyBinding::new("cmd-w", ClosePane, None),
+            gpui::KeyBinding::new("cmd-]", FocusNextPane, None),
+            gpui::KeyBinding::new("cmd-[", FocusPrevPane, None),
+            gpui::KeyBinding::new("cmd-k", OpenCommandPalette, None),
+            gpui::KeyBinding::new("cmd-shift-p", OpenSpecPanel, None),
         ]);
 
         cx.set_menus(vec![
@@ -1424,7 +1472,42 @@ pub fn run_app(workspaces: Vec<Workspace>, storage_path: PathBuf) {
             },
             Menu {
                 name: "View".into(),
-                items: vec![],
+                items: vec![
+                    MenuItem::action("Toggle Sidebar", ToggleSidebar),
+                    MenuItem::action("Toggle Banner Stack", ToggleBanner),
+                    MenuItem::separator(),
+                    MenuItem::action("Find...", ToggleFind),
+                    MenuItem::separator(),
+                    MenuItem::action("Reload Workspace", ReloadWorkspace),
+                    MenuItem::action("Toggle Theme", ToggleTheme),
+                ],
+            },
+            Menu {
+                name: "Pane".into(),
+                items: vec![
+                    MenuItem::action("Split Right", SplitRight),
+                    MenuItem::action("Split Down", SplitDown),
+                    MenuItem::separator(),
+                    MenuItem::action("Close Pane", ClosePane),
+                    MenuItem::separator(),
+                    MenuItem::action("Focus Next Pane", FocusNextPane),
+                    MenuItem::action("Focus Previous Pane", FocusPrevPane),
+                ],
+            },
+            Menu {
+                name: "Surface".into(),
+                items: vec![
+                    MenuItem::action("New Terminal", NewTerminalSurface),
+                    MenuItem::action("New Markdown Viewer", NewMarkdownSurface),
+                    MenuItem::action("New Code Viewer", NewCodeViewerSurface),
+                ],
+            },
+            Menu {
+                name: "Go".into(),
+                items: vec![
+                    MenuItem::action("Command Palette", OpenCommandPalette),
+                    MenuItem::action("SPEC Panel", OpenSpecPanel),
+                ],
             },
             Menu {
                 name: "Window".into(),
@@ -1432,7 +1515,12 @@ pub fn run_app(workspaces: Vec<Workspace>, storage_path: PathBuf) {
             },
             Menu {
                 name: "Help".into(),
-                items: vec![MenuItem::action("Report Issue", ReportIssue)],
+                items: vec![
+                    MenuItem::action("Documentation", OpenDocumentation),
+                    MenuItem::action("Report Issue", ReportIssue),
+                    MenuItem::separator(),
+                    MenuItem::action("About MoAI Studio", OpenAbout),
+                ],
             },
         ]);
 
