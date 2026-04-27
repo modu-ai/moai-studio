@@ -202,10 +202,23 @@ fn render_fallback_banner() -> impl IntoElement {
 
 fn render_block(block: &MarkdownBlock) -> AnyElement {
     match block {
-        MarkdownBlock::Heading { level, text } => {
+        MarkdownBlock::Heading {
+            level,
+            text,
+            clause,
+        } => {
             let size_px = heading_size_px(*level);
+            // C-2: EARS clause headings receive an accent colour distinct from
+            // ordinary headings so authors can visually scan requirement clauses.
+            let color = if clause.is_some() {
+                // Accent: a muted blue-green that reads as "structured / semantic"
+                // without clashing with syntax highlights.  Token: ACCENT_EARS.
+                rgb(0x4e_9a_b0_u32)
+            } else {
+                rgb(tok::FG_PRIMARY)
+            };
             div()
-                .text_color(rgb(tok::FG_PRIMARY))
+                .text_color(color)
                 .text_size(px(size_px))
                 .mb(px(4.))
                 .child(text.clone())
@@ -253,7 +266,8 @@ fn render_block(block: &MarkdownBlock) -> AnyElement {
             .rounded_md()
             .text_color(rgb(tok::FG_SECONDARY))
             .text_size(px(12.))
-            .child(format!("[math]\n{}", math))
+            // C-2: math/katex blocks preserved as-is with renderer-pending note.
+            .child(format!("[KaTeX renderer pending]\n{}", math))
             .into_any_element(),
         MarkdownBlock::Mermaid(diagram) => div()
             .p(px(8.))
@@ -262,7 +276,8 @@ fn render_block(block: &MarkdownBlock) -> AnyElement {
             .rounded_md()
             .text_color(rgb(syntax::VARIABLE))
             .text_size(px(12.))
-            .child(format!("[mermaid]\n{}", diagram))
+            // C-2: mermaid blocks preserved as-is with renderer-pending note.
+            .child(format!("[Mermaid renderer pending C-7]\n{}", diagram))
             .into_any_element(),
         MarkdownBlock::List(items) => {
             let mut list = div().flex().flex_col().mb(px(4.));
