@@ -996,6 +996,7 @@ fn workspace_section(is_empty: bool, rows: Vec<gpui::Stateful<gpui::Div>>) -> im
 /// SPEC-V0-1-1-UX-FIX (H-1): active dot 색상을 is_active 기반으로 분리.
 /// - active: brand ACCENT (청록) — 현재 선택된 workspace 강조
 /// - inactive: BORDER_STRONG dim outline — 시각적 우선순위 낮춤
+///
 /// 이전 v0.1.0 에서는 모든 row 가 ws.color (orange-red) 로 동일하여 active 구분이 어려웠음.
 fn workspace_row(ws: &Workspace, is_active: bool) -> gpui::Stateful<gpui::Div> {
     let bg = if is_active {
