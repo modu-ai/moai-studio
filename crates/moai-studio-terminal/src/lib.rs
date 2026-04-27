@@ -5,6 +5,7 @@
 
 pub mod events;
 pub mod libghostty_ffi;
+pub mod link;
 pub mod pty;
 pub mod vt;
 pub mod worker;
