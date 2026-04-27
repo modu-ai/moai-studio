@@ -307,7 +307,88 @@ Phase 3 PR 생성 시:
 
 ---
 
-## 8. Version 1차 확정 전 (v0.1.0 release까지) 임시 규칙
+## 8. macOS .app 번들 빌드 [HARD — 시연/배포 워크플로]
+
+### 8.1 배경
+
+`cargo build --release` 만으로는 macOS .app 번들이 만들어지지 않는다. 단순 바이너리 (`target/release/moai-studio`) 만 생성됨. 사용자가 `open target/release/moai-studio.app` 호출 시 file-not-found 에러 발생.
+
+해결책: `scripts/build-macos-app.sh` 스크립트가 cargo-bundle 의존 없이 표준 Unix 도구만으로 번들 조립 (SPEC-V0-1-2-MACOS-BUNDLE-001, PR #59).
+
+### 8.2 스크립트 구성
+
+| 파일 | 역할 |
+|------|------|
+| `scripts/build-macos-app.sh` | 빌드 + 번들 + (선택) `~/Applications/` 설치 |
+| `assets/macos/Info.plist.template` | `__VERSION__` placeholder, workspace 버전 자동 치환 |
+| `assets/icons/256x256/moai-studio.png` | 아이콘 placeholder (v0.1.0 GA 전 `.icns` 교체 필요) |
+
+### 8.3 사용법
+
+| 명령 | 용도 |
+|------|------|
+| `scripts/build-macos-app.sh` | 풀 빌드 + 번들 생성 (`target/release/moai-studio.app`) |
+| `scripts/build-macos-app.sh --install` | 빌드 + 번들 + `~/Applications/moai-studio.app` 자동 설치 + 기존 인스턴스 kill |
+| `scripts/build-macos-app.sh --skip-build` | `cargo build` 생략, 이미 빌드한 바이너리로 번들만 (빠른 반복) |
+| `scripts/build-macos-app.sh --debug` | release 대신 debug profile |
+| `scripts/build-macos-app.sh --help` | 도움말 출력 |
+
+### 8.4 시연/개발 자주 쓰는 패턴
+
+```bash
+# (A) 깨끗한 빌드 + 시연
+scripts/build-macos-app.sh --install && open ~/Applications/moai-studio.app
+
+# (B) 빠른 반복 — 이미 cargo build 완료한 상태
+scripts/build-macos-app.sh --skip-build && open target/release/moai-studio.app
+
+# (C) 디버그 빌드 시연 (logs/breakpoint 활성)
+scripts/build-macos-app.sh --debug --install
+```
+
+### 8.5 번들 구조
+
+```
+moai-studio.app/Contents/
+  Info.plist              (workspace.package.version 자동 주입)
+  MacOS/
+    moai-studio           (release 바이너리)
+    libghostty-vt.dylib   (@executable_path rpath 매칭, otool -L 검증)
+  Resources/
+    moai-studio.png       (256×256 placeholder)
+  _CodeSignature/         (codesign --sign - --force --deep)
+```
+
+### 8.6 검증 명령
+
+```bash
+# 바이너리 → dylib 링크 매칭 확인
+otool -L target/release/moai-studio | grep ghostty
+# → @rpath/libghostty-vt.dylib (compatibility version 1.0.0, current version 0.1.0)
+
+otool -l target/release/moai-studio | grep -A 2 LC_RPATH
+# → path @executable_path
+
+# 실행 PID 확인
+pgrep -f "moai-studio.app/Contents/MacOS/moai-studio"
+```
+
+### 8.7 HARD 규칙
+
+- [HARD] 시연/QA 시점에 사용자에게 `open target/release/moai-studio.app` 또는 `open ~/Applications/moai-studio.app` 안내 전, 본 스크립트 실행 필수. 단순 `cargo build --release` 만으로는 `.app` 미생성.
+- [HARD] `--install` 플래그 사용 시 기존 `~/Applications/moai-studio.app` 가 삭제되고 재생성됨. 사용자 데이터 (UserSettings 등) 는 `~/Library/Application Support/` 또는 `~/.moai/` 별도 경로에 저장되므로 영향 없으나, 커스텀 codesign 적용된 빌드를 보존하려면 `--install` 사용 금지.
+- [HARD] 스크립트는 macOS 전용 (`uname -s != Darwin` 시 exit 1). Linux/Windows 번들링은 별도 SPEC (cargo-deb, cargo-wix 메타데이터는 `crates/moai-studio-app/Cargo.toml` 에 이미 존재).
+
+### 8.8 Carry-over (v0.1.0 GA 이전 필수)
+
+- `assets/icons/icon.icns` 생성 (`iconutil -c icns icon.iconset -o assets/icons/icon.icns`) → `Info.plist.template` 의 `CFBundleIconFile` 을 PNG → ICNS 로 변경
+- Hardened Runtime entitlement (`Entitlements.plist`) + Apple Developer ID 정식 codesign
+- Notarization (`xcrun notarytool submit --wait`) — App Store 외 배포 채널용
+- `.github/workflows/release-macos.yml` 에서 본 스크립트 호출 → release artifact 자동 업로드
+
+---
+
+## 9. Version 1차 확정 전 (v0.1.0 release까지) 임시 규칙
 
 > **2026-04-26 update**: PUBLIC visibility 전환은 GHA billing 차단 회피 + free tier 활용을 위해 v0.1.0 이전에 선제 완료됨 (모두 `gh repo edit ... --visibility public` 으로 처리). 본 §8 의 다른 항목 (release/v0.1.0 분기, main v0.1.0 tag, Release Drafter publish) 은 v0.1.0 시점까지 유효.
 >
@@ -326,9 +407,9 @@ v0.1.0 릴리스 시점에:
 
 ---
 
-## 9. Code Comments Policy [HARD]
+## 10. Code Comments Policy [HARD]
 
-### 9.1 영어 주석 강제
+### 10.1 영어 주석 강제
 
 [HARD] 본 레포의 모든 코드 주석은 **영어** 로 작성한다. `.moai/config/sections/language.yaml` 의 `code_comments: en` 설정과 일치.
 
@@ -339,13 +420,13 @@ v0.1.0 릴리스 시점에:
 - @MX 태그 description 및 @MX:REASON sub-line
 - 테스트 함수 주석 및 assert message (가능한 한 영어)
 
-### 9.2 적용 시점 및 점진 전환
+### 10.2 적용 시점 및 점진 전환
 
 - **2026-04-26 이후 작성·수정되는 모든 코드** 는 즉시 영어 주석 적용 (HARD)
 - 기존 한국어 주석 코드: 정책 활성 이후 해당 파일을 touch 할 때 그 시점에 영어로 전환 (점진 마이그레이션)
 - 일괄 변환은 별도 SPEC (`SPEC-V3-COMMENTS-MIGRATION` 후보) 으로 분리 — 본 정책은 신규 코드와 touch-on-modify 만 강제
 
-### 9.3 한국어 유지 영역 (제외)
+### 10.3 한국어 유지 영역 (제외)
 
 다음은 영어 정책에서 제외된다 (별도 language.yaml 설정 따라감):
 - SPEC 문서 (`.moai/specs/**/*.md`) — `documentation: ko`
@@ -354,17 +435,17 @@ v0.1.0 릴리스 시점에:
 - 사용자 응답 (orchestrator → user) — `conversation_language: ko`
 - error_messages 의 사용자 메시지 — `error_messages: en` (이미 영어, 별도)
 
-### 9.4 Skill / Agent / Rule 정의
+### 10.4 Skill / Agent / Rule 정의
 
-`.claude/skills/**`, `.claude/agents/**`, `.claude/rules/**` 의 instruction document 는 영어로 작성 (CLAUDE.md / coding-standards.md 의 Language Policy 따라감). 본 §9 와 동일한 영어 강제.
+`.claude/skills/**`, `.claude/agents/**`, `.claude/rules/**` 의 instruction document 는 영어로 작성 (CLAUDE.md / coding-standards.md 의 Language Policy 따라감). 본 §10 와 동일한 영어 강제.
 
-### 9.5 Agent 위임 시 명시
+### 10.5 Agent 위임 시 명시
 
 코드를 작성하는 subagent (`manager-tdd`, `manager-ddd`, `expert-backend`, `expert-frontend` 등) 의 위임 프롬프트에 다음 라인을 권장 포함:
 
 > All code comments and docstrings MUST be in English. Variable / function / type / module names are also in English (already enforced by Rust convention). Korean is reserved for SPEC documents (`.moai/specs/`), git commit messages, README / docs, and user-facing orchestrator responses only.
 
-### 9.6 위반 처리
+### 10.6 위반 처리
 
 - 코드 리뷰 시 한국어 주석 발견 → 영어로 수정 요청 (블로킹 사유)
 - 자동 검증 도구 부재: `cargo clippy` / `eslint` 등 표준 lint 는 주석 언어 검사 없음 → 수동 리뷰
@@ -372,7 +453,7 @@ v0.1.0 릴리스 시점에:
 
 ---
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 | 상황 | 대응 |
 |------|------|
@@ -381,18 +462,19 @@ v0.1.0 릴리스 시점에:
 | Release Drafter 가 라벨 없는 PR 을 미분류로 표시 | PR 작성자는 머지 전 3축 라벨 부착 필수. 미부착 PR 은 review 에서 reject. |
 | ~~Release Drafter action 자체가 "Invalid config file" 로 실패~~ | **2026-04-26 해소**: PR #38 + d4d8fd1 main commit 으로 main 에 release-drafter.yml 반영. PUBLIC 전환 (2026-04-26) 후 Release Drafter 정상 동작 (PR #45 머지 시점에 SUCCESS 확인). |
 | 실수로 main 에 직접 push | Branch protection rule 활성화로 차단됨. 우회 시 즉시 revert + hotfix 브랜치로 이관. |
-| 한국어 주석이 신규 코드에 들어감 | §9.1 위반. 머지 전 영어로 수정. agent 가 작성한 경우 위임 프롬프트에 §9.5 라인 누락 → 다음 위임에 추가. |
+| 한국어 주석이 신규 코드에 들어감 | §10.1 위반. 머지 전 영어로 수정. agent 가 작성한 경우 위임 프롬프트에 §10.5 라인 누락 → 다음 위임에 추가. |
 | ~~GitHub Actions billing 차단~~ | **2026-04-26 해소**: PUBLIC 전환으로 standard runner GHA 무료 (org-level billing 영향 없음). private 환경 복귀 시 spending limit 재상향 필요. |
 | Doc-only PR (README, .moai/specs/, LICENSE) auto-merge 차단 | **해소**: `.github/workflows/ci-required-stubs.yml` (2026-04-26 추가) 가 7 required contexts 를 stub 으로 SUCCESS 보고. doc-only PR 도 추가 조치 없이 auto-merge 가능. |
 
 ---
 
-Version: 1.3.0
-Last Updated: 2026-04-26
+Version: 1.4.0
+Last Updated: 2026-04-27
 Scope: github.com/modu-ai/moai-studio (PUBLIC, transferred from GoosLab/moai-studio 2026-04-26)
 
 Changelog:
-- 1.3.0 (2026-04-26): PUBLIC visibility 전환 완료 (v0.1.0 이전 선제 처리). §8 에 PUBLIC 전환 메모 추가. §10 troubleshooting 에 doc-only PR auto-merge 해소 (`ci-required-stubs.yml`) + Release Drafter 정상 동작 + GHA billing 해소 항목 갱신. CLAUDE.local.md 자체는 PUBLIC repo 에 commit 되어 외부 노출 (정책 텍스트만, 민감 정보 0).
+- 1.4.0 (2026-04-27): §8 macOS .app 번들 빌드 신설 (HARD: scripts/build-macos-app.sh + Info.plist.template). 기존 §8 Version 임시규칙 → §9 / §9 Code Comments → §10 / §10 Troubleshooting → §11 로 시프트.
+- 1.3.0 (2026-04-26): PUBLIC visibility 전환 완료 (v0.1.0 이전 선제 처리). §8 에 PUBLIC 전환 메모 추가. §11 troubleshooting 에 doc-only PR auto-merge 해소 (`ci-required-stubs.yml`) + Release Drafter 정상 동작 + GHA billing 해소 항목 갱신. CLAUDE.local.md 자체는 PUBLIC repo 에 commit 되어 외부 노출 (정책 텍스트만, 민감 정보 0).
 - 1.2.0 (2026-04-26): §2 branch protection 활성 (main + develop, 7 required contexts), §2.4 Auto-merge 운영 가이드 신설. §7.2 sync subcommand 에 auto-merge 패턴 주입. Repo transfer (GoosLab → modu-ai).
 - 1.1.0 (2026-04-26): §9 Code Comments Policy 신설 (HARD: 모든 코드 주석 영어). Troubleshooting → §10 이동. CI billing / Release Drafter config troubleshooting 항목 추가.
 - 1.0.0 (2026-04-24): 초안. Enhanced GitHub Flow + 3축 라벨 + Release Drafter + branch protection 가이드.
