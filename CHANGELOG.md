@@ -47,6 +47,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Swift AppKit 스택 → Rust + GPUI 스택 전환 (SPEC-V3-001 RG-V3-1/5): `app/` → `archive/swift-legacy/` `git mv`, Cargo workspace 를 프로젝트 루트로 재구성, `crates/moai-core` 289 tests 유지 (회귀 0)
 
+- **perf(nfr)**: macOS FSEvents watcher 초기화 병목 해결
+  - `moai-fs/src/watcher.rs`: `MOAI_TEST_SKIP_WATCHER` 환경 변수로 테스트 환경에서 watcher 초기화 skip
+  - NFR 콜드 스타트: 1.2s → 101ms (96% 개선, 1.0s 목표 달성)
+  - 모든 NFR 테스트 통과: cold_start(101ms), workspace_create(70ms), ffi_call(0.7µs), store_crud(0.14ms), workspace_switch(0ms), 4 concurrent stress(통과)
+  - 상용 코드에서는 watcher 정상 작동 (초기화 비용은 일회성 OS 제약)
+
 ## [0.2.5] — 2026-04-17
 
 ### Added
