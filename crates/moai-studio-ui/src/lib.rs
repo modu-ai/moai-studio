@@ -33,9 +33,22 @@ pub mod spec_ui;
 
 use design::tokens::{self as tok, traffic};
 use gpui::{
-    App, Application, Context, Entity, IntoElement, KeyDownEvent, MouseButton, ParentElement,
-    Render, Styled, Window, WindowOptions, div, prelude::*, px, rgb, size,
+    App, Application, Context, Entity, InteractiveElement, IntoElement, KeyDownEvent, Menu,
+    MenuItem, MouseButton, OsAction, ParentElement, PathPromptOptions, Render, Styled,
+    SystemMenuType, Window, WindowOptions, actions, div, prelude::*, px, rgb, size,
 };
+
+// SPEC-V0-1-1-UX-FIX (C-5 + audit §10): macOS menu bar 비어있던 상태 해결.
+// gpui::actions! 매크로로 Action type 정의 → cx.set_menus + cx.on_action + cx.bind_keys 로 wire.
+// - Quit / About: App menu actions (system 자동 dispatch)
+// - NoOp: OsAction Cut/Copy/Paste/Undo/Redo placeholder (system handler 가 처리, dispatch 무시)
+// - NewWorkspace: File menu + Cmd+N → RootView::handle_add_workspace
+// - OpenSettings: App menu + Cmd+, → RootView::settings_modal mount (V3-013)
+// - ReportIssue: Help menu → GitHub issues URL
+actions!(
+    moai_studio,
+    [Quit, About, NoOp, NewWorkspace, OpenSettings, ReportIssue]
+);
 use moai_studio_workspace::{Workspace, WorkspacesStore};
 use panes::PaneId;
 use std::collections::HashMap;
@@ -186,10 +199,22 @@ impl RootView {
     }
 
     /// 새 워크스페이스가 저장소에 추가된 이후 로컬 상태를 갱신.
-    /// GPUI 이벤트 핸들러와 독립적으로 테스트 가능.
+    /// GPUI 이벤트 핸들러와 독립적으로 테스트 가능 (no-cx 시그니처 유지).
     pub fn apply_added_workspace(&mut self, added: &Workspace, all: Vec<Workspace>) {
         self.workspaces = all;
         self.active_id = Some(added.id.clone());
+    }
+
+    /// SPEC-V0-1-1-UX-FIX (C-3): TabContainer 가 없으면 생성. workspace 활성화 시점에 호출.
+    ///
+    /// v0.1.0 에서는 production 코드에 TabContainer 생성 로직이 부재하여 content_area 가
+    /// 영구적으로 "tab container initializing" 텍스트만 표시되는 stuck 상태 발생. v0.1.1 에서
+    /// 본 helper 가 handle_add_workspace + handle_activate_workspace 양쪽에서 호출되어
+    /// workspace 가 활성화된 즉시 TabContainer 가 가시 상태가 된다.
+    fn ensure_tab_container(&mut self, cx: &mut Context<Self>) {
+        if self.tab_container.is_none() {
+            self.tab_container = Some(cx.new(|_| TabContainer::new()));
+        }
     }
 
     /// 주어진 id 의 워크스페이스를 active 로 전환. 존재하지 않으면 false.
@@ -204,10 +229,12 @@ impl RootView {
 
     /// Row 클릭 처리 — active_id 전환 + store.touch() 로 last_active 갱신.
     /// 저장 실패는 로깅만, UI 전환은 성공 처리.
+    /// SPEC-V0-1-1-UX-FIX (C-3): activate 시 TabContainer 미생성이면 생성.
     fn handle_activate_workspace(&mut self, id: String, cx: &mut Context<Self>) {
         if !self.activate_workspace(&id) {
             return;
         }
+        self.ensure_tab_container(cx);
         match WorkspacesStore::load(&self.storage_path) {
             Ok(mut store) => {
                 if let Err(e) = store.touch(&id) {
@@ -585,31 +612,81 @@ impl RootView {
         }
     }
 
-    /// + New Workspace 버튼 클릭 처리 — store 재로드, 네이티브 picker, 상태 갱신.
-    ///   사용자가 취소하거나 로드/저장이 실패하면 상태 유지.
+    /// + New Workspace 버튼 클릭 처리 — GPUI native folder prompt, 비동기 store 갱신.
+    ///
+    /// SPEC-V0-1-1-RFD-MODAL-FIX (hotfix v0.1.1):
+    /// `rfd::FileDialog::pick_folder()` blocking call 은 GPUI main thread 의 RefCell
+    /// borrow 가 살아있는 상태에서 NSOpenPanel 이 GPUI tick 을 재진입하면 panic loop
+    /// (`RefCell already borrowed`) 를 일으킨다. v0.1.0 에서 critical regression 으로 발견됨.
+    ///
+    /// Fix: GPUI 0.2.2 의 native `cx.prompt_for_paths` API 사용. listener borrow 종료 후
+    /// `cx.spawn` async task 에서 receiver 를 await — main thread 안전성 + GPUI tick 재진입
+    /// 회피.
     fn handle_add_workspace(&mut self, cx: &mut Context<Self>) {
-        let mut store = match WorkspacesStore::load(&self.storage_path) {
-            Ok(s) => s,
-            Err(e) => {
-                error!("WorkspacesStore::load 실패: {e}");
+        let storage_path = self.storage_path.clone();
+        let receiver = cx.prompt_for_paths(PathPromptOptions {
+            files: false,
+            directories: true,
+            multiple: false,
+            prompt: Some("프로젝트 폴더 선택".into()),
+        });
+        cx.spawn(async move |entity, cx| {
+            let path = match receiver.await {
+                Ok(Ok(Some(paths))) => match paths.into_iter().next() {
+                    Some(p) => p,
+                    None => return,
+                },
+                Ok(Ok(None)) => {
+                    info!("프로젝트 폴더 선택 취소");
+                    return;
+                }
+                Ok(Err(e)) => {
+                    error!("prompt_for_paths 실패: {e}");
+                    return;
+                }
+                Err(_) => {
+                    error!("prompt_for_paths channel 닫힘");
+                    return;
+                }
+            };
+            let mut store = match WorkspacesStore::load(&storage_path) {
+                Ok(s) => s,
+                Err(e) => {
+                    error!("WorkspacesStore::load 실패: {e}");
+                    return;
+                }
+            };
+            let ws = match Workspace::from_path(&path) {
+                Ok(w) => w,
+                Err(e) => {
+                    error!("Workspace::from_path 실패: {e}");
+                    return;
+                }
+            };
+            if let Err(e) = store.add(ws.clone()) {
+                error!("store.add 실패: {e}");
                 return;
             }
-        };
-        match moai_studio_workspace::pick_and_save(&mut store) {
-            Ok(Some(ws)) => {
-                let all = store.list().to_vec();
-                self.apply_added_workspace(&ws, all);
+            let all = store.list().to_vec();
+            let _ = entity.update(cx, |this, cx| {
+                this.apply_added_workspace(&ws, all);
+                this.ensure_tab_container(cx);
                 cx.notify();
-            }
-            Ok(None) => info!("pick_and_save: 사용자 취소"),
-            Err(e) => error!("pick_and_save 실패: {e}"),
-        }
+            });
+        })
+        .detach();
     }
 }
 
 impl Render for RootView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let new_ws_btn = new_workspace_button().on_mouse_down(
+            MouseButton::Left,
+            cx.listener(|this, _ev, _window, cx| this.handle_add_workspace(cx)),
+        );
+        // SPEC-V0-1-1-RFD-MODAL-FIX: empty state primary CTA 가 v0.1.0 에서 dead button 이었음.
+        // hotfix 로 동일 handle_add_workspace 호출에 wire — sidebar `+ New Workspace` 와 같은 동작.
+        let create_first_btn = empty_state_primary_cta().on_mouse_down(
             MouseButton::Left,
             cx.listener(|this, _ev, _window, cx| this.handle_add_workspace(cx)),
         );
@@ -661,6 +738,20 @@ impl Render for RootView {
             .flex_col()
             .size_full()
             .bg(rgb(tok::BG_APP))
+            // SPEC-V0-1-1-UX-FIX (audit §10): Menu / keybinding action dispatch.
+            // Cmd+N (NewWorkspace) → handle_add_workspace (sidebar / File menu / 단축키 통합 진입점).
+            // Cmd+, (OpenSettings) → settings_modal mount (V3-013 와 동일 동작).
+            .on_action(cx.listener(|this, _: &NewWorkspace, _window, cx| {
+                this.handle_add_workspace(cx);
+            }))
+            .on_action(cx.listener(|this, _: &OpenSettings, _window, cx| {
+                if this.settings_modal.is_none() {
+                    let mut modal = settings::SettingsModal::new();
+                    modal.mount();
+                    this.settings_modal = Some(modal);
+                    cx.notify();
+                }
+            }))
             .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _window, cx| {
                 // settings 키 먼저 처리 — 소비되면 나머지 스킵.
                 if this.handle_settings_key_event(ev) {
@@ -686,7 +777,13 @@ impl Render for RootView {
             .child(title_bar(self.title_label()))
             // SPEC-V3-014 REQ-V14-027: banner_stack — TabContainer 위, 정상 flow (overlay 아님).
             .child(render_banner_strip(banner_view_entities))
-            .child(main_body(&self.workspaces, rows, new_ws_btn, tab_container))
+            .child(main_body(
+                &self.workspaces,
+                rows,
+                new_ws_btn,
+                tab_container,
+                create_first_btn,
+            ))
             .child(status_bar())
             .children(active_palette.map(|_v| render_palette_overlay()))
             .children(has_settings.then(render_settings_overlay))
@@ -736,19 +833,20 @@ fn render_banner_strip(
 // ============================================================
 
 fn title_bar(active_label: &str) -> impl IntoElement {
+    // SPEC-V0-1-1-UX-FIX (C-4): macOS native traffic light 와 중복되던 custom traffic_lights() 제거.
+    // GPUI WindowOptions::titlebar 가 native traffic light 를 좌상단 (~70px) 에 그리므로 좌측 padding 으로 회피.
     div()
         .flex()
         .flex_row()
         .items_center()
         .w_full()
         .h(px(44.))
-        .px_4()
+        .pl(px(80.)) // native traffic light 영역 회피
+        .pr_4()
         .gap_3()
         .bg(rgb(tok::BG_SURFACE))
         .border_b_1()
         .border_color(rgb(tok::BORDER_SUBTLE))
-        // 좌측 — traffic lights placeholder (native 윈도우 chrome 사용 시 숨김 가능)
-        .child(traffic_lights())
         // 프로젝트 이름 (현재 활성 워크스페이스)
         .child(
             div()
@@ -767,8 +865,9 @@ fn title_bar(active_label: &str) -> impl IntoElement {
         )
 }
 
-/// macOS 전용 traffic lights (red/yellow/green). GPUI 자체 타이틀바 사용 시 생략 가능하나
-/// 브랜드 일관성을 위해 인라인 렌더링.
+/// macOS 전용 traffic lights (red/yellow/green). v0.1.1 부터 macOS native traffic light 만 사용 (C-4).
+/// 본 함수는 향후 cross-platform fallback (Linux/Windows custom titlebar) 용으로 보존.
+#[allow(dead_code)]
 fn traffic_lights() -> impl IntoElement {
     div()
         .flex()
@@ -807,6 +906,7 @@ fn main_body(
     rows: Vec<gpui::Stateful<gpui::Div>>,
     new_ws_btn: impl IntoElement,
     tab_container: Option<Entity<TabContainer>>,
+    create_first_btn: gpui::Stateful<gpui::Div>,
 ) -> impl IntoElement {
     let is_empty = workspaces.is_empty();
     div()
@@ -815,7 +915,7 @@ fn main_body(
         .flex_grow()
         .w_full()
         .child(sidebar(is_empty, rows, new_ws_btn))
-        .child(content_area(is_empty, tab_container))
+        .child(content_area(is_empty, tab_container, create_first_btn))
 }
 
 /// Sidebar 260pt — WORKSPACE + GIT WORKTREES + SPECs 섹션 + 하단 인터랙티브 "+ New Workspace".
@@ -892,6 +992,11 @@ fn workspace_section(is_empty: bool, rows: Vec<gpui::Stateful<gpui::Div>>) -> im
 }
 
 /// 단일 워크스페이스 row — Stateful (id=ws.id). 컬러 dot + 이름. Active 시 하이라이트.
+///
+/// SPEC-V0-1-1-UX-FIX (H-1): active dot 색상을 is_active 기반으로 분리.
+/// - active: brand ACCENT (청록) — 현재 선택된 workspace 강조
+/// - inactive: BORDER_STRONG dim outline — 시각적 우선순위 낮춤
+/// 이전 v0.1.0 에서는 모든 row 가 ws.color (orange-red) 로 동일하여 active 구분이 어려웠음.
 fn workspace_row(ws: &Workspace, is_active: bool) -> gpui::Stateful<gpui::Div> {
     let bg = if is_active {
         tok::BG_ELEVATED
@@ -902,6 +1007,11 @@ fn workspace_row(ws: &Workspace, is_active: bool) -> gpui::Stateful<gpui::Div> {
         tok::FG_PRIMARY
     } else {
         tok::FG_SECONDARY
+    };
+    let dot_color = if is_active {
+        tok::ACCENT
+    } else {
+        tok::BORDER_STRONG
     };
     div()
         .id(gpui::SharedString::from(format!("ws-row-{}", ws.id)))
@@ -915,7 +1025,7 @@ fn workspace_row(ws: &Workspace, is_active: bool) -> gpui::Stateful<gpui::Div> {
         .bg(rgb(bg))
         .hover(|s| s.bg(rgb(tok::BG_ELEVATED)))
         .cursor_pointer()
-        .child(div().w(px(8.)).h(px(8.)).rounded_full().bg(rgb(ws.color)))
+        .child(div().w(px(8.)).h(px(8.)).rounded_full().bg(rgb(dot_color)))
         .child(div().text_sm().text_color(rgb(fg)).child(ws.name.clone()))
 }
 
@@ -925,9 +1035,13 @@ fn workspace_row(ws: &Workspace, is_active: bool) -> gpui::Stateful<gpui::Div> {
 ///   1. tab_container 가 Some 이면 TabContainer 렌더 (MS-1+: 탭 바 + PaneTree)
 ///   2. show_empty_state 이면 Empty State CTA 렌더 (SPEC-V3-001 carry)
 ///   3. 그 외 (workspace 선택 but tab_container 없음) 플레이스홀더 렌더
+///
+/// SPEC-V0-1-1-RFD-MODAL-FIX: `create_first_btn` 은 RootView::render 에서 cx.listener 로
+/// wire 된 stateful button. 이전 v0.1.0 에서는 dead button 이었음.
 fn content_area(
     show_empty_state: bool,
     tab_container: Option<Entity<TabContainer>>,
+    create_first_btn: gpui::Stateful<gpui::Div>,
 ) -> impl IntoElement {
     let mut area = div()
         .flex()
@@ -946,7 +1060,7 @@ fn content_area(
             .gap_4()
             .px_12()
             .child(empty_state_hero())
-            .child(empty_state_primary_cta())
+            .child(create_first_btn)
             .child(empty_state_secondary_cta_row())
             .child(empty_state_tip());
     } else {
@@ -982,9 +1096,14 @@ fn empty_state_hero() -> impl IntoElement {
         )
 }
 
-/// Primary CTA — `+ Create First Workspace` (MoAI 오렌지).
-fn empty_state_primary_cta() -> impl IntoElement {
+/// Primary CTA — `+ Create First Workspace` (모두의AI 청록).
+///
+/// SPEC-V0-1-1-RFD-MODAL-FIX (hotfix v0.1.1): `Stateful<Div>` 반환으로 변경하여
+/// `RootView::render` 에서 `cx.listener` + `handle_add_workspace` 를 wire 가능. v0.1.0
+/// 에서는 click handler 없는 dead button 이었음.
+fn empty_state_primary_cta() -> gpui::Stateful<gpui::Div> {
     div()
+        .id("empty-state-primary-cta")
         .flex()
         .flex_row()
         .items_center()
@@ -996,6 +1115,7 @@ fn empty_state_primary_cta() -> impl IntoElement {
         .bg(rgb(tok::ACCENT))
         .text_color(rgb(crate::design::tokens::theme::dark::text::ON_PRIMARY))
         .text_sm()
+        .cursor_pointer()
         .child("+ Create First Workspace")
 }
 
@@ -1230,7 +1350,7 @@ fn status_bar() -> impl IntoElement {
             div()
                 .text_xs()
                 .text_color(rgb(tok::FG_MUTED))
-                .child("moai-studio v0.1.0"),
+                .child(format!("moai-studio v{}", env!("CARGO_PKG_VERSION"))),
         )
         .child(div().flex_grow())
         // 우측 — ⌘K 힌트 (Command Palette 발견성)
@@ -1254,6 +1374,67 @@ pub fn run_app(workspaces: Vec<Workspace>, storage_path: PathBuf) {
     );
 
     Application::new().run(move |cx: &mut App| {
+        // SPEC-V0-1-1-UX-FIX (C-5 + audit §10): macOS menu bar setup.
+        // App menu, File (New Workspace), Edit (OsAction), View, Window, Help (Report Issue).
+        cx.on_action(|_: &Quit, cx: &mut App| cx.quit());
+        cx.on_action(|_: &About, _cx: &mut App| {
+            tracing::info!("About MoAI Studio v{}", env!("CARGO_PKG_VERSION"));
+        });
+        cx.on_action(|_: &ReportIssue, cx: &mut App| {
+            cx.open_url("https://github.com/modu-ai/moai-studio/issues");
+        });
+        // NewWorkspace + OpenSettings 는 RootView 가 .on_action 으로 받아 처리 (entity-level dispatch).
+
+        // 키바인딩 — Cmd+N (New Workspace), Cmd+, (Settings).
+        cx.bind_keys([
+            gpui::KeyBinding::new("cmd-n", NewWorkspace, None),
+            gpui::KeyBinding::new("cmd-,", OpenSettings, None),
+        ]);
+
+        cx.set_menus(vec![
+            Menu {
+                name: "MoAI Studio".into(),
+                items: vec![
+                    MenuItem::action("About MoAI Studio", About),
+                    MenuItem::separator(),
+                    MenuItem::action("Settings...", OpenSettings),
+                    MenuItem::separator(),
+                    MenuItem::os_submenu("Services", SystemMenuType::Services),
+                    MenuItem::separator(),
+                    MenuItem::action("Quit MoAI Studio", Quit),
+                ],
+            },
+            Menu {
+                name: "File".into(),
+                items: vec![MenuItem::action("New Workspace", NewWorkspace)],
+            },
+            Menu {
+                name: "Edit".into(),
+                items: vec![
+                    MenuItem::os_action("Cut", NoOp, OsAction::Cut),
+                    MenuItem::os_action("Copy", NoOp, OsAction::Copy),
+                    MenuItem::os_action("Paste", NoOp, OsAction::Paste),
+                    MenuItem::separator(),
+                    MenuItem::os_action("Undo", NoOp, OsAction::Undo),
+                    MenuItem::os_action("Redo", NoOp, OsAction::Redo),
+                    MenuItem::separator(),
+                    MenuItem::os_action("Select All", NoOp, OsAction::SelectAll),
+                ],
+            },
+            Menu {
+                name: "View".into(),
+                items: vec![],
+            },
+            Menu {
+                name: "Window".into(),
+                items: vec![],
+            },
+            Menu {
+                name: "Help".into(),
+                items: vec![MenuItem::action("Report Issue", ReportIssue)],
+            },
+        ]);
+
         let bounds = gpui::Bounds::centered(None, size(px(1600.), px(1000.)), cx);
         let options = WindowOptions {
             window_bounds: Some(gpui::WindowBounds::Windowed(bounds)),
