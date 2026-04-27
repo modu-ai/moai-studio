@@ -369,6 +369,131 @@ impl Default for TabContainer {
 }
 
 // ============================================================
+// Snapshot conversion — A-1/A-2 persistence layer
+// ============================================================
+
+// @MX:ANCHOR: [AUTO] tab-container-snapshot-api
+// @MX:REASON: [AUTO] TabContainer ↔ PaneLayoutV1 conversion entry points.
+//   Called from persistence restore (startup) and save (shutdown/change).
+//   fan_in >= 3: startup restore, shutdown save, integration tests.
+
+use moai_studio_workspace::panes_convert::{PaneTreeInput, SplitDirectionInput, TabSnapshotInput};
+
+impl TabContainer {
+    /// Converts this TabContainer into a `Vec<TabSnapshotInput>` for persistence.
+    ///
+    /// Each tab produces one `TabSnapshotInput`. The pane tree is converted
+    /// recursively from `PaneTree<String>` to `PaneTreeInput`. Since `PaneTree<String>`
+    /// does not carry cwd information (payload is tab title), all leaf cwds are `None`.
+    ///
+    /// Call `moai_studio_workspace::panes_convert::tab_container_to_layout_v1` on the
+    /// result to produce a `PaneLayoutV1` ready for `save_panes`.
+    pub fn into_snapshot(&self) -> Vec<TabSnapshotInput> {
+        self.tabs.iter().map(tab_to_snapshot_input).collect()
+    }
+
+    /// Restores a `TabContainer` from a slice of `TabSnapshotInput` DTOs.
+    ///
+    /// Each `TabSnapshotInput` becomes one `Tab`. The pane tree is reconstructed
+    /// recursively; leaf payloads are set to the pane id string (used as placeholder
+    /// text in the current `PaneTree<String>` design).
+    ///
+    /// If `inputs` is empty, returns a default single-tab container so the UI
+    /// always has at least one tab (graceful degradation).
+    pub fn from_snapshot(inputs: &[TabSnapshotInput]) -> Self {
+        if inputs.is_empty() {
+            return Self::new();
+        }
+        let tabs: Vec<Tab> = inputs.iter().map(snapshot_input_to_tab).collect();
+        Self {
+            tabs,
+            active_tab_idx: 0,
+            drag_state: None,
+        }
+    }
+}
+
+// ---- helpers ----
+
+fn tab_to_snapshot_input(tab: &Tab) -> TabSnapshotInput {
+    TabSnapshotInput {
+        id: tab.id.0.clone(),
+        title: tab.title.clone(),
+        last_focused_pane: tab.last_focused_pane.as_ref().map(|p| p.0.clone()),
+        pane_tree: pane_tree_to_input(&tab.pane_tree),
+    }
+}
+
+fn pane_tree_to_input(tree: &PaneTree<String>) -> PaneTreeInput {
+    match tree {
+        PaneTree::Leaf(leaf) => PaneTreeInput::Leaf {
+            id: leaf.id.0.clone(),
+            // PaneTree<String> payload is the display title, not a filesystem path.
+            // cwd is not tracked at this layer; restored tabs use $HOME fallback.
+            cwd: None,
+        },
+        PaneTree::Split {
+            id,
+            direction,
+            ratio,
+            first,
+            second,
+        } => PaneTreeInput::Split {
+            id: id.0.clone(),
+            direction: split_direction_to_input(*direction),
+            ratio: *ratio,
+            first: Box::new(pane_tree_to_input(first)),
+            second: Box::new(pane_tree_to_input(second)),
+        },
+    }
+}
+
+fn split_direction_to_input(d: SplitDirection) -> SplitDirectionInput {
+    match d {
+        SplitDirection::Horizontal => SplitDirectionInput::Horizontal,
+        SplitDirection::Vertical => SplitDirectionInput::Vertical,
+    }
+}
+
+fn snapshot_input_to_tab(input: &TabSnapshotInput) -> Tab {
+    Tab {
+        id: TabId(input.id.clone()),
+        title: input.title.clone(),
+        last_focused_pane: input.last_focused_pane.as_ref().map(|s| PaneId(s.clone())),
+        pane_tree: snapshot_input_to_pane_tree(&input.pane_tree),
+    }
+}
+
+fn snapshot_input_to_pane_tree(input: &PaneTreeInput) -> PaneTree<String> {
+    match input {
+        PaneTreeInput::Leaf { id, .. } => {
+            // Payload is the pane id string; no cwd tracked at this layer.
+            PaneTree::new_leaf(PaneId(id.clone()), id.clone())
+        }
+        PaneTreeInput::Split {
+            id,
+            direction,
+            ratio,
+            first,
+            second,
+        } => PaneTree::Split {
+            id: SplitNodeId(id.clone()),
+            direction: split_input_to_direction(direction),
+            ratio: *ratio,
+            first: Box::new(snapshot_input_to_pane_tree(first)),
+            second: Box::new(snapshot_input_to_pane_tree(second)),
+        },
+    }
+}
+
+fn split_input_to_direction(d: &SplitDirectionInput) -> SplitDirection {
+    match d {
+        SplitDirectionInput::Horizontal => SplitDirection::Horizontal,
+        SplitDirectionInput::Vertical => SplitDirection::Vertical,
+    }
+}
+
+// ============================================================
 // GPUI Render 구현 (SPEC-V3-004 MS-1 T3, MS-3 T7)
 // ============================================================
 
@@ -753,6 +878,183 @@ mod tests {
         for expected in 2..=5usize {
             container.new_tab(None);
             assert_eq!(container.tab_count(), expected);
+        }
+    }
+
+    // ============================================================
+    // Snapshot round-trip tests (A-1/A-2 persistence)
+    // ============================================================
+
+    /// Single-tab TabContainer → into_snapshot → from_snapshot preserves tab id, title,
+    /// last_focused_pane, and leaf pane tree shape.
+    #[test]
+    fn into_snapshot_single_tab_leaf() {
+        let container = TabContainer::new();
+        let snapshots = container.into_snapshot();
+
+        assert_eq!(snapshots.len(), 1, "single tab produces one snapshot");
+        let s = &snapshots[0];
+        // title of an untitled tab is "untitled"
+        assert_eq!(s.title, "untitled");
+        // last_focused_pane must be Some (root pane is focused on creation)
+        assert!(s.last_focused_pane.is_some(), "last_focused_pane is set");
+        // pane_tree must be a leaf
+        match &s.pane_tree {
+            moai_studio_workspace::panes_convert::PaneTreeInput::Leaf { id, .. } => {
+                // id must match last_focused_pane
+                assert_eq!(Some(id.as_str()), s.last_focused_pane.as_deref());
+            }
+            _ => panic!("single tab pane_tree must be Leaf"),
+        }
+    }
+
+    /// TabContainer with multiple tabs → into_snapshot → from_snapshot restores tab count.
+    #[test]
+    fn into_snapshot_multiple_tabs() {
+        let mut container = TabContainer::new();
+        container.new_tab(None);
+        container.new_tab(None);
+        assert_eq!(container.tab_count(), 3);
+
+        let snapshots = container.into_snapshot();
+        assert_eq!(snapshots.len(), 3, "three tabs produce three snapshots");
+
+        // All must have Some last_focused_pane (all single-leaf tabs)
+        for s in &snapshots {
+            assert!(s.last_focused_pane.is_some());
+        }
+    }
+
+    /// from_snapshot with empty slice produces a default single-tab container.
+    #[test]
+    fn from_snapshot_empty_slice_yields_default() {
+        let container = TabContainer::from_snapshot(&[]);
+        // A new container always has at least one tab
+        assert_eq!(container.tab_count(), 1);
+    }
+
+    /// from_snapshot restores tab ids and titles from snapshot inputs.
+    #[test]
+    fn from_snapshot_restores_ids_and_titles() {
+        use moai_studio_workspace::panes_convert::{PaneTreeInput, TabSnapshotInput};
+        let inputs = vec![
+            TabSnapshotInput {
+                id: "tab-restore-a".to_string(),
+                title: "Alpha".to_string(),
+                last_focused_pane: Some("pane-ra".to_string()),
+                pane_tree: PaneTreeInput::Leaf {
+                    id: "pane-ra".to_string(),
+                    cwd: None,
+                },
+            },
+            TabSnapshotInput {
+                id: "tab-restore-b".to_string(),
+                title: "Beta".to_string(),
+                last_focused_pane: None,
+                pane_tree: PaneTreeInput::Leaf {
+                    id: "pane-rb".to_string(),
+                    cwd: None,
+                },
+            },
+        ];
+
+        let container = TabContainer::from_snapshot(&inputs);
+        assert_eq!(container.tab_count(), 2);
+        assert_eq!(container.tabs[0].id.0, "tab-restore-a");
+        assert_eq!(container.tabs[0].title, "Alpha");
+        assert_eq!(container.tabs[1].id.0, "tab-restore-b");
+        assert_eq!(container.tabs[1].title, "Beta");
+    }
+
+    /// from_snapshot restores last_focused_pane.
+    #[test]
+    fn from_snapshot_restores_last_focused_pane() {
+        use moai_studio_workspace::panes_convert::{PaneTreeInput, TabSnapshotInput};
+        let inputs = vec![TabSnapshotInput {
+            id: "tab-lfp".to_string(),
+            title: "LFP".to_string(),
+            last_focused_pane: Some("pane-focused-q".to_string()),
+            pane_tree: PaneTreeInput::Leaf {
+                id: "pane-focused-q".to_string(),
+                cwd: None,
+            },
+        }];
+
+        let container = TabContainer::from_snapshot(&inputs);
+        let tab = &container.tabs[0];
+        assert_eq!(
+            tab.last_focused_pane.as_ref().map(|p| p.0.as_str()),
+            Some("pane-focused-q"),
+            "last_focused_pane restored"
+        );
+    }
+
+    /// from_snapshot restores a split pane tree (Horizontal split with ratio).
+    #[test]
+    fn from_snapshot_restores_split_tree() {
+        use moai_studio_workspace::panes_convert::{
+            PaneTreeInput, SplitDirectionInput, TabSnapshotInput,
+        };
+        let inputs = vec![TabSnapshotInput {
+            id: "tab-split-restore".to_string(),
+            title: "Split".to_string(),
+            last_focused_pane: Some("pane-sl".to_string()),
+            pane_tree: PaneTreeInput::Split {
+                id: "split-restore".to_string(),
+                direction: SplitDirectionInput::Horizontal,
+                ratio: 0.4,
+                first: Box::new(PaneTreeInput::Leaf {
+                    id: "pane-sl".to_string(),
+                    cwd: None,
+                }),
+                second: Box::new(PaneTreeInput::Leaf {
+                    id: "pane-sr".to_string(),
+                    cwd: None,
+                }),
+            },
+        }];
+
+        let container = TabContainer::from_snapshot(&inputs);
+        assert_eq!(container.tab_count(), 1);
+        let tab = &container.tabs[0];
+        // Split tree must have 2 leaves
+        assert_eq!(tab.pane_tree.leaf_count(), 2);
+        // Verify ratio preserved via find_split_node_id + get_ratio
+        let split_id = tab
+            .pane_tree
+            .find_split_node_id()
+            .expect("split node exists");
+        let ratio = tab.pane_tree.get_ratio(split_id).expect("ratio accessible");
+        assert!((ratio - 0.4_f32).abs() < 1e-5, "ratio preserved: {}", ratio);
+    }
+
+    /// Full round-trip: TabContainer → into_snapshot → from_snapshot → into_snapshot
+    /// produces identical snapshot slices.
+    #[test]
+    fn container_snapshot_full_roundtrip() {
+        let mut original = TabContainer::new();
+        original.new_tab(None);
+        // Split the active pane in the first tab
+        let first_tab = &mut original.tabs[0];
+        let root_pane_id = first_tab.pane_tree.root_pane_id().unwrap().clone();
+        let new_pane_id = PaneId::new_unique();
+        first_tab
+            .pane_tree
+            .split_horizontal(&root_pane_id, new_pane_id, "right".to_string())
+            .expect("split succeeds");
+
+        let snapshot_a = original.into_snapshot();
+        let restored = TabContainer::from_snapshot(&snapshot_a);
+        let snapshot_b = restored.into_snapshot();
+
+        assert_eq!(snapshot_a.len(), snapshot_b.len(), "tab count preserved");
+        for (a, b) in snapshot_a.iter().zip(snapshot_b.iter()) {
+            assert_eq!(a.id, b.id, "tab id preserved through double round-trip");
+            assert_eq!(a.title, b.title, "title preserved");
+            assert_eq!(
+                a.last_focused_pane, b.last_focused_pane,
+                "last_focused_pane preserved"
+            );
         }
     }
 }

@@ -5,6 +5,7 @@
 
 use crate::palette::fuzzy::fuzzy_match;
 use crate::palette::palette_view::{PaletteEvent, PaletteItem, PaletteView};
+use std::path::Path;
 
 // ============================================================
 // mock 파일 인덱스 (AC-PL-6: 5+ 항목)
@@ -62,6 +63,32 @@ impl CmdPalette {
     /// 기본 mock 파일 인덱스로 새 CmdPalette 를 생성한다.
     pub fn new() -> Self {
         let file_index: Vec<String> = MOCK_FILE_INDEX.iter().map(|s| s.to_string()).collect();
+        let items = files_to_items(&file_index);
+        Self {
+            view: PaletteView::with_items(items),
+            file_index,
+            last_event: None,
+            activation_key: "cmd+p",
+        }
+    }
+
+    /// Build a CmdPalette populated from a real workspace directory (F-1).
+    ///
+    /// Walks `workspace_dir` recursively and collects relative file paths
+    /// (excluding hidden files and common build artefacts). If the directory
+    /// does not exist or the walk produces no results, falls back to
+    /// `MOCK_FILE_INDEX` so the palette is never empty.
+    ///
+    /// File paths are returned as forward-slash-separated strings relative to
+    /// `workspace_dir`, suitable for display and fuzzy matching.
+    pub fn from_workspace_dir(workspace_dir: &Path) -> Self {
+        let file_index = scan_workspace_files(workspace_dir);
+        let file_index = if file_index.is_empty() {
+            // Fallback to mock when dir is missing or empty.
+            MOCK_FILE_INDEX.iter().map(|s| s.to_string()).collect()
+        } else {
+            file_index
+        };
         let items = files_to_items(&file_index);
         Self {
             view: PaletteView::with_items(items),
@@ -136,6 +163,87 @@ impl Default for CmdPalette {
 // ============================================================
 // 헬퍼
 // ============================================================
+
+/// Recursively scan `root` and return relative paths for non-hidden, non-artefact files.
+///
+/// Hidden entries (names starting with '.'), build artefacts (target/, node_modules/,
+/// .git/), and directories themselves are excluded. Paths are separated with '/' on
+/// all platforms for consistent display and fuzzy matching.
+///
+/// Depth is capped at 8 levels to avoid extremely large repositories causing
+/// visible latency. For production use, real file-index integration (SPEC-V3-012 N1)
+/// should replace this synchronous walk.
+fn scan_workspace_files(root: &Path) -> Vec<String> {
+    const MAX_DEPTH: usize = 8;
+    const MAX_FILES: usize = 2000;
+
+    // Directories to skip during traversal.
+    let skip_dirs: &[&str] = &[
+        "target",
+        "node_modules",
+        ".git",
+        ".cargo",
+        "dist",
+        "build",
+        ".next",
+        "__pycache__",
+    ];
+
+    let mut files: Vec<String> = Vec::new();
+    walk_dir(root, root, 0, MAX_DEPTH, skip_dirs, &mut files, MAX_FILES);
+    files.sort();
+    files
+}
+
+/// Recursive directory walker used by `scan_workspace_files`.
+fn walk_dir(
+    root: &Path,
+    current: &Path,
+    depth: usize,
+    max_depth: usize,
+    skip_dirs: &[&str],
+    out: &mut Vec<String>,
+    max_files: usize,
+) {
+    if depth > max_depth || out.len() >= max_files {
+        return;
+    }
+    let read_dir = match std::fs::read_dir(current) {
+        Ok(rd) => rd,
+        Err(_) => return,
+    };
+    for entry in read_dir.flatten() {
+        if out.len() >= max_files {
+            break;
+        }
+        let path = entry.path();
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n,
+            None => continue,
+        };
+        // Skip hidden entries.
+        if name.starts_with('.') {
+            continue;
+        }
+        if path.is_dir() {
+            // Skip known artefact directories.
+            if skip_dirs.contains(&name) {
+                continue;
+            }
+            walk_dir(root, &path, depth + 1, max_depth, skip_dirs, out, max_files);
+        } else {
+            // Build a relative path string with forward slashes.
+            if let Ok(rel) = path.strip_prefix(root) {
+                let rel_str = rel
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                out.push(rel_str);
+            }
+        }
+    }
+}
 
 fn files_to_items(files: &[String]) -> Vec<PaletteItem> {
     files
@@ -266,5 +374,74 @@ mod tests {
         assert_eq!(palette.view.nav.selected_index, Some(1));
         palette.on_arrow_up();
         assert_eq!(palette.view.nav.selected_index, Some(0));
+    }
+
+    // ── F-1: from_workspace_dir tests ──
+
+    /// F-1: from_workspace_dir with existing dir returns a non-empty file list.
+    #[test]
+    fn from_workspace_dir_scans_files() {
+        use std::fs;
+        let tmp = std::env::temp_dir().join("moai_palette_test_scan");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).expect("create tmp dir");
+        fs::write(tmp.join("main.rs"), "fn main() {}").expect("write file");
+        fs::write(tmp.join("lib.rs"), "").expect("write file");
+        fs::create_dir_all(tmp.join("src")).expect("create src dir");
+        fs::write(tmp.join("src/mod.rs"), "").expect("write nested file");
+
+        let palette = CmdPalette::from_workspace_dir(&tmp);
+        let count = palette.filtered_count();
+        assert!(count >= 3, "should scan at least 3 files, got {count}");
+
+        // All listed paths should be relative strings (no absolute prefix).
+        for item in &palette.view.items {
+            assert!(
+                !item.label.starts_with('/'),
+                "paths should be relative, got: {}",
+                item.label
+            );
+        }
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    /// F-1: from_workspace_dir on non-existent path falls back to mock index.
+    #[test]
+    fn from_workspace_dir_missing_dir_falls_back_to_mock() {
+        let nonexistent = std::path::PathBuf::from("/tmp/moai_does_not_exist_xyz_12345");
+        let palette = CmdPalette::from_workspace_dir(&nonexistent);
+        // Falls back to MOCK_FILE_INDEX — must have items.
+        assert!(
+            palette.filtered_count() > 0,
+            "fallback should produce non-empty list"
+        );
+    }
+
+    /// F-1: from_workspace_dir result is fuzzy-searchable.
+    #[test]
+    fn from_workspace_dir_fuzzy_search_works() {
+        use std::fs;
+        let tmp = std::env::temp_dir().join("moai_palette_test_fuzzy");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).expect("create tmp dir");
+        fs::write(tmp.join("main.rs"), "").expect("write main.rs");
+        fs::write(tmp.join("palette.rs"), "").expect("write palette.rs");
+
+        let mut palette = CmdPalette::from_workspace_dir(&tmp);
+        palette.set_query("palette".to_string());
+        assert!(
+            palette.filtered_count() > 0,
+            "fuzzy search 'palette' must match palette.rs"
+        );
+        let has_palette_rs = palette
+            .view
+            .items
+            .iter()
+            .any(|i| i.label.contains("palette"));
+        assert!(
+            has_palette_rs,
+            "palette.rs should appear in filtered results"
+        );
+        let _ = fs::remove_dir_all(&tmp);
     }
 }
