@@ -88,7 +88,11 @@ pub enum LeafKind {
     Code(Entity<CodeViewer>),
     /// C-5: Image viewer with zoom/pan support.
     Image(Entity<image::ImageViewer>),
-    /// SPEC-V3-007 carry-over: Web viewer (컴파일 전용 placeholder).
+    /// SPEC-V3-007 MS-1: Embedded web browser surface (wry backend).
+    #[cfg(feature = "web")]
+    Web(Entity<crate::web::WebViewSurface>),
+    /// SPEC-V3-007: Web viewer placeholder (no web feature).
+    #[cfg(not(feature = "web"))]
     Web,
     /// Binary 파일 — viewer 마운트 없이 안내 메시지 표시.
     Binary(BinaryKind),
@@ -106,7 +110,10 @@ impl Render for LeafKind {
             LeafKind::Markdown(e) => e.clone().into_any_element(),
             LeafKind::Code(e) => e.clone().into_any_element(),
             LeafKind::Image(e) => e.clone().into_any_element(),
-            LeafKind::Web => leaf_placeholder("Web viewer — SPEC-V3-007 예정").into_any_element(),
+            #[cfg(feature = "web")]
+            LeafKind::Web(e) => e.clone().into_any_element(),
+            #[cfg(not(feature = "web"))]
+            LeafKind::Web => leaf_placeholder("Web viewer — install webkit2gtk for WebView support").into_any_element(),
             LeafKind::Binary(k) => {
                 let msg = format!("바이너리 파일 ({:?}) — viewer 열 수 없음", k);
                 leaf_placeholder(&msg).into_any_element()

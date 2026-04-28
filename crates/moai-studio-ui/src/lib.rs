@@ -37,6 +37,9 @@ pub mod viewer;
 pub mod spec_ui;
 // SPEC-V3-008 MS-2: Git UI module (GitDiffViewer + GitBranchSwitcher)
 pub mod git;
+// SPEC-V3-007 MS-1: WebView module (wry backend + abstraction)
+#[cfg(feature = "web")]
+pub mod web;
 
 use design::tokens::{self as tok, traffic};
 use gpui::{
