@@ -113,7 +113,10 @@ impl Render for LeafKind {
             #[cfg(feature = "web")]
             LeafKind::Web(e) => e.clone().into_any_element(),
             #[cfg(not(feature = "web"))]
-            LeafKind::Web => leaf_placeholder("Web viewer — install webkit2gtk for WebView support").into_any_element(),
+            LeafKind::Web => {
+                leaf_placeholder("Web viewer — install webkit2gtk for WebView support")
+                    .into_any_element()
+            }
             LeafKind::Binary(k) => {
                 let msg = format!("바이너리 파일 ({:?}) — viewer 열 수 없음", k);
                 leaf_placeholder(&msg).into_any_element()

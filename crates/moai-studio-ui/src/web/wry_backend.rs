@@ -7,7 +7,7 @@
 // - Linux: WebKit2GTK
 
 // wry re-exports raw_window_handle and dpi crate
-use wry::{raw_window_handle, WebView, WebViewBuilder, Rect};
+use wry::{Rect, WebView, WebViewBuilder, raw_window_handle};
 
 use super::WebViewBackend;
 
@@ -45,7 +45,10 @@ impl WryBackend {
     /// // Note: This is a compilation test - parent_window would be a GPUI Window
     /// // that implements HasWindowHandle, which is verified by the generic constraint
     /// ```
-    pub fn new_as_child<W>(parent_window: &W, bounds: Rect) -> Result<Self, Box<dyn std::error::Error>>
+    pub fn new_as_child<W>(
+        parent_window: &W,
+        bounds: Rect,
+    ) -> Result<Self, Box<dyn std::error::Error>>
     where
         W: raw_window_handle::HasWindowHandle,
     {

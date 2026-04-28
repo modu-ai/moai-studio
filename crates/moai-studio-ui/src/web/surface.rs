@@ -6,8 +6,11 @@
 // REQ-WB-001: WebViewSurface is a GPUI Entity with impl Render
 // REQ-WB-005: If backend unavailable, render placeholder (no panic)
 
-use gpui::{Context, Div, IntoElement, InteractiveElement, ParentElement, Render, Styled, Window, div, px, rgb};
 use crate::design::tokens as tok;
+use gpui::{
+    Context, Div, InteractiveElement, IntoElement, ParentElement, Render, Styled, Window, div, px,
+    rgb,
+};
 
 /// WebViewSurface GPUI Entity
 ///

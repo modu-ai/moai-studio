@@ -17,7 +17,11 @@
 // Expected: Compiles successfully (✓ PASS) or fails with type error (✗ BLOCKED)
 
 #[cfg(feature = "web")]
-use wry::{dpi::{LogicalPosition, LogicalSize}, raw_window_handle::HasWindowHandle, Rect, WebViewBuilder};
+use wry::{
+    Rect, WebViewBuilder,
+    dpi::{LogicalPosition, LogicalSize},
+    raw_window_handle::HasWindowHandle,
+};
 
 // This function demonstrates the critical integration point
 // It doesn't actually execute, but it validates type compatibility
