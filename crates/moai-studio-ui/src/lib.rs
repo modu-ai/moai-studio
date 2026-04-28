@@ -37,6 +37,9 @@ pub mod viewer;
 pub mod spec_ui;
 // SPEC-V3-008 MS-2: Git UI module (GitDiffViewer + GitBranchSwitcher)
 pub mod git;
+// SPEC-V3-007 MS-1: WebView module (wry backend + abstraction)
+#[cfg(feature = "web")]
+pub mod web;
 
 use design::tokens::{self as tok, traffic};
 use gpui::{
@@ -2535,7 +2538,7 @@ mod tests {
     fn palette_nav_state_provides_selection_for_rendering() {
         use palette::palette_view::{NavState, PaletteItem};
 
-        let items = vec![
+        let items = [
             PaletteItem::new("1", "File 1"),
             PaletteItem::new("2", "File 2"),
             PaletteItem::new("3", "File 3"),
