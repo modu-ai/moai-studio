@@ -41,7 +41,13 @@ pub mod url;
 pub mod wry_backend;
 
 #[cfg(feature = "web")]
+pub mod bridge;
+
+#[cfg(feature = "web")]
 pub use history::NavigationHistory;
+
+#[cfg(feature = "web")]
+pub use bridge::{BridgeKind, BridgeMessage, BridgeRouter};
 
 #[cfg(feature = "web")]
 pub use surface::WebViewSurface;
