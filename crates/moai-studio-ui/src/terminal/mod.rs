@@ -10,8 +10,8 @@ pub mod input;
 
 use crate::design::tokens::{self as tok, ide_accent};
 use gpui::{
-    Context, EventEmitter, IntoElement, Keystroke, ParentElement, Render, Styled, Window, div, px,
-    rgb,
+    Context, EventEmitter, InteractiveElement, IntoElement, Keystroke, MouseButton,
+    MouseDownEvent, ParentElement, Render, Styled, Window, div, px, rgb,
 };
 use moai_studio_terminal::link::ClickAction;
 use std::path::PathBuf;
@@ -334,7 +334,7 @@ impl Render for TerminalSurface {
     /// TerminalSurface 렌더 — T4 플레이스홀더.
     ///
     /// T5/T6 에서 실제 Grid<Cell> → Glyph 렌더로 교체한다.
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let cursor_info = format!(
             "cursor ({}, {}) | bytes={} | {}",
             self.state.cursor_row,
@@ -345,12 +345,23 @@ impl Render for TerminalSurface {
 
         let mut area = div()
             .size_full()
-            .bg(rgb(tok::BG_APP)) // 터미널 배경 — tokens.json theme.dark.background.app
+            .bg(rgb(tok::BG_APP))
             .flex()
             .flex_col()
-            .p_2();
+            .p_2()
+            // AC-LK-4/5: Wire mouse click to handle_click for link detection
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, event: &MouseDownEvent, _window, cx| {
+                    let x = f32::from(event.position.x);
+                    let y = f32::from(event.position.y);
+                    let (row, col) = this.pixel_to_cell(x, y);
+                    let line = this.state.row0_text.clone();
+                    this.handle_click(row, col, &line, cx);
+                }),
+            );
 
-        // 선택 영역 하이라이트 표시 (T6 에서 paint_quad 기반 반투명 렌더로 교체)
+        // Selection highlight (T6: replace with paint_quad semi-transparent render)
         if let Some(sel) = &self.selection {
             let ((r1, c1), (r2, c2)) = sel.bounding_rect();
             let sel_info = format!("sel ({r1},{c1})→({r2},{c2})");
@@ -363,7 +374,7 @@ impl Render for TerminalSurface {
             );
         }
 
-        // 커서 위치 + 첫 번째 행 텍스트 표시 (T5 에서 실제 셀 그리드로 교체)
+        // Cursor position + first row text (T5: replace with actual cell grid)
         area.child(
             div()
                 .text_sm()
@@ -371,7 +382,7 @@ impl Render for TerminalSurface {
                 .child(cursor_info),
         )
         .child(
-            // 커서 표시 (blink 는 T5 에서 GPUI timer 기반으로 구현)
+            // Cursor blink (T5: GPUI timer-based blink)
             div().w(px(8.)).h(px(16.)).bg(rgb(if self.cursor_visible {
                 tok::FG_SECONDARY
             } else {
