@@ -2,8 +2,8 @@
 
 **Started**: 2026-04-27
 **Branch**: main (implementation via PR #60, docs via PRs #49, #50)
-**SPEC status**: ms1-ms2-implemented-ms3-in-progress
-**Completion date**: 2026-04-27 (MS-1/MS-2), N/A (MS-3 uncommitted)
+**SPEC status**: implemented (all 3 milestones complete)
+**Completion date**: 2026-04-27 (MS-1/MS-2), 2026-04-28 (MS-3 committed aad49af)
 
 ## Implementation Timeline
 
@@ -23,7 +23,7 @@
 
 - [x] MS-1: Distribution artifacts created (Homebrew Cask, Scoop manifest, AUR PKGBUILD, AppImage README)
 - [x] MS-2: README Installation section updated with all 4 channels
-- [ ] MS-3: release.yml automation for cask/scoop bump — in progress (135 LOC uncommitted in release.yml, external repos not yet created)
+- [x] MS-3: release.yml bump-manifests job — committed `aad49af` (135 LOC, 538-656 in release.yml)
 
 ## Key Files Changed
 

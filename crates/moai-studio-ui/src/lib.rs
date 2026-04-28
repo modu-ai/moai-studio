@@ -690,10 +690,13 @@ impl RootView {
                     this.handle_open_file(&ev, cx);
                 }
                 TerminalClickEvent::OpenUrl(url) => {
+                    // @MX:WARN: URL passed to system without validation
+                    // @MX:REASON: GPUI open_url delegates to OS handler which applies its own safety checks
                     cx.open_url(url);
                 }
                 TerminalClickEvent::OpenSpec(spec_id) => {
-                    tracing::info!(spec_id = %spec_id, "Terminal emitted OpenSpec event");
+                    // TODO(SPEC-V3-LINK-001 MS-3): Wire to SpecPanel open action
+                    tracing::info!(spec_id = %spec_id, "Terminal emitted OpenSpec event — panel wiring pending");
                 }
             }
         });

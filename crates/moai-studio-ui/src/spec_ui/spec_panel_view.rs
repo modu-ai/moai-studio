@@ -86,6 +86,25 @@ impl SpecPanelView {
         }
         // 없는 id 는 noop — sprint = 기존 상태 유지 (AC-RV-4 graceful)
     }
+
+    /// MS-2: 현재 로드된 SPEC 목록의 이름들을 반환한다.
+    ///
+    /// 각 SPEC의 ID 문자열을 포함하는 Vec를 반환한다.
+    pub fn spec_names(&self) -> Vec<String> {
+        self.list
+            .index
+            .records
+            .iter()
+            .map(|r| r.id.to_string())
+            .collect()
+    }
+
+    /// MS-2: SPEC 목록이 비어있는지 확인한다.
+    ///
+    /// 로드된 SPEC이 하나도 없으면 true를 반환한다.
+    pub fn is_empty(&self) -> bool {
+        self.list.index.is_empty()
+    }
 }
 
 impl Render for SpecPanelView {
@@ -242,5 +261,121 @@ mod tests {
             view.sprint.is_none(),
             "set_mode 는 sprint panel 을 초기화하지 않는다"
         );
+    }
+
+    // ============================================================
+    // MS-2 Tests - Real SPEC data loading
+    // ============================================================
+
+    use std::fs;
+    use tempfile::TempDir;
+
+    /// Create a temporary specs directory with test SPEC folders
+    fn create_test_specs_dir() -> TempDir {
+        let tmp = tempfile::tempdir().unwrap();
+        let specs_dir = tmp.path().join(".moai").join("specs");
+
+        // Create test SPEC directories
+        let spec1 = specs_dir.join("SPEC-V3-001");
+        let spec2 = specs_dir.join("SPEC-V3-002");
+        let spec3 = specs_dir.join("SPEC-M2-002");
+
+        fs::create_dir_all(&spec1).unwrap();
+        fs::create_dir_all(&spec2).unwrap();
+        fs::create_dir_all(&spec3).unwrap();
+
+        // Add minimal spec.md files
+        fs::write(
+            spec1.join("spec.md"),
+            "---\nid: SPEC-V3-001\ntitle: Test Spec 1\n---\n",
+        )
+        .unwrap();
+        fs::write(
+            spec2.join("spec.md"),
+            "---\nid: SPEC-V3-002\ntitle: Test Spec 2\n---\n",
+        )
+        .unwrap();
+        fs::write(
+            spec3.join("spec.md"),
+            "---\nid: SPEC-M2-002\ntitle: Test Spec M2\n---\n",
+        )
+        .unwrap();
+
+        tmp
+    }
+
+    /// MS-2: SpecPanel should load actual SPEC names from directory
+    #[test]
+    fn test_spec_panel_loads_real_specs() {
+        let tmp = create_test_specs_dir();
+        let specs_dir = tmp.path().join(".moai").join("specs");
+        let panel = SpecPanelView::new(specs_dir);
+
+        let names = panel.spec_names();
+
+        // Should find 3 SPEC directories
+        assert_eq!(names.len(), 3, "Should load 3 SPECs from directory");
+
+        // Should contain the SPEC names
+        assert!(names.contains(&"SPEC-V3-001".to_string()));
+        assert!(names.contains(&"SPEC-V3-002".to_string()));
+        assert!(names.contains(&"SPEC-M2-002".to_string()));
+    }
+
+    /// MS-2: SpecPanel should handle empty directory gracefully
+    #[test]
+    fn test_spec_panel_empty_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let specs_dir = tmp.path().join(".moai").join("specs");
+        fs::create_dir_all(&specs_dir).unwrap();
+
+        let panel = SpecPanelView::new(specs_dir);
+
+        assert!(panel.is_empty(), "Should be empty when no specs exist");
+        assert_eq!(panel.spec_names().len(), 0);
+    }
+
+    /// MS-2: SpecPanel should handle non-existent directory gracefully
+    #[test]
+    fn test_spec_panel_nonexistent_directory() {
+        let specs_dir = PathBuf::from("/nonexistent/.moai/specs");
+        let panel = SpecPanelView::new(specs_dir);
+
+        assert!(panel.is_empty(), "Should be empty when directory doesn't exist");
+        assert_eq!(panel.spec_names().len(), 0);
+    }
+
+    /// MS-2: SpecPanel should provide access to SpecIndex for details
+    #[test]
+    fn test_spec_panel_index_access() {
+        let tmp = create_test_specs_dir();
+        let specs_dir = tmp.path().join(".moai").join("specs");
+        let panel = SpecPanelView::new(specs_dir);
+
+        // Should be able to access the underlying index
+        assert!(!panel.list.index.is_empty());
+        assert_eq!(panel.list.index.len(), 3);
+
+        // Should be able to find specific specs
+        let id = SpecId::new("SPEC-V3-001");
+        let record = panel.list.index.find(&id);
+        assert!(record.is_some(), "Should find SPEC-V3-001");
+        assert_eq!(record.unwrap().id.as_str(), "SPEC-V3-001");
+    }
+
+    /// MS-2: select_spec should work with real loaded specs
+    #[test]
+    fn test_select_spec_with_real_spec() {
+        let tmp = create_test_specs_dir();
+        let specs_dir = tmp.path().join(".moai").join("specs");
+        let mut view = SpecPanelView::new(specs_dir);
+
+        // Select a real spec
+        let id = SpecId::new("SPEC-V3-001");
+        view.select_spec(id.clone());
+
+        // Sprint panel should be initialized
+        assert!(view.sprint.is_some(), "Sprint panel should be initialized");
+        assert_eq!(view.list.selected_id, Some(id));
     }
 }

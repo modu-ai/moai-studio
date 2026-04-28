@@ -80,19 +80,17 @@ pub fn validate_url(url: &str) -> Result<String, UrlValidationError> {
         return Err(UrlValidationError::UnsafeScheme("vbscript:".to_string()));
     }
 
-    // Check if scheme is present
-    if url.contains(':') {
-        // Has scheme - validate it's http or https
-        if url_lower.starts_with("http://") || url_lower.starts_with("https://") {
+    // Detect scheme via :// pattern (avoids false positives on host:port)
+    if let Some(scheme_end) = url.find("://") {
+        let scheme = &url[..scheme_end];
+        let scheme_lower = scheme.to_lowercase();
+        if scheme_lower == "http" || scheme_lower == "https" {
             Ok(url.to_string())
         } else {
-            // Unknown scheme - block it
-            let scheme_end = url.find(':').unwrap_or(0);
-            let scheme = &url[..scheme_end];
             Err(UrlValidationError::UnsafeScheme(format!("{}:", scheme)))
         }
     } else {
-        // No scheme - prepend https://
+        // No scheme detected — prepend https://
         Ok(format!("https://{}", url))
     }
 }
@@ -179,5 +177,20 @@ mod tests {
             }
             _ => panic!("Expected UnsafeScheme error"),
         }
+    }
+
+    #[test]
+    fn test_validate_host_port_prepends_https() {
+        // host:port should not be treated as a scheme
+        let result = validate_url("example.com:8080");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "https://example.com:8080");
+    }
+
+    #[test]
+    fn test_validate_localhost_port_prepends_https() {
+        let result = validate_url("localhost:3000");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "https://localhost:3000");
     }
 }

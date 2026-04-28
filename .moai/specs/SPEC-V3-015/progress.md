@@ -35,3 +35,16 @@
 - Dependent on V3-009 components (SpecListView, KanbanBoardView, SprintContractPanel) — these use mock MoaiCommandClient for backend communication.
 - Only spec.md exists (no research.md, no plan.md) — this was a focused integration SPEC with narrow scope.
 - Spec status in frontmatter shows `draft` but implementation is complete — status may need updating.
+
+## Phase 1-2 Additional Improvements (2026-04-28)
+
+- Commit `6d48044` on branch `feature/SPEC-V3-LINK-001-click-wiring`
+- Added `spec_names(&self) -> Vec<String>` and `is_empty(&self) -> bool` to SpecPanelView
+- Added 5 integration tests with real SpecIndex (temp dir with 3 SPEC subdirs)
+- Total: 135 LOC added to spec_panel_view.rs (246 → 381 lines)
+
+### Verdict
+
+MS-1 only SPEC — no MS-2/MS-3 milestones defined. Additional quality improvements
+(spec_names, is_empty, integration tests) were done as part of Phase 1 link-wiring.
+**Status: COMPLETE (no remaining work)**
