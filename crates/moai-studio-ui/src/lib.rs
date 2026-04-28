@@ -2538,7 +2538,7 @@ mod tests {
     fn palette_nav_state_provides_selection_for_rendering() {
         use palette::palette_view::{NavState, PaletteItem};
 
-        let items = vec![
+        let items = [
             PaletteItem::new("1", "File 1"),
             PaletteItem::new("2", "File 2"),
             PaletteItem::new("3", "File 3"),
