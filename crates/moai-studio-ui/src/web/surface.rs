@@ -16,6 +16,22 @@ use gpui::{
 
 use super::history::NavigationHistory;
 use super::url::validate_url;
+use super::bridge::BridgeRouter;
+
+/// WebView state enumeration (REQ-WB-006)
+///
+/// Represents the current state of the webview.
+#[derive(Debug, Clone, PartialEq)]
+pub enum WebViewState {
+    /// Page is currently loading
+    Loading,
+    /// Page is ready and interactive
+    Ready,
+    /// Page encountered an error
+    Error(String),
+    /// Page has crashed (webview process terminated)
+    Crashed,
+}
 
 /// WebViewSurface GPUI Entity
 ///
@@ -23,7 +39,7 @@ use super::url::validate_url;
 /// status bar, and webview content area. Gracefully degrades when
 /// wry backend is not available (REQ-WB-005).
 ///
-/// # Fields (MS-2 updated)
+/// # Fields (MS-3 updated)
 /// * `url_bar_text` - Current URL bar content
 /// * `status_message` - Status bar text (e.g., "Loading...", "Ready")
 /// * `backend_available` - Whether wry backend is available
@@ -31,6 +47,8 @@ use super::url::validate_url;
 /// * `devtools_open` - Whether DevTools panel is open
 /// * `workspace_id` - Optional workspace ID for sandbox data directory
 /// * `last_error` - Last validation or navigation error
+/// * `state` - WebView state (Loading, Ready, Error, Crashed) - MS-3 REQ-WB-006
+/// * `bridge` - Optional JS bridge router - MS-3
 pub struct WebViewSurface {
     /// Current URL bar content
     url_bar_text: String,
@@ -46,6 +64,10 @@ pub struct WebViewSurface {
     workspace_id: Option<String>,
     /// Last error message (MS-2)
     last_error: Option<String>,
+    /// WebView state (MS-3: REQ-WB-006)
+    state: WebViewState,
+    /// JS bridge router (MS-3)
+    bridge: Option<BridgeRouter>,
 }
 
 impl WebViewSurface {
@@ -70,6 +92,8 @@ impl WebViewSurface {
             devtools_open: false,
             workspace_id: None,
             last_error: None,
+            state: WebViewState::Ready,
+            bridge: None,
         }
     }
 
@@ -153,6 +177,61 @@ impl WebViewSurface {
     pub fn set_workspace_id(&mut self, id: String) {
         self.workspace_id = Some(id);
     }
+
+    /// Report a webview crash (MS-3: REQ-WB-006)
+    ///
+    /// Transitions the state to Crashed, which will render
+    /// a "Page crashed. Reload?" message in the webview area.
+    pub fn report_crash(&mut self) {
+        self.state = WebViewState::Crashed;
+        self.status_message = "Page crashed".to_string();
+    }
+
+    /// Recover from a crash by reloading (MS-3: REQ-WB-006)
+    ///
+    /// Transitions state back to Loading and attempts to reload
+    /// the current URL.
+    pub fn recover_from_crash(&mut self) {
+        if self.state == WebViewState::Crashed {
+            self.state = WebViewState::Loading;
+            self.status_message = "Reloading...".to_string();
+            // In a full implementation, this would trigger backend.reload()
+        }
+    }
+
+    /// Get the current webview state (MS-3)
+    pub fn state(&self) -> &WebViewState {
+        &self.state
+    }
+
+    /// Set the webview state (MS-3)
+    pub fn set_state(&mut self, state: WebViewState) {
+        self.state = state;
+        match &self.state {
+            WebViewState::Loading => {
+                self.status_message = "Loading...".to_string();
+            }
+            WebViewState::Ready => {
+                self.status_message = "Ready".to_string();
+            }
+            WebViewState::Error(msg) => {
+                self.status_message = format!("Error: {}", msg);
+            }
+            WebViewState::Crashed => {
+                self.status_message = "Page crashed".to_string();
+            }
+        }
+    }
+
+    /// Get the bridge router (MS-3)
+    pub fn bridge(&self) -> Option<&BridgeRouter> {
+        self.bridge.as_ref()
+    }
+
+    /// Set the bridge router (MS-3)
+    pub fn set_bridge(&mut self, bridge: BridgeRouter) {
+        self.bridge = Some(bridge);
+    }
 }
 
 impl Render for WebViewSurface {
@@ -198,7 +277,7 @@ impl Render for WebViewSurface {
                             .child(self.url_bar_text.clone()),
                     ),
             )
-            // Content area: WebView placeholder (MS-1 - actual WebView integration in MS-2)
+            // Content area: WebView placeholder or crash recovery (MS-3: REQ-WB-006)
             .child(
                 div()
                     .flex()
@@ -207,12 +286,49 @@ impl Render for WebViewSurface {
                     .justify_center()
                     .items_center()
                     .bg(rgb(tok::BG_PANEL))
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(rgb(tok::FG_MUTED))
-                            .child("WebView will render here (MS-2 integration)"),
-                    ),
+                    .when(self.state == WebViewState::Crashed, |this| {
+                        // MS-3: REQ-WB-006 - Show crash recovery UI
+                        this.child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap_3()
+                                .items_center()
+                                .px_6()
+                                .py_4()
+                                .bg(rgb(tok::BG_SURFACE))
+                                .rounded_lg()
+                                .border_1()
+                                .border_color(rgb(tok::semantic::DANGER))
+                                .child(
+                                    div()
+                                        .text_lg()
+                                        .text_color(rgb(tok::semantic::DANGER))
+                                        .child("Page crashed"),
+                                )
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .text_color(rgb(tok::FG_SECONDARY))
+                                        .child("The webview process has terminated unexpectedly."),
+                                )
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .text_color(rgb(tok::FG_PRIMARY))
+                                        .child("Reload?"),
+                                ),
+                        )
+                    })
+                    .when(self.state != WebViewState::Crashed, |this| {
+                        // Normal webview placeholder
+                        this.child(
+                            div()
+                                .text_sm()
+                                .text_color(rgb(tok::FG_MUTED))
+                                .child("WebView will render here (MS-2 integration)"),
+                        )
+                    }),
             )
             // MS-2: Bottom status bar with error display and DevTools indicator
             .child(
@@ -485,5 +601,84 @@ mod tests {
         // Can go forward, but not back
         assert!(!surface.history.can_go_back());
         assert!(surface.history.can_go_forward());
+    }
+
+    // MS-3 tests for WebViewState and crash recovery (REQ-WB-006)
+
+    #[test]
+    fn webview_surface_initial_state_is_ready() {
+        let surface = WebViewSurface::new("https://example.com");
+        assert_eq!(surface.state(), &WebViewState::Ready);
+    }
+
+    #[test]
+    fn webview_surface_report_crash_transitions_to_crashed() {
+        let mut surface = WebViewSurface::new("https://example.com");
+        surface.report_crash();
+
+        assert_eq!(surface.state(), &WebViewState::Crashed);
+        assert_eq!(surface.status_message, "Page crashed");
+    }
+
+    #[test]
+    fn webview_surface_recover_from_crash_transitions_to_loading() {
+        let mut surface = WebViewSurface::new("https://example.com");
+        surface.report_crash();
+        surface.recover_from_crash();
+
+        assert_eq!(surface.state(), &WebViewState::Loading);
+        assert_eq!(surface.status_message, "Reloading...");
+    }
+
+    #[test]
+    fn webview_surface_set_state_updates_status_message() {
+        let mut surface = WebViewSurface::new("https://example.com");
+
+        surface.set_state(WebViewState::Loading);
+        assert_eq!(surface.status_message, "Loading...");
+        assert_eq!(surface.state(), &WebViewState::Loading);
+
+        surface.set_state(WebViewState::Ready);
+        assert_eq!(surface.status_message, "Ready");
+        assert_eq!(surface.state(), &WebViewState::Ready);
+
+        surface.set_state(WebViewState::Error("Test error".to_string()));
+        assert_eq!(surface.status_message, "Error: Test error");
+        assert_eq!(surface.state(), &WebViewState::Error("Test error".to_string()));
+    }
+
+    #[test]
+    fn webview_crashed_state_matches_pattern() {
+        let crashed = WebViewState::Crashed;
+        let loading = WebViewState::Loading;
+
+        assert_eq!(crashed, WebViewState::Crashed);
+        assert_ne!(crashed, loading);
+    }
+
+    #[test]
+    fn webview_surface_bridge_operations() {
+        let mut surface = WebViewSurface::new("https://example.com");
+
+        // Initially no bridge
+        assert!(surface.bridge().is_none());
+
+        // Set bridge
+        let router = BridgeRouter::new();
+        surface.set_bridge(router);
+
+        // Now has bridge
+        assert!(surface.bridge().is_some());
+    }
+
+    #[test]
+    fn webview_state_error_variants_distinct() {
+        let error1 = WebViewState::Error("Network error".to_string());
+        let error2 = WebViewState::Error("Parse error".to_string());
+        let ready = WebViewState::Ready;
+
+        assert_ne!(error1, error2);
+        assert_ne!(error1, ready);
+        assert_ne!(error2, ready);
     }
 }
