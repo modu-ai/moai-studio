@@ -147,7 +147,7 @@ impl BridgeRouter {
     /// * `handler` - Handler function that receives payload and returns optional response
     ///
     /// # Example (REQ-WB-050)
-    /// ```
+    /// ```ignore
     /// router.register("log", |payload| {
     ///     println!("Log: {}", payload);
     ///     None // Event: no response

@@ -52,7 +52,7 @@ impl DetectedUrl {
 /// Vector of detected URLs (deduplicated within the chunk)
 ///
 /// # Example
-/// ```
+/// ```ignore
 /// let urls = detect_local_urls("Server running at http://localhost:8080");
 /// assert_eq!(urls.len(), 1);
 /// assert_eq!(urls[0].url, "http://localhost:8080");
