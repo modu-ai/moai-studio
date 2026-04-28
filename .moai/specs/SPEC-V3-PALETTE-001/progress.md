@@ -2,7 +2,7 @@
 
 **Started**: 2026-04-27
 **Branch**: feature/SPEC-V3-PALETTE-001-fuzzy-wire (merged into main)
-**SPEC status**: partial (logic/data layer wired, visual rendering deferred)
+**SPEC status**: implemented (F-1 fuzzy search wired to file source)
 **Completion date**: 2026-04-27
 
 ## Relationship to SPEC-V3-012

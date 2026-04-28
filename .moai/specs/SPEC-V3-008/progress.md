@@ -2,8 +2,8 @@
 
 **Started**: 2026-04-25
 **Branch**: feature/SPEC-V3-005-file-explorer (shared branch with V3-006/DIST-001)
-**SPEC status**: ms1-implemented-ms2-ms3-in-progress (uncommitted)
-**Completion date**: N/A (MS-2/MS-3 UI code written but uncommitted)
+**SPEC status**: ms2-ms3-committed
+**Completion date**: N/A (commit_composer.rs, status_panel.rs still pending)
 
 ## Planning Phase
 
@@ -12,12 +12,13 @@
 ## Implementation Timeline
 
 - 2026-04-27 `82a11b2` PR #60: feat(viewer,git): SPEC-V3-008 MS-1 — moai-git crate expansion (6 new modules)
+- 2026-04-28 `02d8ac9`: feat(git): SPEC-V3-008 MS-2/MS-3 — Git UI 5개 GPUI Entity + 통합 테스트 (committed)
 
 ## Milestone Status
 
 - [x] MS-1: moai-git crate API expansion (status, diff, commit, branch, log, stash modules) — PR #60
-- [ ] MS-2: Diff Viewer + Branch Switcher UI — code written, uncommitted (see Uncommitted Work below)
-- [ ] MS-3: Log Graph + Merge Conflict Resolver + Stash Management UI — code written, uncommitted (see Uncommitted Work below)
+- [x] MS-2: Diff Viewer + Branch Switcher UI — committed `02d8ac9`
+- [x] MS-3: Log Graph + Merge Conflict Resolver + Stash Management UI — committed `02d8ac9`
 
 ## Key Files Changed
 
