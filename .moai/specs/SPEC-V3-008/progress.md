@@ -2,8 +2,8 @@
 
 **Started**: 2026-04-25
 **Branch**: feature/SPEC-V3-005-file-explorer (shared branch with V3-006/DIST-001)
-**SPEC status**: ms1-implemented
-**Completion date**: N/A (MS-2/MS-3 not yet started)
+**SPEC status**: ms1-implemented-ms2-ms3-in-progress (uncommitted)
+**Completion date**: N/A (MS-2/MS-3 UI code written but uncommitted)
 
 ## Planning Phase
 
@@ -16,8 +16,8 @@
 ## Milestone Status
 
 - [x] MS-1: moai-git crate API expansion (status, diff, commit, branch, log, stash modules) — PR #60
-- [ ] MS-2: Diff Viewer + Branch Switcher UI (not started)
-- [ ] MS-3: Log Graph + Merge Conflict Resolver + Stash Management UI (not started)
+- [ ] MS-2: Diff Viewer + Branch Switcher UI — code written, uncommitted (see Uncommitted Work below)
+- [ ] MS-3: Log Graph + Merge Conflict Resolver + Stash Management UI — code written, uncommitted (see Uncommitted Work below)
 
 ## Key Files Changed
 
@@ -36,32 +36,42 @@
 
 ### Not Yet Created (MS-2/MS-3 scope)
 
-- `crates/moai-studio-ui/src/git/mod.rs`
 - `crates/moai-studio-ui/src/git/status_panel.rs`
-- `crates/moai-studio-ui/src/git/diff_viewer.rs`
 - `crates/moai-studio-ui/src/git/commit_composer.rs`
-- `crates/moai-studio-ui/src/git/branch_switcher.rs`
-- `crates/moai-studio-ui/src/git/log_view.rs`
-- `crates/moai-studio-ui/src/git/merge_resolver.rs`
-- `crates/moai-studio-ui/src/git/stash_panel.rs`
+
+### Uncommitted Work (MS-2/MS-3 — written but not committed)
+
+The following files exist on disk but are not tracked by git. They represent MS-2/MS-3 UI implementation that was written in a prior session but not committed or compiled.
+
+- `crates/moai-studio-ui/src/git/mod.rs` (20 LOC) — Module registration + re-exports
+- `crates/moai-studio-ui/src/git/branch_switcher.rs` (202 LOC) — GitBranchSwitcher entity (REQ-G-030~035)
+- `crates/moai-studio-ui/src/git/diff_viewer.rs` (176 LOC) — GitDiffViewer entity (REQ-G-010~015)
+- `crates/moai-studio-ui/src/git/log_view.rs` (237 LOC) — GitLogView entity (REQ-G-040~044)
+- `crates/moai-studio-ui/src/git/merge_resolver.rs` (253 LOC) — GitMergeResolver entity (REQ-G-050~056)
+- `crates/moai-studio-ui/src/git/stash_panel.rs` (176 LOC) — GitStashPanel entity (REQ-G-060~064)
+- `crates/moai-studio-ui/tests/integration_git.rs` (532 LOC) — Integration tests
+- `crates/moai-studio-ui/src/lib.rs` (+251 insertions) — Git module wiring + RootView integration
+- Total: ~1064 LOC UI + 532 LOC tests = 1596 LOC uncommitted
+
+**Action needed**: Review uncommitted files, run `cargo check`, resolve compilation issues, then commit.
 
 ## Acceptance Criteria Status
 
 | AC ID | Status | Notes |
 |-------|--------|-------|
-| AC-A-1 | PARTIAL | moai-git status_map exists but UI GitStatusPanel not created |
+| AC-A-1 | PARTIAL | moai-git status_map exists but UI GitStatusPanel not created (commit_composer.rs not written) |
 | AC-A-2 | PARTIAL | stage/unstage API exists but UI toggle not created |
 | AC-A-3 | PARTIAL | commit API exists but UI composer not created |
 | AC-A-4 | NOT STARTED | Commit button disabled state (UI scope) |
 | AC-A-5 | NOT STARTED | Non-git directory handling (UI scope) |
-| AC-A-6 | NOT STARTED | Diff Viewer UI |
+| AC-A-6 | UNCOMMITTED | Diff Viewer UI written (diff_viewer.rs, 176 LOC) but not compiled/committed |
 | AC-A-7 | NOT STARTED | Syntax highlight fallback |
-| AC-A-8 | NOT STARTED | Branch switcher UI |
-| AC-A-9 | NOT STARTED | New branch creation UI |
-| AC-A-10 | NOT STARTED | Log graph UI |
-| AC-A-11 | NOT STARTED | Commit row click → diff |
-| AC-A-12 | NOT STARTED | Merge conflict resolver UI |
-| AC-A-13 | NOT STARTED | Stash push/pop UI |
+| AC-A-8 | UNCOMMITTED | Branch switcher UI written (branch_switcher.rs, 202 LOC) but not compiled/committed |
+| AC-A-9 | UNCOMMITTED | New branch creation UI — part of branch_switcher.rs |
+| AC-A-10 | UNCOMMITTED | Log graph UI written (log_view.rs, 237 LOC) but not compiled/committed |
+| AC-A-11 | UNCOMMITTED | Commit row click → diff — part of log_view.rs |
+| AC-A-12 | UNCOMMITTED | Merge conflict resolver UI written (merge_resolver.rs, 253 LOC) but not compiled/committed |
+| AC-A-13 | UNCOMMITTED | Stash push/pop UI written (stash_panel.rs, 176 LOC) but not compiled/committed |
 
 ## Test Coverage
 
@@ -71,11 +81,13 @@
 
 ## Known Limitations
 
-- MS-1 is API-only (no GPUI UI components created yet)
+- MS-1 is API-only (committed in PR #60)
+- MS-2/MS-3 UI code exists on disk but is **uncommitted** (6 files, ~1064 LOC + 532 LOC tests)
+- Uncommitted UI files have not been compiled or tested — `cargo check` status unknown
 - stash.rs only implements stash_push(); stash_apply(), stash_drop(), stash_list() are stubs
 - diff_workdir() is a stub (placeholder implementation)
 - stash_apply/drop/list deferred to MS-3
-- No UI files created for any git management widget
+- commit_composer.rs and status_panel.rs still missing (not in uncommitted set)
 - git2 = 0.20 maintained (USER-DECISION UD-1: no gix migration)
 - No merge conflict resolver (MS-3 scope)
 - No log graph visualization (MS-3 scope)

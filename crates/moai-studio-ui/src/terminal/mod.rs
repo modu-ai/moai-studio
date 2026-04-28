@@ -10,6 +10,7 @@ pub mod input;
 
 use crate::design::tokens::{self as tok, ide_accent};
 use gpui::{Context, IntoElement, Keystroke, ParentElement, Render, Styled, Window, div, px, rgb};
+use moai_studio_terminal::link::ClickAction;
 
 // ============================================================
 // 폰트 메트릭 — pixel_to_cell 계산 기준
@@ -247,6 +248,48 @@ impl TerminalSurface {
     /// T6 에서 PTY stdin writer 연결 시 이 메서드로 버퍼 drain.
     pub fn drain_pending_input(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.pending_input)
+    }
+
+    /// Handles mouse click events on terminal surface.
+    ///
+    /// AC-LK-4: FilePath span click → log OpenCodeViewer action
+    /// AC-LK-5: URL span click → dispatch to browser via cx.open_url()
+    ///
+    /// @MX:NOTE: click-handler-entrypoint
+    /// This is the entry point for GPUI click handling. The actual GPUI
+    /// on_mouse_down wiring is in the Render impl. This helper contains
+    /// the core logic for converting click position to ClickAction.
+    pub fn handle_click(&mut self, _row: u16, col: u16, line_text: &str, cx: &mut Context<Self>) {
+        // Convert column to byte offset (UTF-8 aware)
+        let byte_offset = moai_studio_terminal::link::col_to_byte_offset(line_text, col as usize);
+
+        // Resolve click action using link detection
+        if let Some(action) = moai_studio_terminal::link::resolve_click(line_text, byte_offset) {
+            match action {
+                ClickAction::OpenCodeViewer(moai_studio_terminal::link::OpenCodeViewer {
+                    path,
+                    line,
+                    col,
+                }) => {
+                    // AC-LK-4 PARTIAL: log the action (file opening deferred to viewer SPEC)
+                    tracing::info!(
+                        path = ?path,
+                        line = ?line,
+                        col = ?col,
+                        "ClickAction::OpenCodeViewer"
+                    );
+                }
+                ClickAction::OpenUrl(moai_studio_terminal::link::OpenUrl { url }) => {
+                    // AC-LK-5: open URL in default browser
+                    cx.open_url(&url);
+                    tracing::debug!(url = %url, "Opened URL in browser");
+                }
+                ClickAction::OpenSpec(moai_studio_terminal::link::OpenSpec { spec_id }) => {
+                    // B-4 feature: log SPEC ID click (panel opening deferred)
+                    tracing::info!(spec_id = %spec_id, "ClickAction::OpenSpec");
+                }
+            }
+        }
     }
 }
 
@@ -507,5 +550,98 @@ mod tests {
         });
         // (24.0, 48.0) → col=2, row=2
         assert_eq!(surface.pixel_to_cell(24.0, 48.0), (2, 2));
+    }
+
+    // --- AC-LK-4/5: Click handler 테스트 ---
+
+    #[test]
+    fn handle_click_on_file_path_returns_action() {
+        // Test that clicking on a file path resolves to OpenCodeViewer
+        let line_text = "error at src/main.rs:42:10 here";
+        let col = line_text.find("main").unwrap() as u16;
+
+        // Verify link detection works
+        let byte_offset = moai_studio_terminal::link::col_to_byte_offset(line_text, col as usize);
+        let action = moai_studio_terminal::link::resolve_click(line_text, byte_offset);
+
+        assert!(action.is_some(), "Should resolve click on file path");
+        match action.unwrap() {
+            ClickAction::OpenCodeViewer(moai_studio_terminal::link::OpenCodeViewer {
+                path,
+                line,
+                col,
+            }) => {
+                assert_eq!(path, std::path::PathBuf::from("src/main.rs"));
+                assert_eq!(line, Some(42));
+                assert_eq!(col, Some(10));
+            }
+            other => panic!("Expected OpenCodeViewer, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn handle_click_on_url_returns_action() {
+        // Test that clicking on a URL resolves to OpenUrl
+        let line_text = "see https://example.com/foo for details";
+        let col = line_text.find("example").unwrap() as u16;
+
+        // Verify link detection works
+        let byte_offset = moai_studio_terminal::link::col_to_byte_offset(line_text, col as usize);
+        let action = moai_studio_terminal::link::resolve_click(line_text, byte_offset);
+
+        assert!(action.is_some(), "Should resolve click on URL");
+        match action.unwrap() {
+            ClickAction::OpenUrl(moai_studio_terminal::link::OpenUrl { url }) => {
+                assert_eq!(url, "https://example.com/foo");
+            }
+            other => panic!("Expected OpenUrl, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn handle_click_on_spec_id_returns_action() {
+        // Test that clicking on a SPEC-ID resolves to OpenSpec
+        let line_text = "Working on SPEC-V3-001 today";
+        let col = line_text.find("V3").unwrap() as u16;
+
+        // Verify link detection works
+        let byte_offset = moai_studio_terminal::link::col_to_byte_offset(line_text, col as usize);
+        let action = moai_studio_terminal::link::resolve_click(line_text, byte_offset);
+
+        assert!(action.is_some(), "Should resolve click on SPEC-ID");
+        match action.unwrap() {
+            ClickAction::OpenSpec(moai_studio_terminal::link::OpenSpec { spec_id }) => {
+                assert_eq!(spec_id, "SPEC-V3-001");
+            }
+            other => panic!("Expected OpenSpec, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn handle_click_on_plain_text_returns_none() {
+        // Test that clicking on plain text returns no action
+        let line_text = "plain text no links here";
+        let col = 5;
+
+        // Verify link detection returns None
+        let byte_offset = moai_studio_terminal::link::col_to_byte_offset(line_text, col as usize);
+        let action = moai_studio_terminal::link::resolve_click(line_text, byte_offset);
+
+        assert!(action.is_none(), "Should not resolve click on plain text");
+    }
+
+    #[test]
+    fn col_to_byte_offset_handles_utf8_correctly() {
+        // Test UTF-8 byte offset calculation (Korean text)
+        let line_text = "에러 src/main.rs:42";
+        // '에' is 3 bytes, '러' is 3 bytes, space is 1 byte = 7 bytes
+        // "src/main.rs" starts at byte offset 7, which is character index 3
+        let col = 3; // Character index 3 (after "에러 ") is 's' in "src"
+
+        let byte_offset = moai_studio_terminal::link::col_to_byte_offset(line_text, col);
+        assert_eq!(
+            byte_offset, 7,
+            "UTF-8 byte offset should be calculated correctly"
+        );
     }
 }

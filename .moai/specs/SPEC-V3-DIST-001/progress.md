@@ -2,8 +2,8 @@
 
 **Started**: 2026-04-27
 **Branch**: main (implementation via PR #60, docs via PRs #49, #50)
-**SPEC status**: ms1-ms2-implemented (MS-3 release.yml automation not yet done)
-**Completion date**: 2026-04-27
+**SPEC status**: ms1-ms2-implemented-ms3-in-progress
+**Completion date**: 2026-04-27 (MS-1/MS-2), N/A (MS-3 uncommitted)
 
 ## Implementation Timeline
 
@@ -23,7 +23,7 @@
 
 - [x] MS-1: Distribution artifacts created (Homebrew Cask, Scoop manifest, AUR PKGBUILD, AppImage README)
 - [x] MS-2: README Installation section updated with all 4 channels
-- [ ] MS-3: release.yml automation for cask/scoop bump — defined in spec but not yet in release.yml
+- [ ] MS-3: release.yml automation for cask/scoop bump — in progress (135 LOC uncommitted in release.yml, external repos not yet created)
 
 ## Key Files Changed
 
@@ -61,6 +61,6 @@
 - Stub artifacts: Homebrew Cask, Scoop manifest, and AUR PKGBUILD contain placeholder URLs and checksums. They need updating with actual release artifact URLs and SHA256 hashes upon first real release.
 - External repos not yet created: `modu-ai/homebrew-tap` and `modu-ai/scoop-bucket` GitHub repositories need to be created and populated.
 - AUR package not yet uploaded: Requires authenticated AUR account and package submission.
-- MS-3 release.yml automation: The spec defines automatic cask/scoop manifest bumping on release publish, but this step is not yet implemented in `.github/workflows/release.yml`.
+- MS-3 release.yml: 135 LOC uncommitted in `.github/workflows/release.yml` (bump-manifests job). Needs review, cargo check, and commit.
 - No plan.md or research.md — only spec.md exists. This was a focused distribution SPEC with narrow scope.
 - Implementation was bundled with SPEC-V3-006/V3-008 in PR #60, making it harder to isolate distribution-only changes.

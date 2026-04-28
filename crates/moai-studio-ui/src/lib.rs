@@ -1,3 +1,4 @@
+#![recursion_limit = "1024"]
 //! MoAI Studio UI 컴포넌트 라이브러리.
 //!
 //! Phase 1.6 (SPEC-V3-001 RG-V3-2) — Sidebar workspace 리스트 + active 하이라이트.
@@ -34,6 +35,11 @@ pub mod terminal;
 pub mod viewer;
 // SPEC-V3-009 MS-1: SPEC Management UI 모듈 (SpecListView + SpecDetailView)
 pub mod spec_ui;
+// SPEC-V3-008 MS-2: Git UI module (GitDiffViewer + GitBranchSwitcher)
+pub mod git;
+// SPEC-V3-007 MS-1: WebView module (wry backend + abstraction)
+#[cfg(feature = "web")]
+pub mod web;
 
 use design::tokens::{self as tok, traffic};
 use gpui::{
@@ -787,7 +793,6 @@ impl Render for RootView {
         // REQ-R-031: keystroke_to_tab_key → dispatch_tab_key 순서로 변환.
         // MS-3: palette overlay slot — active palette 가 있을 때 overlay 렌더.
         // SPEC-V3-013 MS-3: settings overlay slot — settings_modal 이 Some 이면 overlay 렌더.
-        let active_palette = self.palette.active_variant;
         let has_settings = self.settings_modal.is_some();
         // SPEC-V3-015 MS-1: spec_panel — overlay mount 상태.
         let has_spec_panel = self.spec_panel.is_some();
@@ -828,6 +833,57 @@ impl Render for RootView {
                     cx.notify();
                 }
             }))
+            // SPEC-V0-1-2-MENUS-001: View/Pane/Surface/Go/Help menu action wiring.
+            .on_action(cx.listener(|_this, _: &ToggleSidebar, _window, cx| {
+                info!("ToggleSidebar — file explorer toggle deferred");
+                cx.notify();
+            }))
+            .on_action(cx.listener(|_this, _: &ToggleBanner, _window, _cx| {
+                info!("ToggleBanner — banner system is separate");
+            }))
+            .on_action(cx.listener(|this, _: &ToggleFind, _window, cx| {
+                this.find_bar_open = !this.find_bar_open;
+                cx.notify();
+            }))
+            .on_action(cx.listener(|_this, _: &ReloadWorkspace, _window, _cx| {
+                info!("ReloadWorkspace — full reload deferred");
+            }))
+            .on_action(cx.listener(|this, _: &ToggleTheme, _window, cx| {
+                use settings::settings_state::ThemeMode;
+                let next = match this.active_theme.theme {
+                    ThemeMode::Dark | ThemeMode::System => ThemeMode::Light,
+                    ThemeMode::Light => ThemeMode::Dark,
+                };
+                this.active_theme.theme = next;
+                this.user_settings.appearance.theme = next;
+                cx.notify();
+            }))
+            .on_action(cx.listener(|_this, _: &SplitRight, _window, _cx| {
+                info!("SplitRight — pane splitting deferred to SPEC-V3-003");
+            }))
+            .on_action(cx.listener(|_this, _: &SplitDown, _window, _cx| {
+                info!("SplitDown — pane splitting deferred to SPEC-V3-003");
+            }))
+            .on_action(cx.listener(|_this, _: &ClosePane, _window, _cx| {
+                info!("ClosePane — pane management deferred");
+            }))
+            .on_action(cx.listener(|_this, _: &FocusNextPane, _window, _cx| {
+                info!("FocusNextPane — pane focus deferred");
+            }))
+            .on_action(cx.listener(|_this, _: &FocusPrevPane, _window, _cx| {
+                info!("FocusPrevPane — pane focus deferred");
+            }))
+            .on_action(cx.listener(|_this, _: &NewTerminalSurface, _window, _cx| {
+                info!("NewTerminalSurface — terminal creation deferred");
+            }))
+            .on_action(cx.listener(|_this, _: &NewMarkdownSurface, _window, _cx| {
+                info!("NewMarkdownSurface — surface creation deferred");
+            }))
+            .on_action(
+                cx.listener(|_this, _: &NewCodeViewerSurface, _window, _cx| {
+                    info!("NewCodeViewerSurface — surface creation deferred");
+                }),
+            )
             .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _window, cx| {
                 // settings 키 먼저 처리 — 소비되면 나머지 스킵.
                 if this.handle_settings_key_event(ev) {
@@ -863,7 +919,11 @@ impl Render for RootView {
                 create_first_btn,
             ))
             .child(status_bar())
-            .children(active_palette.map(|_v| render_palette_overlay()))
+            .children(
+                self.cmd_palette
+                    .as_ref()
+                    .map(|cp| render_palette_overlay(cp, &self.palette_query)),
+            )
             .children(has_settings.then(render_settings_overlay))
             .children(has_spec_panel.then(render_spec_panel_overlay))
             // G-2: Project Wizard overlay (rendered when visible)
@@ -1249,11 +1309,38 @@ fn empty_state_tip() -> impl IntoElement {
 // MS-3: Palette overlay — Scrim + variant placeholder
 // ============================================================
 
-/// Palette overlay 렌더 — Scrim 위에 variant placeholder 를 표시한다 (AC-PL-14/15).
+/// Palette overlay rendering — Shows CmdPalette with query input and filtered results.
 ///
-/// MS-3 에서는 Scrim (반투명 backdrop) + 중앙 정렬 컨테이너 placeholder 를 렌더한다.
-/// 실제 CmdPalette/CommandPalette/SlashBar variant 컴포넌트는 follow-up 에서 연결.
-fn render_palette_overlay() -> impl IntoElement {
+/// @MX:ANCHOR: [AUTO] render_palette_overlay — RootView.render 호출 + GPUI 렌더 계약.
+/// @MX:REASON: [AUTO] SPEC-V3-PALETTE-001 AC-PA-1~3. fan_in >= 3:
+///   RootView.render (line 866), palette integration tests, visual regression tests.
+/// @MX:SPEC: SPEC-V3-PALETTE-001
+///
+/// # Arguments
+/// * `cmd_palette` - Active CmdPalette instance with query, items, and navigation state
+/// * `query` - Current query text for display in input field
+///
+/// # Rendering
+/// - Scrim backdrop (semi-transparent dark overlay)
+/// - Centered 600px palette container
+/// - Query input field (showing current query)
+/// - Filtered results list (32px rows, max 320px height)
+/// - Selected item highlight (HIGHLIGHT_ALPHA with brand primary)
+fn render_palette_overlay(
+    cmd_palette: &palette::variants::CmdPalette,
+    query: &str,
+) -> impl IntoElement {
+    use palette::palette_view::{LIST_MAX_HEIGHT, ROW_HEIGHT};
+
+    // Extract data from CmdPalette for rendering
+    let view = &cmd_palette.view;
+    let items = &view.items;
+    let nav = &view.nav;
+
+    // Calculate highlight color with alpha (0xRR_GG_BB_AA format)
+    // Brand primary blue (0x3b_82_f6) with HIGHLIGHT_ALPHA (0.20 = 0x33)
+    let highlight_color = 0x3b_82_f6_33u32;
+
     div()
         .absolute()
         .inset_0()
@@ -1268,11 +1355,55 @@ fn render_palette_overlay() -> impl IntoElement {
                 .bg(rgb(crate::design::tokens::neutral::N900))
                 .rounded_lg()
                 .p_3()
+                .flex()
+                .flex_col()
+                .gap_2()
+                // Query input field
                 .child(
                     div()
+                        .w(px(palette::PALETTE_WIDTH - 24.0)) // Account for padding (p-3 = 12px * 2)
+                        .h(px(32.0))
+                        .px_3()
+                        .bg(rgb(tok::BG_APP))
+                        .rounded_md()
+                        .flex()
+                        .items_center()
                         .text_sm()
-                        .text_color(rgb(tok::FG_SECONDARY))
-                        .child("palette"),
+                        .text_color(rgb(tok::FG_PRIMARY))
+                        .child(if query.is_empty() {
+                            div()
+                                .text_color(rgb(tok::FG_MUTED))
+                                .child("Search files...")
+                        } else {
+                            div().child(query.to_string())
+                        }),
+                )
+                // Filtered results list
+                .child(
+                    div()
+                        .w(px(palette::PALETTE_WIDTH - 24.0))
+                        .max_h(px(LIST_MAX_HEIGHT))
+                        .overflow_y_hidden()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .children(items.iter().enumerate().map(|(idx, item)| {
+                            let is_selected = nav.selected_index == Some(idx);
+                            div()
+                                .h(px(ROW_HEIGHT))
+                                .px_3()
+                                .flex()
+                                .items_center()
+                                .rounded_md()
+                                .when(is_selected, |div| div.bg(gpui::rgba(highlight_color)))
+                                .text_sm()
+                                .text_color(if is_selected {
+                                    rgb(tok::FG_PRIMARY)
+                                } else {
+                                    rgb(tok::FG_SECONDARY)
+                                })
+                                .child(item.label.clone())
+                        })),
                 ),
         )
 }
@@ -2374,5 +2505,113 @@ mod tests {
                 "UpdateBanner auto_dismiss = 8s (AC-V14-12)"
             );
         });
+    }
+
+    // ============================================================
+    // SPEC-V3-PALETTE-001: Palette rendering tests
+    // ============================================================
+
+    /// Test that CmdPalette provides correct data for rendering (AC-PA-1).
+    #[test]
+    fn cmd_palette_render_data_has_query_and_items() {
+        use palette::variants::CmdPalette;
+
+        let cmd_palette = CmdPalette::new();
+
+        // Verify initial state for rendering
+        assert_eq!(
+            cmd_palette.view.query, "",
+            "Initial query should be empty for rendering"
+        );
+        assert!(
+            !cmd_palette.view.items.is_empty(),
+            "Should have items to render in list"
+        );
+        assert!(
+            cmd_palette.view.nav.selected_index.is_some(),
+            "Should have initial selection for highlight"
+        );
+    }
+
+    /// Test navigation state for rendering selection highlight (AC-PA-3).
+    #[test]
+    fn palette_nav_state_provides_selection_for_rendering() {
+        use palette::palette_view::{NavState, PaletteItem};
+
+        let items = [
+            PaletteItem::new("1", "File 1"),
+            PaletteItem::new("2", "File 2"),
+            PaletteItem::new("3", "File 3"),
+        ];
+
+        let mut nav = NavState::new(items.len());
+
+        // Initial selection should be first item
+        assert_eq!(
+            nav.selected_index,
+            Some(0),
+            "First item should be selected for rendering"
+        );
+
+        // Move down - selection changes
+        nav.move_down();
+        assert_eq!(
+            nav.selected_index,
+            Some(1),
+            "Second item should be selected after move_down"
+        );
+
+        // Move up - selection changes back
+        nav.move_up();
+        assert_eq!(
+            nav.selected_index,
+            Some(0),
+            "First item should be selected after move_up"
+        );
+    }
+
+    /// Test empty palette state for rendering (AC-PA-2).
+    #[test]
+    fn empty_palette_has_no_selection_for_rendering() {
+        use palette::PaletteItem;
+        use palette::palette_view::NavState;
+
+        let items: Vec<PaletteItem> = vec![];
+        let nav = NavState::new(items.len());
+
+        assert_eq!(
+            nav.selected_index, None,
+            "No selection when empty - nothing to highlight"
+        );
+        assert_eq!(nav.item_count, 0, "Item count should be zero");
+    }
+
+    /// Test that RootView integrates palette state for rendering.
+    #[test]
+    fn root_view_cmd_palette_state_ready_for_rendering() {
+        let mut view = RootView::new(vec![], dummy_path());
+
+        // Initial state - palette closed, no data
+        assert!(
+            view.cmd_palette.is_none(),
+            "CmdPalette should be None initially"
+        );
+        assert_eq!(view.palette_query, "", "Query should be empty initially");
+
+        // Open CmdPalette - should create palette instance
+        view.toggle_cmd_palette();
+
+        assert!(
+            view.cmd_palette.is_some(),
+            "CmdPalette should be created for rendering"
+        );
+        assert_eq!(view.palette_query, "", "Query should be empty after open");
+
+        // Verify palette has data for rendering
+        let cmd_palette = view.cmd_palette.as_ref().unwrap();
+        assert!(
+            !cmd_palette.view.items.is_empty(),
+            "Should have items to render"
+        );
     }
 }

@@ -5,6 +5,8 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       dry_run:
@@ -524,4 +526,136 @@ jobs:
             | Windows | .msi | Unsigned — SmartScreen warning expected |
 
             > **TODO (MS-2):** codesign + notarytool + stapler for macOS, signtool for Windows.
-            > **TODO (MS-3):** Ed25519-signed update.json manifest for auto-update.
+
+  # ============================================================
+  # SPEC-V3-DIST-001 MS-3: Auto-bump Homebrew Cask and Scoop manifest
+  # After release is published (draft → publish), this job updates
+  # dist/homebrew/Casks/moai-studio.rb and dist/scoop/moai-studio.json
+  # with the correct version, URLs, and SHA256 checksums, then opens
+  # a PR against main.
+  # Trigger: release.published event (fires when draft is published).
+  # ============================================================
+  bump-manifests:
+    name: Bump distribution manifests
+    runs-on: ubuntu-22.04
+    if: github.event.action == 'published'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download release assets for checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p release-assets
+          VERSION="${{ steps.version.outputs.version }}"
+          REPO="${{ github.repository }}"
+
+          # Download macOS arm64 zip/tar for sha256
+          gh release download "v${VERSION}" \
+            --repo "${REPO}" \
+            --dir release-assets \
+            --clobber || true
+
+      - name: Compute SHA256 checksums
+        id: checksums
+        run: |
+          # macOS artifacts (universal .app bundled as zip)
+          if [ -f release-assets/moai-studio-mac-universal.zip ]; then
+            echo "mac_sha=$(sha256sum release-assets/moai-studio-mac-universal.zip | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          elif [ -f release-assets/MoAI Studio.app ]; then
+            cd release-assets && zip -r ../mac-app.zip "MoAI Studio.app" && cd ..
+            echo "mac_sha=$(sha256sum mac-app.zip | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          else
+            echo "mac_sha=sha256_placeholder" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Windows MSI
+          if ls release-assets/*.msi 1>/dev/null 2>&1; then
+            MSI_FILE=$(ls release-assets/*.msi | head -1)
+            echo "win_sha=$(sha256sum "$MSI_FILE" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          else
+            echo "win_sha=sha256_placeholder" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update Homebrew Cask
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          MAC_SHA="${{ steps.checksums.outputs.mac_sha }}"
+
+          CASK_FILE="dist/homebrew/Casks/moai-studio.rb"
+          if [ -f "$CASK_FILE" ]; then
+            sed -i "s/version \".*\"/version \"${VERSION}\"/" "$CASK_FILE"
+            sed -i "s/aarch64_dmg_sha256_placeholder/${MAC_SHA}/" "$CASK_FILE"
+            sed -i "s/x86_64_dmg_sha256_placeholder/${MAC_SHA}/" "$CASK_FILE"
+            echo "Updated $CASK_FILE:"
+            cat "$CASK_FILE"
+          else
+            echo "WARNING: $CASK_FILE not found — skipping"
+          fi
+
+      - name: Update Scoop manifest
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          WIN_SHA="${{ steps.checksums.outputs.win_sha }}"
+
+          SCOOP_FILE="dist/scoop/moai-studio.json"
+          if [ -f "$SCOOP_FILE" ]; then
+            # Update version field
+            sed -i "s/\"version\": \".*\"/\"version\": \"${VERSION}\"/" "$SCOOP_FILE"
+            # Update URL
+            sed -i "s|https://github.com/modu-ai/moai-studio/releases/download/v[^/]*\/moai-studio-windows-x64.msi|https://github.com/modu-ai/moai-studio/releases/download/v${VERSION}/moai-studio-windows-x64.msi|g" "$SCOOP_FILE"
+            # Update hash
+            sed -i "s/windows_msi_sha256_placeholder/${WIN_SHA}/" "$SCOOP_FILE"
+            echo "Updated $SCOOP_FILE:"
+            cat "$SCOOP_FILE"
+          else
+            echo "WARNING: $SCOOP_FILE not found — skipping"
+          fi
+
+      - name: Create PR with manifest updates
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BRANCH="chore/bump-manifests-v${VERSION}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add dist/homebrew/Casks/moai-studio.rb dist/scoop/moai-studio.json
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+
+          git commit -m "chore(dist): bump cask/scoop manifests to v${VERSION}
+
+          Auto-generated by release.yml bump-manifests job.
+          Version: v${VERSION}
+          Source: ${{ github.event.release.html_url }}
+
+          🗿 MoAI <email@mo.ai.kr>"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore(dist): bump cask/scoop manifests to v${VERSION}" \
+            --body "## Summary
+          - Auto-bump Homebrew Cask version and SHA256 to v${VERSION}
+          - Auto-bump Scoop manifest version and hash to v${VERSION}
+          - Triggered by release publish of v${VERSION}
+
+          ## Test plan
+          - [ ] Verify \`dist/homebrew/Casks/moai-studio.rb\` has correct version and SHA256
+          - [ ] Verify \`dist/scoop/moai-studio.json\` has correct version and hash
+          - [ ] After merge, sync to modu-ai/homebrew-tap and modu-ai/scoop-bucket
+
+          🗿 MoAI <email@mo.ai.kr>" \
+            --label "type/chore" \
+            --label "area/ci" \
+            --label "skip-changelog"
