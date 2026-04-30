@@ -4,8 +4,8 @@
 //! REQ-QD-005 through REQ-QD-008: Default heuristic formulas.
 
 use crate::quality::{
-    metrics::{GitMetrics, LspMetrics, SecurityMetrics, TestMetrics},
     Trust5Score,
+    metrics::{GitMetrics, LspMetrics, SecurityMetrics, TestMetrics},
 };
 
 // @MX:ANCHOR: [AUTO] scoring-engine-trait
@@ -135,8 +135,7 @@ fn compute_secured(security: Option<&SecurityMetrics>) -> f32 {
             if metrics.critical_vulns > 0 || metrics.high_vulns > 0 {
                 0.0
             } else {
-                let penalty =
-                    metrics.medium_vulns as f32 * 0.1 + metrics.low_vulns as f32 * 0.05;
+                let penalty = metrics.medium_vulns as f32 * 0.1 + metrics.low_vulns as f32 * 0.05;
                 (1.0 - penalty).clamp(0.0, 1.0)
             }
         }
@@ -153,9 +152,7 @@ fn compute_trackable(git: Option<&GitMetrics>) -> f32 {
     match git {
         None => 0.5,
         Some(metrics) => {
-            let sum = metrics.conventional_commit_pct
-                + metrics.spec_ref_pct
-                + metrics.mx_tag_pct;
+            let sum = metrics.conventional_commit_pct + metrics.spec_ref_pct + metrics.mx_tag_pct;
             (sum / 300.0).clamp(0.0, 1.0)
         }
     }
@@ -370,18 +367,13 @@ mod tests {
     #[test]
     fn scoring_engine_partial_metrics() {
         let engine = DefaultHeuristicEngine;
-        let score = engine.compute_score(
-            Some(&lsp_clean()),
-            None,
-            Some(&git_perfect()),
-            None,
-        );
+        let score = engine.compute_score(Some(&lsp_clean()), None, Some(&git_perfect()), None);
 
-        assert_eq!(score.tested, 0.5);      // No data
-        assert_eq!(score.readable, 1.0);    // Clean LSP
-        assert_eq!(score.unified, 1.0);     // Clean LSP
-        assert_eq!(score.secured, 0.5);     // No data
-        assert_eq!(score.trackable, 1.0);   // Perfect git
+        assert_eq!(score.tested, 0.5); // No data
+        assert_eq!(score.readable, 1.0); // Clean LSP
+        assert_eq!(score.unified, 1.0); // Clean LSP
+        assert_eq!(score.secured, 0.5); // No data
+        assert_eq!(score.trackable, 1.0); // Perfect git
     }
 
     #[test]

@@ -111,8 +111,7 @@ mod tests {
 
     #[test]
     fn image_data_creation() {
-        let pixels = vec
-![0u8; 100 * 100 * 4];
+        let pixels = vec![0u8; 100 * 100 * 4];
         let data = ImageData::new(pixels.clone(), 100, 100, PathBuf::from("test.png"), 1024);
         assert_eq!(data.width, 100);
         assert_eq!(data.height, 100);

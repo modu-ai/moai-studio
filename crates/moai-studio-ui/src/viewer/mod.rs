@@ -330,8 +330,18 @@ pub fn resolve_event(ev: &OpenFileEvent) -> EventResolution {
     // 2. 기타 명백한 binary 확장자 조기 거부
     if matches!(
         ext.as_str(),
-        "pdf" | "zip" | "tar" | "gz" | "7z" | "rar" | "exe" | "dll" | "so"
-            | "dylib" | "bin" | "wasm"
+        "pdf"
+            | "zip"
+            | "tar"
+            | "gz"
+            | "7z"
+            | "rar"
+            | "exe"
+            | "dll"
+            | "so"
+            | "dylib"
+            | "bin"
+            | "wasm"
     ) {
         return EventResolution::Binary;
     }

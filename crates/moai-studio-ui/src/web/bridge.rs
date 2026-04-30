@@ -296,8 +296,8 @@ mod tests {
         // Register a handler that returns the payload unchanged
         router.register("echo", |payload| Some(payload.clone()));
 
-        let msg = BridgeMessage::new(1, BridgeKind::Request, "echo", json!({"test": "data"}))
-            .unwrap();
+        let msg =
+            BridgeMessage::new(1, BridgeKind::Request, "echo", json!({"test": "data"})).unwrap();
         let result = router.dispatch(&msg, "http://localhost:8080");
 
         assert!(result.is_some());
@@ -351,8 +351,8 @@ mod tests {
             None
         });
 
-        let msg = BridgeMessage::new(1, BridgeKind::Event, "log", json!({"level": "info"}))
-            .unwrap();
+        let msg =
+            BridgeMessage::new(1, BridgeKind::Event, "log", json!({"level": "info"})).unwrap();
         let result = router.dispatch(&msg, "http://localhost:8080");
 
         assert!(result.is_none());

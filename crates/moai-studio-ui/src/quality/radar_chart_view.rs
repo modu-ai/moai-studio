@@ -6,8 +6,8 @@
 //! REQ-QD-010~014: Radar chart with score polygon, threshold reference, and axis labels.
 
 use gpui::{
-    Context, IntoElement, ParentElement, Pixels, Render, Styled, Window, canvas, div,
-    point, px, rgb,
+    Context, IntoElement, ParentElement, Pixels, Render, Styled, Window, canvas, div, point, px,
+    rgb,
 };
 use moai_studio_agent::quality::Trust5Score;
 
@@ -17,13 +17,7 @@ use crate::design::tokens as tok;
 pub const DIMENSION_LABELS: [&str; 5] = ["T", "R", "U", "S", "K"];
 
 /// Full dimension names for tooltip/label context.
-pub const DIMENSION_NAMES: [&str; 5] = [
-    "Tested",
-    "Readable",
-    "Unified",
-    "Secured",
-    "Trackable",
-];
+pub const DIMENSION_NAMES: [&str; 5] = ["Tested", "Readable", "Unified", "Secured", "Trackable"];
 
 /// Default threshold value for the quality gate (0.75).
 pub const DEFAULT_THRESHOLD: f32 = 0.75;
@@ -152,12 +146,7 @@ pub fn polygon_vertices(
 /// Compute the label position for a given axis (offset beyond the perimeter).
 ///
 /// Labels are placed slightly outside the perimeter for readability.
-pub fn label_position(
-    center_x: f32,
-    center_y: f32,
-    radius: f32,
-    axis_index: usize,
-) -> (f32, f32) {
+pub fn label_position(center_x: f32, center_y: f32, radius: f32, axis_index: usize) -> (f32, f32) {
     const LABEL_OFFSET: f32 = 20.0;
     axis_position(center_x, center_y, radius + LABEL_OFFSET, axis_index, 1.0)
 }
@@ -174,7 +163,12 @@ fn pf(p: Pixels) -> f32 {
 }
 
 /// Build a stroke path from line segments connecting points.
-fn stroke_path_from_points(points: &[(f32, f32)], ox: f32, oy: f32, line_width: f32) -> gpui::Path<Pixels> {
+fn stroke_path_from_points(
+    points: &[(f32, f32)],
+    ox: f32,
+    oy: f32,
+    line_width: f32,
+) -> gpui::Path<Pixels> {
     let mut builder = gpui::PathBuilder::stroke(px(line_width));
     if let Some(&(fx, fy)) = points.first() {
         builder.move_to(point(px(ox + fx), px(oy + fy)));
@@ -183,11 +177,9 @@ fn stroke_path_from_points(points: &[(f32, f32)], ox: f32, oy: f32, line_width: 
         }
         builder.close();
     }
-    builder.build().unwrap_or_else(|_| {
-        gpui::PathBuilder::stroke(px(line_width))
-            .build()
-            .unwrap()
-    })
+    builder
+        .build()
+        .unwrap_or_else(|_| gpui::PathBuilder::stroke(px(line_width)).build().unwrap())
 }
 
 /// Build a fill path from line segments connecting points.
@@ -200,7 +192,9 @@ fn fill_path_from_points(points: &[(f32, f32)], ox: f32, oy: f32) -> gpui::Path<
         }
         builder.close();
     }
-    builder.build().unwrap_or_else(|_| gpui::PathBuilder::fill().build().unwrap())
+    builder
+        .build()
+        .unwrap_or_else(|_| gpui::PathBuilder::fill().build().unwrap())
 }
 
 /// Build a stroke line between two points.
@@ -208,7 +202,9 @@ fn line_path(x1: f32, y1: f32, x2: f32, y2: f32, width: f32) -> gpui::Path<Pixel
     let mut builder = gpui::PathBuilder::stroke(px(width));
     builder.move_to(point(px(x1), px(y1)));
     builder.line_to(point(px(x2), px(y2)));
-    builder.build().unwrap_or_else(|_| gpui::PathBuilder::stroke(px(width)).build().unwrap())
+    builder
+        .build()
+        .unwrap_or_else(|_| gpui::PathBuilder::stroke(px(width)).build().unwrap())
 }
 
 /// Build an approximate circle path (8-segment polygon, filled).
@@ -225,7 +221,9 @@ fn circle_path(cx: f32, cy: f32, r: f32) -> gpui::Path<Pixels> {
         }
     }
     builder.close();
-    builder.build().unwrap_or_else(|_| gpui::PathBuilder::fill().build().unwrap())
+    builder
+        .build()
+        .unwrap_or_else(|_| gpui::PathBuilder::fill().build().unwrap())
 }
 
 impl Render for RadarChartView {

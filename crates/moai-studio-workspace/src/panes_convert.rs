@@ -106,6 +106,23 @@ pub fn tab_container_to_layout_v1(tabs: &[TabSnapshotInput]) -> PaneLayoutV1 {
     let tab_snapshots: Vec<TabSnapshotV1> = tabs.iter().map(tab_input_to_snapshot).collect();
     PaneLayoutV1 {
         schema_version: SCHEMA_VERSION.to_string(),
+        active_tab_idx: 0,
+        tabs: tab_snapshots,
+    }
+}
+
+/// `TabSnapshotInput` 슬라이스와 `active_tab_idx` 를 `PaneLayoutV1` 으로 변환한다 (UI → 저장).
+///
+/// `active_tab_idx` 를 포함하는 전체 레이아웃 스냅샷을 생성한다.
+/// fan_in >= 3: shutdown save handler, integration tests, TabContainer::into_snapshot_full.
+pub fn tab_container_to_layout_v1_with_active(
+    tabs: &[TabSnapshotInput],
+    active_tab_idx: usize,
+) -> PaneLayoutV1 {
+    let tab_snapshots: Vec<TabSnapshotV1> = tabs.iter().map(tab_input_to_snapshot).collect();
+    PaneLayoutV1 {
+        schema_version: SCHEMA_VERSION.to_string(),
+        active_tab_idx,
         tabs: tab_snapshots,
     }
 }

@@ -14,9 +14,9 @@ use gpui::{
     rgb,
 };
 
+use super::bridge::BridgeRouter;
 use super::history::NavigationHistory;
 use super::url::validate_url;
-use super::bridge::BridgeRouter;
 
 /// WebView state enumeration (REQ-WB-006)
 ///
@@ -644,7 +644,10 @@ mod tests {
 
         surface.set_state(WebViewState::Error("Test error".to_string()));
         assert_eq!(surface.status_message, "Error: Test error");
-        assert_eq!(surface.state(), &WebViewState::Error("Test error".to_string()));
+        assert_eq!(
+            surface.state(),
+            &WebViewState::Error("Test error".to_string())
+        );
     }
 
     #[test]

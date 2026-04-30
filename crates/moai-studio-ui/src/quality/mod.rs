@@ -24,8 +24,8 @@ pub use quality_gate_view::{DimensionGate, GateStatus, QualityGateView};
 pub use radar_chart_view::RadarChartView;
 
 use gpui::{
-    Context, IntoElement, ParentElement, Pixels, Render, Styled, Window, canvas, div, point, px,
-    rgb, prelude::FluentBuilder,
+    Context, IntoElement, ParentElement, Pixels, Render, Styled, Window, canvas, div, point,
+    prelude::FluentBuilder, px, rgb,
 };
 use moai_studio_agent::quality::{QualityHistory, Trust5Score};
 
@@ -336,7 +336,11 @@ impl Render for QualityDashboardView {
         } else {
             // Placeholder content for selected dimension metrics
             let dim_score = score.as_slice()[selected_dim.unwrap()];
-            let status = if dim_score >= threshold { "PASS" } else { "FAIL" };
+            let status = if dim_score >= threshold {
+                "PASS"
+            } else {
+                "FAIL"
+            };
             let status_color = if dim_score >= threshold {
                 tok::semantic::SUCCESS
             } else {
@@ -349,18 +353,32 @@ impl Render for QualityDashboardView {
                     .gap(px(8.))
                     .py(px(2.))
                     .child(
-                        div().flex_1().text_xs().text_color(rgb(tok::FG_PRIMARY)).child("Score"),
+                        div()
+                            .flex_1()
+                            .text_xs()
+                            .text_color(rgb(tok::FG_PRIMARY))
+                            .child("Score"),
                     )
                     .child(
-                        div().flex_1().text_xs().text_color(rgb(tok::FG_SECONDARY))
+                        div()
+                            .flex_1()
+                            .text_xs()
+                            .text_color(rgb(tok::FG_SECONDARY))
                             .child(format!("{:.2}", dim_score)),
                     )
                     .child(
-                        div().flex_1().text_xs().text_color(rgb(tok::FG_MUTED))
+                        div()
+                            .flex_1()
+                            .text_xs()
+                            .text_color(rgb(tok::FG_MUTED))
                             .child(format!("{:.2}", threshold)),
                     )
                     .child(
-                        div().flex_1().text_xs().text_color(rgb(status_color)).child(status),
+                        div()
+                            .flex_1()
+                            .text_xs()
+                            .text_color(rgb(status_color))
+                            .child(status),
                     ),
             );
         }

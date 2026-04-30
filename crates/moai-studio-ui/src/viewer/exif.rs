@@ -85,11 +85,7 @@ fn get_string_field(exif_data: &exif::Exif, tag: exif::Tag) -> Option<String> {
 fn get_display_field(exif_data: &exif::Exif, tag: exif::Tag) -> Option<String> {
     let field = exif_data.get_field(tag, exif::In::PRIMARY)?;
     let val = field.display_value().with_unit(exif_data).to_string();
-    if val.is_empty() {
-        None
-    } else {
-        Some(val)
-    }
+    if val.is_empty() { None } else { Some(val) }
 }
 
 /// Extract uint value from an EXIF field.

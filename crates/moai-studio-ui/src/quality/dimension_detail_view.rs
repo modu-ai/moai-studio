@@ -5,9 +5,7 @@
 //!
 //! REQ-QD-025~028: Dimension detail panel with metric items.
 
-use gpui::{
-    Context, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb,
-};
+use gpui::{Context, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb};
 
 use crate::design::tokens as tok;
 
@@ -167,16 +165,13 @@ impl Render for DimensionDetailView {
             .border_color(rgb(tok::BORDER_SUBTLE));
 
         // Header with dimension name
-        container = container.child(
-            div()
-                .text_sm()
-                .text_color(rgb(tok::FG_PRIMARY))
-                .child(if has_selection {
-                    format!("{} Metrics", dim_label)
-                } else {
-                    "Dimension Metrics".to_string()
-                }),
-        );
+        container = container.child(div().text_sm().text_color(rgb(tok::FG_PRIMARY)).child(
+            if has_selection {
+                format!("{} Metrics", dim_label)
+            } else {
+                "Dimension Metrics".to_string()
+            },
+        ));
 
         if !has_selection {
             // Placeholder when no dimension is selected (REQ-QD-028)
@@ -252,11 +247,7 @@ impl Render for DimensionDetailView {
                             .flex_1()
                             .text_xs()
                             .text_color(rgb(tok::FG_MUTED))
-                            .child(
-                                item.threshold
-                                    .clone()
-                                    .unwrap_or_else(|| "-".to_string()),
-                            ),
+                            .child(item.threshold.clone().unwrap_or_else(|| "-".to_string())),
                     )
                     .child(
                         // Status
