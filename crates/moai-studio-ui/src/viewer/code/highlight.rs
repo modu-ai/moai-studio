@@ -192,12 +192,15 @@ fn collect_highlights(
 /// 언어별 tree-sitter 노드 종류 → `HighlightScope` 매핑.
 ///
 /// MS-2 simplified mapping: 핵심 노드 종류 10개 우선.
+/// MS-5: JavaScript / JSON 추가 매핑.
 fn map_node_kind(kind: &str, lang: SupportedLang) -> Option<HighlightScope> {
     match lang {
         SupportedLang::Rust => map_rust_kind(kind),
         SupportedLang::Go => map_go_kind(kind),
         SupportedLang::Python => map_python_kind(kind),
         SupportedLang::TypeScript => map_typescript_kind(kind),
+        SupportedLang::JavaScript => map_javascript_kind(kind),
+        SupportedLang::Json => map_json_kind(kind),
     }
 }
 
@@ -317,6 +320,57 @@ fn map_typescript_kind(kind: &str) -> Option<HighlightScope> {
         | "/=" | "=>" | "?." | "??" => Some(HighlightScope::Operator),
         // 상수
         "true" | "false" | "null" | "undefined" => Some(HighlightScope::Constant),
+        _ => None,
+    }
+}
+
+/// SPEC-V3-006 MS-5: JavaScript node-kind → highlight scope mapping.
+/// Mirrors map_typescript_kind, omitting TS-only keywords (interface, namespace, etc.)
+/// and predefined_type. Tree-sitter-javascript exposes the same core node kinds
+/// (function, string, comment, function_declaration) as the TS grammar.
+fn map_javascript_kind(kind: &str) -> Option<HighlightScope> {
+    match kind {
+        // Keywords (no TS-only ones).
+        "function" | "const" | "let" | "var" | "class" | "import" | "export" | "default"
+        | "from" | "as" | "if" | "else" | "for" | "while" | "do" | "switch" | "case" | "break"
+        | "continue" | "return" | "throw" | "try" | "catch" | "finally" | "new" | "this"
+        | "super" | "extends" | "in" | "instanceof" | "typeof" | "void" | "delete" | "async"
+        | "await" | "yield" | "static" | "of" => Some(HighlightScope::Keyword),
+        // Strings (regular, template, regex).
+        "string" | "template_string" | "regex" => Some(HighlightScope::String),
+        // Comments (line + block + hashbang for Node.js scripts).
+        "comment" | "hash_bang_line" => Some(HighlightScope::Comment),
+        // Numbers (no separate type node in JS).
+        "number" => Some(HighlightScope::Number),
+        // Functions.
+        "function_declaration" | "arrow_function" | "method_definition" => {
+            Some(HighlightScope::Function)
+        }
+        // Operators.
+        "+" | "-" | "*" | "/" | "%" | "**" | "==" | "===" | "!=" | "!==" | "<" | ">" | "<="
+        | ">=" | "&&" | "||" | "!" | "&" | "|" | "^" | "<<" | ">>" | ">>>" | "=" | "+=" | "-="
+        | "*=" | "/=" | "=>" | "?." | "??" | "..." => Some(HighlightScope::Operator),
+        // Constants.
+        "true" | "false" | "null" | "undefined" => Some(HighlightScope::Constant),
+        _ => None,
+    }
+}
+
+/// SPEC-V3-006 MS-5: JSON node-kind → highlight scope mapping.
+/// JSON grammar is small: object, array, string, number, true/false/null,
+/// pair (key:value). Comments are non-standard but supported by jsonc dialect.
+fn map_json_kind(kind: &str) -> Option<HighlightScope> {
+    match kind {
+        // Strings (both keys and values share the "string" node kind in tree-sitter-json).
+        "string" | "string_content" => Some(HighlightScope::String),
+        // Numbers.
+        "number" => Some(HighlightScope::Number),
+        // JSON literals.
+        "true" | "false" | "null" => Some(HighlightScope::Constant),
+        // Comments (only in JSONC dialect; tree-sitter-json may emit them anyway).
+        "comment" => Some(HighlightScope::Comment),
+        // Structural punctuation as operators.
+        "{" | "}" | "[" | "]" | ":" | "," => Some(HighlightScope::Operator),
         _ => None,
     }
 }
@@ -491,6 +545,117 @@ mod tests {
         assert!(
             has_keyword,
             "func 가 Keyword scope 로 highlight 되어야 한다"
+        );
+    }
+
+    // ── SPEC-V3-006 MS-5: JavaScript / JSON highlight tests ──
+
+    #[test]
+    fn highlight_javascript_const_keyword() {
+        let code = "const x = 42;";
+        let lines = highlight_source(code, SupportedLang::JavaScript);
+        assert!(!lines.is_empty(), "JS highlight result must not be empty");
+
+        let has_keyword = lines.iter().any(|line| {
+            line.spans
+                .iter()
+                .any(|s| s.scope == Some(HighlightScope::Keyword) && s.text.contains("const"))
+        });
+        assert!(has_keyword, "JS `const` must highlight as Keyword");
+    }
+
+    #[test]
+    fn highlight_javascript_operators_and_constants() {
+        // Pipeline only assigns scope to LEAF nodes, so we test leaf-level
+        // tokens that the JS grammar exposes directly: =>, ===, true, false.
+        let code = "const ok = (a === b) => true;";
+        let lines = highlight_source(code, SupportedLang::JavaScript);
+
+        let has_operator = lines.iter().any(|line| {
+            line.spans
+                .iter()
+                .any(|s| s.scope == Some(HighlightScope::Operator))
+        });
+        let has_constant = lines.iter().any(|line| {
+            line.spans
+                .iter()
+                .any(|s| s.scope == Some(HighlightScope::Constant) && s.text == "true")
+        });
+        assert!(
+            has_operator,
+            "JS operators (===, =>) must highlight Operator scope"
+        );
+        assert!(has_constant, "JS `true` must highlight Constant scope");
+    }
+
+    #[test]
+    fn highlight_javascript_number_literal() {
+        let code = "let x = 3.14;";
+        let lines = highlight_source(code, SupportedLang::JavaScript);
+
+        let has_number = lines.iter().any(|line| {
+            line.spans
+                .iter()
+                .any(|s| s.scope == Some(HighlightScope::Number))
+        });
+        assert!(has_number, "JS number literal must highlight Number scope");
+    }
+
+    #[test]
+    fn highlight_json_object_with_strings_and_numbers() {
+        let code = r#"{"name": "moai", "version": 12, "active": true}"#;
+        let lines = highlight_source(code, SupportedLang::Json);
+
+        let has_string = lines.iter().any(|line| {
+            line.spans
+                .iter()
+                .any(|s| s.scope == Some(HighlightScope::String))
+        });
+        let has_number = lines.iter().any(|line| {
+            line.spans
+                .iter()
+                .any(|s| s.scope == Some(HighlightScope::Number))
+        });
+        let has_constant = lines.iter().any(|line| {
+            line.spans
+                .iter()
+                .any(|s| s.scope == Some(HighlightScope::Constant) && s.text == "true")
+        });
+
+        assert!(has_string, "JSON strings must highlight String scope");
+        assert!(has_number, "JSON numbers must highlight Number scope");
+        assert!(
+            has_constant,
+            "JSON `true` literal must highlight Constant scope"
+        );
+    }
+
+    #[test]
+    fn highlight_json_null_literal() {
+        let code = r#"{"x": null}"#;
+        let lines = highlight_source(code, SupportedLang::Json);
+
+        let has_null = lines.iter().any(|line| {
+            line.spans
+                .iter()
+                .any(|s| s.scope == Some(HighlightScope::Constant) && s.text == "null")
+        });
+        assert!(has_null, "JSON `null` must highlight Constant scope");
+    }
+
+    #[test]
+    fn highlight_json_punctuation_as_operator() {
+        let code = r#"{"a":1,"b":2}"#;
+        let lines = highlight_source(code, SupportedLang::Json);
+
+        let has_operator = lines.iter().any(|line| {
+            line.spans
+                .iter()
+                .any(|s| s.scope == Some(HighlightScope::Operator))
+        });
+        assert!(
+            has_operator,
+            "JSON braces / colon / comma must highlight Operator scope"
         );
     }
 
