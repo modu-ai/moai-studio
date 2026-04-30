@@ -281,4 +281,46 @@ mod tests {
             "빈 쿼리 → 전체 목록 복원"
         );
     }
+
+    // ── MS-4: SlashInvoked dispatch correctness (AC-PL-21) ──
+
+    /// AC-PL-21: SlashInvoked payload starts with "/moai" for all default commands.
+    #[test]
+    fn all_default_commands_invoke_with_moai_prefix() {
+        for (id, label) in MOCK_SLASH_COMMANDS {
+            let mut bar = SlashBar::with_commands(vec![(id.to_string(), label.to_string())]);
+            if let Some(SlashBarEvent::SlashInvoked(name)) = bar.on_enter() {
+                assert!(
+                    name.starts_with("/moai"),
+                    "SlashInvoked must start with /moai for command {id}: got {name}"
+                );
+            } else {
+                panic!("Expected SlashInvoked for command {id}");
+            }
+        }
+    }
+
+    /// AC-PL-21: SlashInvoked subcommand matches /moai plan label.
+    #[test]
+    fn slash_invoked_plan_dispatches_correct_label() {
+        let mut bar =
+            SlashBar::with_commands(vec![("moai_plan".to_string(), "/moai plan".to_string())]);
+        let ev = bar.on_enter();
+        assert_eq!(
+            ev,
+            Some(SlashBarEvent::SlashInvoked("/moai plan".to_string()))
+        );
+    }
+
+    /// MS-4: subcommand count expands from 8 to cover all /moai subcommands in mock.
+    #[test]
+    fn mock_slash_commands_covers_essential_subcommands() {
+        let essential = ["/moai plan", "/moai run", "/moai sync", "/moai fix"];
+        for expected in &essential {
+            let has = MOCK_SLASH_COMMANDS
+                .iter()
+                .any(|(_, label)| label == expected);
+            assert!(has, "MOCK_SLASH_COMMANDS must include '{expected}'");
+        }
+    }
 }

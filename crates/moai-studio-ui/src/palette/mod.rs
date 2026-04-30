@@ -22,6 +22,10 @@ pub use scrim::Scrim;
 /// MS-2: fuzzy 매처 모듈.
 pub mod fuzzy;
 
+/// MS-4: Real command registry (AC-PL-16).
+pub mod registry;
+pub use registry::{CATEGORIES, CommandEntry as RegistryCommandEntry, CommandRegistry};
+
 /// MS-2: 3 variant 모듈.
 pub mod variants;
 

@@ -1,7 +1,7 @@
-//! CmdPalette variant — Cmd+P 파일 quick open.
+//! CmdPalette variant — Cmd+P 파일 quick open + @mention / # issue mode (MS-4).
 //!
-//! @MX:NOTE: [AUTO] CmdPalette variant — mock 파일 인덱스 데이터 소스. 실제 소스는 후속 SPEC.
-//! @MX:SPEC: SPEC-V3-012 MS-2 AC-PL-6
+//! @MX:NOTE: [AUTO] CmdPalette variant — file source (F-1) + @symbol / #issue mode switching (MS-4).
+//! @MX:SPEC: SPEC-V3-012 MS-2 AC-PL-6, MS-4 AC-PL-20
 
 use crate::palette::fuzzy::fuzzy_match;
 use crate::palette::palette_view::{PaletteEvent, PaletteItem, PaletteView};
@@ -26,6 +26,75 @@ pub const MOCK_FILE_INDEX: &[&str] = &[
 ];
 
 // ============================================================
+// PaletteMode — @mention / # issue mode switching (MS-4 AC-PL-20)
+// ============================================================
+
+/// Active search mode for CmdPalette.
+///
+/// Determined by the leading character of the query:
+/// - No prefix or `@` not at start → `File` (default)
+/// - `@` prefix → `Symbol` (mock data for now)
+/// - `#` prefix → `Issue` (mock data for now)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaletteMode {
+    /// File quick-open (default, Cmd+P).
+    File,
+    /// Symbol search mode (triggered by leading `@`).
+    ///
+    /// Real symbol data is a Non-Goal for MS-4; mock list is used.
+    Symbol,
+    /// Issue search mode (triggered by leading `#`).
+    ///
+    /// Real issue data is a Non-Goal for MS-4; mock list is used.
+    Issue,
+}
+
+impl PaletteMode {
+    /// Detect mode from raw query string.
+    pub fn detect(query: &str) -> Self {
+        if query.starts_with('@') {
+            PaletteMode::Symbol
+        } else if query.starts_with('#') {
+            PaletteMode::Issue
+        } else {
+            PaletteMode::File
+        }
+    }
+
+    /// Strip the mode prefix from query for downstream filtering.
+    pub fn strip_prefix<'a>(&self, query: &'a str) -> &'a str {
+        match self {
+            PaletteMode::Symbol | PaletteMode::Issue => query.get(1..).unwrap_or(""),
+            PaletteMode::File => query,
+        }
+    }
+}
+
+// ============================================================
+// Mock symbol / issue data (MS-4; real source is N-Goal)
+// ============================================================
+
+/// Mock symbol list for @mention mode.
+///
+/// Real symbol index integration is a Non-Goal for MS-4.
+const MOCK_SYMBOLS: &[(&str, &str)] = &[
+    ("symbol.RootView", "RootView (struct)"),
+    ("symbol.PaletteView", "PaletteView (struct)"),
+    ("symbol.CommandRegistry", "CommandRegistry (struct)"),
+    ("symbol.TabContainer", "TabContainer (struct)"),
+    ("symbol.TerminalSurface", "TerminalSurface (struct)"),
+];
+
+/// Mock issue list for # issue mode.
+///
+/// Real issue integration is a Non-Goal for MS-4.
+const MOCK_ISSUES: &[(&str, &str)] = &[
+    ("issue.1", "#1 — Initial scaffold"),
+    ("issue.2", "#2 — Palette Surface"),
+    ("issue.3", "#3 — Terminal integration"),
+];
+
+// ============================================================
 // CmdPalette 이벤트
 // ============================================================
 
@@ -42,12 +111,12 @@ pub enum CmdPaletteEvent {
 // CmdPalette — 파일 quick open variant
 // ============================================================
 
-/// CmdPalette — Cmd+P 파일 quick open variant.
+/// CmdPalette — Cmd+P 파일 quick open variant with @mention / # issue mode (MS-4).
 ///
-/// - mock_file_index 에서 데이터 소스를 가져온다 (AC-PL-6).
-/// - query 변경 시 fuzzy match 로 필터링하고 PaletteView 를 갱신한다.
-/// - Enter 시 FileOpened(path) 이벤트를 발생시킨다.
-/// - 활성화 keybinding: Cmd+P (데이터만 선언, 실제 설치는 MS-3).
+/// - file_index for File mode (default); mock symbols for @; mock issues for #.
+/// - Mode is detected automatically from query prefix.
+/// - On Enter: emits FileOpened(path) in File mode; Symbol/Issue modes also emit FileOpened(id).
+/// - Activation keybinding: Cmd+P.
 pub struct CmdPalette {
     /// 공유 PaletteView core.
     pub view: PaletteView,
@@ -57,10 +126,12 @@ pub struct CmdPalette {
     pub last_event: Option<CmdPaletteEvent>,
     /// 활성화 keybinding 정보 (MS-3 에서 실제 설치).
     pub activation_key: &'static str,
+    /// Current active mode (File / Symbol / Issue).
+    pub mode: PaletteMode,
 }
 
 impl CmdPalette {
-    /// 기본 mock 파일 인덱스로 새 CmdPalette 를 생성한다.
+    /// Create CmdPalette with the default mock file index.
     pub fn new() -> Self {
         let file_index: Vec<String> = MOCK_FILE_INDEX.iter().map(|s| s.to_string()).collect();
         let items = files_to_items(&file_index);
@@ -69,6 +140,7 @@ impl CmdPalette {
             file_index,
             last_event: None,
             activation_key: "cmd+p",
+            mode: PaletteMode::File,
         }
     }
 
@@ -95,10 +167,11 @@ impl CmdPalette {
             file_index,
             last_event: None,
             activation_key: "cmd+p",
+            mode: PaletteMode::File,
         }
     }
 
-    /// 커스텀 파일 인덱스로 CmdPalette 를 생성한다 (테스트용).
+    /// Create CmdPalette with custom file index (for tests).
     pub fn with_file_index(files: Vec<String>) -> Self {
         let items = files_to_items(&files);
         Self {
@@ -106,15 +179,31 @@ impl CmdPalette {
             file_index: files,
             last_event: None,
             activation_key: "cmd+p",
+            mode: PaletteMode::File,
         }
     }
 
-    /// query 를 갱신하고 파일 인덱스를 fuzzy 필터링한다 (AC-PL-6).
+    /// Update query, detect mode from prefix, and re-filter the appropriate list.
     ///
-    /// 빈 쿼리면 전체 목록 표시. 필터링 후 선택 index 는 0 으로 초기화.
+    /// Mode switching (MS-4 AC-PL-20):
+    /// - `@...` → Symbol mode with mock symbol list
+    /// - `#...` → Issue mode with mock issue list
+    /// - Otherwise → File mode (default)
+    ///
+    /// On mode switch, the visible list is cleared and replaced with the
+    /// mode-appropriate data source.
     pub fn set_query(&mut self, query: String) {
+        let new_mode = PaletteMode::detect(&query);
+        if new_mode != self.mode {
+            self.mode = new_mode;
+        }
         self.view.set_query(query.clone());
-        let filtered = filter_files(&self.file_index, &query);
+        let sub_query = self.mode.strip_prefix(&query);
+        let filtered = match self.mode {
+            PaletteMode::File => filter_files(&self.file_index, &query),
+            PaletteMode::Symbol => filter_static_pairs(MOCK_SYMBOLS, sub_query),
+            PaletteMode::Issue => filter_static_pairs(MOCK_ISSUES, sub_query),
+        };
         self.view.set_items(filtered);
     }
 
@@ -243,6 +332,25 @@ fn walk_dir(
             }
         }
     }
+}
+
+/// Filter a static `(id, label)` pair slice for Symbol or Issue mode.
+fn filter_static_pairs(pairs: &[(&str, &str)], query: &str) -> Vec<PaletteItem> {
+    if query.is_empty() {
+        return pairs
+            .iter()
+            .map(|(id, label)| PaletteItem::new(id.to_string(), label.to_string()))
+            .collect();
+    }
+    let mut results: Vec<(i32, PaletteItem)> = pairs
+        .iter()
+        .filter_map(|(id, label)| {
+            fuzzy_match(query, label)
+                .map(|(score, _)| (score, PaletteItem::new(id.to_string(), label.to_string())))
+        })
+        .collect();
+    results.sort_by_key(|(score, _)| std::cmp::Reverse(*score));
+    results.into_iter().map(|(_, item)| item).collect()
 }
 
 fn files_to_items(files: &[String]) -> Vec<PaletteItem> {
@@ -443,5 +551,122 @@ mod tests {
             "palette.rs should appear in filtered results"
         );
         let _ = fs::remove_dir_all(&tmp);
+    }
+
+    // ── MS-4: @mention / # mode switching tests (AC-PL-20) ──
+
+    /// AC-PL-20: initial mode is File.
+    #[test]
+    fn initial_mode_is_file() {
+        let palette = CmdPalette::new();
+        assert_eq!(palette.mode, PaletteMode::File);
+    }
+
+    /// AC-PL-20: query starting with '@' switches to Symbol mode.
+    #[test]
+    fn at_prefix_switches_to_symbol_mode() {
+        let mut palette = make_palette_with_files(&["a.rs", "b.rs"]);
+        palette.set_query("@".to_string());
+        assert_eq!(
+            palette.mode,
+            PaletteMode::Symbol,
+            "@ prefix must switch to Symbol mode"
+        );
+    }
+
+    /// AC-PL-20: query starting with '#' switches to Issue mode.
+    #[test]
+    fn hash_prefix_switches_to_issue_mode() {
+        let mut palette = make_palette_with_files(&["a.rs"]);
+        palette.set_query("#".to_string());
+        assert_eq!(
+            palette.mode,
+            PaletteMode::Issue,
+            "# prefix must switch to Issue mode"
+        );
+    }
+
+    /// Symbol mode shows mock symbols, not file list.
+    #[test]
+    fn symbol_mode_shows_mock_symbols() {
+        let mut palette = make_palette_with_files(&["a.rs", "b.rs"]);
+        palette.set_query("@".to_string());
+        assert_eq!(palette.mode, PaletteMode::Symbol);
+        // Should show mock symbols (not file list)
+        assert!(
+            palette.filtered_count() > 0,
+            "Symbol mode must show mock symbols"
+        );
+        // Symbols contain 'struct' or known symbol names — not file names
+        let has_struct = palette
+            .view
+            .items
+            .iter()
+            .any(|i| i.label.contains("struct") || i.label.contains("RootView"));
+        assert!(has_struct, "Symbol mode must show struct symbols");
+    }
+
+    /// Issue mode shows mock issues, not file list.
+    #[test]
+    fn issue_mode_shows_mock_issues() {
+        let mut palette = make_palette_with_files(&["a.rs"]);
+        palette.set_query("#".to_string());
+        assert_eq!(palette.mode, PaletteMode::Issue);
+        assert!(
+            palette.filtered_count() > 0,
+            "Issue mode must show mock issues"
+        );
+        let has_issue = palette.view.items.iter().any(|i| i.label.starts_with('#'));
+        assert!(
+            has_issue,
+            "Issue mode must show issue labels starting with #"
+        );
+    }
+
+    /// Returning to empty query (no prefix) reverts to File mode.
+    #[test]
+    fn empty_query_reverts_to_file_mode() {
+        let mut palette = make_palette_with_files(&["a.rs", "b.rs"]);
+        palette.set_query("@symbol".to_string());
+        assert_eq!(palette.mode, PaletteMode::Symbol);
+        palette.set_query("".to_string());
+        assert_eq!(
+            palette.mode,
+            PaletteMode::File,
+            "empty query must revert to File mode"
+        );
+        // File list is restored
+        assert_eq!(palette.filtered_count(), 2, "file list must be restored");
+    }
+
+    /// Symbol mode filters by sub-query after '@'.
+    #[test]
+    fn symbol_mode_filters_by_sub_query() {
+        let mut palette = make_palette_with_files(&["a.rs"]);
+        // "@Root" should filter symbols containing "Root"
+        palette.set_query("@Root".to_string());
+        assert_eq!(palette.mode, PaletteMode::Symbol);
+        let has_root = palette.view.items.iter().any(|i| i.label.contains("Root"));
+        assert!(has_root, "@Root must match RootView symbol");
+    }
+
+    /// PaletteMode::detect works correctly.
+    #[test]
+    fn palette_mode_detect() {
+        assert_eq!(PaletteMode::detect(""), PaletteMode::File);
+        assert_eq!(PaletteMode::detect("main.rs"), PaletteMode::File);
+        assert_eq!(PaletteMode::detect("@Root"), PaletteMode::Symbol);
+        assert_eq!(PaletteMode::detect("#1"), PaletteMode::Issue);
+        assert_eq!(PaletteMode::detect("@"), PaletteMode::Symbol);
+        assert_eq!(PaletteMode::detect("#"), PaletteMode::Issue);
+    }
+
+    /// PaletteMode::strip_prefix strips leading @ or # correctly.
+    #[test]
+    fn palette_mode_strip_prefix() {
+        assert_eq!(PaletteMode::Symbol.strip_prefix("@Root"), "Root");
+        assert_eq!(PaletteMode::Issue.strip_prefix("#1"), "1");
+        assert_eq!(PaletteMode::File.strip_prefix("main.rs"), "main.rs");
+        assert_eq!(PaletteMode::Symbol.strip_prefix("@"), "");
     }
 }

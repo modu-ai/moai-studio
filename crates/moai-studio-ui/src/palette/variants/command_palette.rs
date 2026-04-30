@@ -1,26 +1,29 @@
 //! CommandPalette variant — Cmd+Shift+P 커맨드 실행.
 //!
-//! @MX:NOTE: [AUTO] CommandPalette variant — mock 커맨드 레지스트리. 실제 소스는 후속 SPEC.
-//! @MX:SPEC: SPEC-V3-012 MS-2 AC-PL-7
+//! @MX:NOTE: [AUTO] CommandPalette variant — real CommandRegistry (MS-4 AC-PL-16/17).
+//! @MX:SPEC: SPEC-V3-012 MS-2 AC-PL-7, MS-4 AC-PL-16/17
 
 use crate::palette::fuzzy::fuzzy_match;
 use crate::palette::palette_view::{PaletteEvent, PaletteItem, PaletteView};
+use crate::palette::registry::CommandRegistry;
 
 // ============================================================
-// 커맨드 레지스트리 항목
+// CommandEntry — local alias for backward compatibility
 // ============================================================
 
-/// 커맨드 레지스트리 항목 — id + label.
+/// Command registry entry — id + label (local owned version for custom registries).
+///
+/// For the real built-in registry, use `crate::palette::registry::CommandEntry`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CommandEntry {
-    /// 커맨드 식별자 (이벤트 페이로드).
+    /// Command identifier (event payload).
     pub id: String,
-    /// 목록에 표시되는 레이블.
+    /// Display label.
     pub label: String,
 }
 
 impl CommandEntry {
-    /// 새 CommandEntry 를 생성한다.
+    /// Create a new CommandEntry.
     pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self {
         Self {
             id: id.into(),
@@ -30,12 +33,28 @@ impl CommandEntry {
 }
 
 // ============================================================
-// mock 커맨드 레지스트리 (AC-PL-7)
+// Real CommandRegistry integration (MS-4 AC-PL-16)
 // ============================================================
 
-/// CommandPalette 기본 mock 커맨드 레지스트리.
+/// Build command entries from the real CommandRegistry.
 ///
-/// N2 (Non-Goal): 실제 커맨드 레지스트리 + 사용자 정의 커맨드 등록은 후속 SPEC.
+/// This replaces `default_mock_commands()` as the source for `CommandPalette::new()`.
+fn registry_to_entries(registry: &CommandRegistry) -> Vec<CommandEntry> {
+    registry
+        .all()
+        .iter()
+        .map(|e| CommandEntry::new(e.id, e.label))
+        .collect()
+}
+
+/// CommandPalette 기본 mock 커맨드 레지스트리 (deprecated — use CommandRegistry).
+///
+/// Retained for backward compatibility in tests only.
+/// New code should use `CommandPalette::new()` which consumes `CommandRegistry::default_registry()`.
+#[deprecated(
+    since = "0.2.0",
+    note = "Use CommandRegistry::default_registry() instead. This function will be removed."
+)]
 pub fn default_mock_commands() -> Vec<CommandEntry> {
     vec![
         CommandEntry::new("file.new", "New File"),
@@ -86,9 +105,12 @@ pub struct CommandPalette {
 }
 
 impl CommandPalette {
-    /// 기본 mock 커맨드 레지스트리로 새 CommandPalette 를 생성한다.
+    /// Create a new CommandPalette from the real CommandRegistry (MS-4 AC-PL-16).
+    ///
+    /// This replaces mock data with the full 30+ command registry.
     pub fn new() -> Self {
-        let registry = default_mock_commands();
+        let real_registry = CommandRegistry::default_registry();
+        let registry = registry_to_entries(&real_registry);
         let items = commands_to_items(&registry);
         Self {
             view: PaletteView::with_items(items),
@@ -277,5 +299,66 @@ mod tests {
         palette.set_query("format".to_string());
         palette.set_query("".to_string());
         assert_eq!(palette.filtered_count(), 5, "빈 쿼리 → 전체 커맨드 복원");
+    }
+
+    // ── MS-4: real registry tests (AC-PL-16/17) ──
+
+    /// AC-PL-16: CommandPalette::new() uses real registry with >= 30 commands.
+    #[test]
+    fn new_uses_real_registry_with_30_plus_commands() {
+        let palette = CommandPalette::new();
+        assert!(
+            palette.filtered_count() >= 30,
+            "real registry must have >= 30 commands, got {}",
+            palette.filtered_count()
+        );
+    }
+
+    /// AC-PL-17: fuzzy filter still works with real registry.
+    #[test]
+    fn fuzzy_filter_works_with_real_registry() {
+        let mut palette = CommandPalette::new();
+        palette.set_query("pane".to_string());
+        let count = palette.filtered_count();
+        assert!(count > 0, "pane query must match at least one real command");
+        assert!(
+            count < 40,
+            "pane query should not match all commands, got {}",
+            count
+        );
+    }
+
+    /// Real registry contains namespaced pane commands.
+    #[test]
+    fn real_registry_contains_pane_split_horizontal() {
+        let mut palette = CommandPalette::new();
+        palette.set_query("split horizontal".to_string());
+        // Should match "Split Pane Horizontal"
+        assert!(
+            palette.filtered_count() > 0,
+            "real registry must contain pane split commands"
+        );
+    }
+
+    /// Real registry contains settings.open command.
+    #[test]
+    fn real_registry_contains_settings_open() {
+        let mut palette = CommandPalette::new();
+        palette.set_query("open settings".to_string());
+        assert!(
+            palette.filtered_count() > 0,
+            "real registry must contain settings.open"
+        );
+    }
+
+    /// Real registry contains theme commands.
+    #[test]
+    fn real_registry_contains_theme_toggle() {
+        let mut palette = CommandPalette::new();
+        palette.set_query("toggle theme".to_string());
+        assert!(
+            palette.filtered_count() > 0,
+            "real registry must contain theme.toggle"
+        );
     }
 }

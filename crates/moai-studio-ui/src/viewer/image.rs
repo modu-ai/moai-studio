@@ -8,8 +8,10 @@
 use crate::design::tokens as tok;
 use crate::viewer::exif::ExifData;
 use crate::viewer::image_data::ImageData;
-use gpui::{Context, CursorStyle, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb};
 use gpui::prelude::FluentBuilder;
+use gpui::{
+    Context, CursorStyle, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb,
+};
 
 use std::path::Path;
 
@@ -261,9 +263,7 @@ impl Render for ImageViewer {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         // Show error if loading failed (REQ-IV-003)
         if let Some(ref error) = self.error_message {
-            return self
-                .render_error_message(error)
-                .into_any_element();
+            return self.render_error_message(error).into_any_element();
         }
 
         // SVG placeholder (REQ-IV-013)
@@ -396,10 +396,9 @@ impl ImageViewer {
                     .child("SVG preview not yet supported"),
             )
             .child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(tok::BORDER_SUBTLE))
-                    .child("SVG files are routed to the image viewer but rendering is not implemented"),
+                div().text_xs().text_color(rgb(tok::BORDER_SUBTLE)).child(
+                    "SVG files are routed to the image viewer but rendering is not implemented",
+                ),
             )
     }
 
@@ -619,13 +618,7 @@ mod tests {
 
         // Load image data so fit_to_view_action has dimensions
         let pixels = vec![0u8; 100 * 100 * 4];
-        let data = ImageData::new(
-            pixels,
-            100,
-            100,
-            std::path::PathBuf::from("test.png"),
-            1024,
-        );
+        let data = ImageData::new(pixels, 100, 100, std::path::PathBuf::from("test.png"), 1024);
         viewer.image_data = Some(data);
 
         viewer.fit_to_view_action();
@@ -648,7 +641,10 @@ mod tests {
 
         viewer.zoom_actual_size();
 
-        assert!((viewer.zoom() - 1.0).abs() < f32::EPSILON, "zoom should be 1.0");
+        assert!(
+            (viewer.zoom() - 1.0).abs() < f32::EPSILON,
+            "zoom should be 1.0"
+        );
         assert!(
             (viewer.pan_x() - 0.0).abs() < f32::EPSILON,
             "100% should reset pan_x"
@@ -664,7 +660,10 @@ mod tests {
     #[test]
     fn exif_panel_default_hidden() {
         let viewer = ImageViewer::new();
-        assert!(!viewer.is_exif_panel_visible(), "EXIF panel should be hidden by default");
+        assert!(
+            !viewer.is_exif_panel_visible(),
+            "EXIF panel should be hidden by default"
+        );
     }
 
     #[test]
@@ -672,9 +671,15 @@ mod tests {
         let mut viewer = ImageViewer::new();
         assert!(!viewer.is_exif_panel_visible());
         viewer.toggle_exif_panel();
-        assert!(viewer.is_exif_panel_visible(), "first toggle should show panel");
+        assert!(
+            viewer.is_exif_panel_visible(),
+            "first toggle should show panel"
+        );
         viewer.toggle_exif_panel();
-        assert!(!viewer.is_exif_panel_visible(), "second toggle should hide panel");
+        assert!(
+            !viewer.is_exif_panel_visible(),
+            "second toggle should hide panel"
+        );
     }
 
     // ── REQ-IV-013: SVG placeholder tests ──
@@ -697,13 +702,7 @@ mod tests {
         let svg_path = std::path::PathBuf::from("graphic.svg");
         assert!(ImageViewer::is_svg_path(&svg_path));
         viewer.is_svg = true;
-        viewer.image_data = Some(ImageData::new(
-            vec![0u8; 4],
-            1,
-            1,
-            svg_path,
-            100,
-        ));
+        viewer.image_data = Some(ImageData::new(vec![0u8; 4], 1, 1, svg_path, 100));
         assert!(viewer.is_svg());
     }
 
@@ -726,7 +725,7 @@ mod tests {
 
     #[test]
     fn non_svg_file_does_not_set_is_svg() {
-        let mut viewer = ImageViewer::new();
+        let viewer = ImageViewer::new();
         assert!(!viewer.is_svg());
         // PNG should not set is_svg
         let png_path = std::path::PathBuf::from("photo.png");
