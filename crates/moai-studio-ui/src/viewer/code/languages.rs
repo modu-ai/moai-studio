@@ -16,12 +16,15 @@ use tree_sitter::Language;
 /// tree-sitter syntax highlight 지원 언어 집합 (REQ-MV-021, USER-DECISION OD-MV2).
 ///
 /// MS-2 에서는 Rust / Go / Python / TypeScript 4개 언어를 우선 지원한다.
+/// MS-5 에서는 JavaScript / JSON 을 추가하여 6개 언어로 확장.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SupportedLang {
     Rust,
     Go,
     Python,
     TypeScript,
+    JavaScript,
+    Json,
 }
 
 // ============================================================
@@ -33,15 +36,19 @@ pub enum SupportedLang {
 /// 매핑:
 /// - `rs` → Rust
 /// - `go` → Go
-/// - `py` → Python
+/// - `py`, `pyi` → Python
 /// - `ts`, `tsx` → TypeScript
+/// - `js`, `jsx`, `mjs`, `cjs` → JavaScript (MS-5)
+/// - `json`, `jsonc` → Json (MS-5)
 /// - 그 외 → None
 pub fn detect_lang_from_extension(ext: &str) -> Option<SupportedLang> {
     match ext.to_ascii_lowercase().as_str() {
         "rs" => Some(SupportedLang::Rust),
         "go" => Some(SupportedLang::Go),
-        "py" => Some(SupportedLang::Python),
+        "py" | "pyi" => Some(SupportedLang::Python),
         "ts" | "tsx" => Some(SupportedLang::TypeScript),
+        "js" | "jsx" | "mjs" | "cjs" => Some(SupportedLang::JavaScript),
+        "json" | "jsonc" => Some(SupportedLang::Json),
         _ => None,
     }
 }
@@ -59,6 +66,8 @@ pub fn load_grammar(lang: SupportedLang) -> Language {
         SupportedLang::Go => tree_sitter_go::LANGUAGE.into(),
         SupportedLang::Python => tree_sitter_python::LANGUAGE.into(),
         SupportedLang::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+        SupportedLang::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+        SupportedLang::Json => tree_sitter_json::LANGUAGE.into(),
     }
 }
 
@@ -114,5 +123,61 @@ mod tests {
         let _ = load_grammar(SupportedLang::Go);
         let _ = load_grammar(SupportedLang::Python);
         let _ = load_grammar(SupportedLang::TypeScript);
+        let _ = load_grammar(SupportedLang::JavaScript);
+        let _ = load_grammar(SupportedLang::Json);
+    }
+
+    // ── SPEC-V3-006 MS-5: JavaScript / JSON extension detection ──
+
+    #[test]
+    fn detect_lang_javascript_extensions() {
+        assert_eq!(
+            detect_lang_from_extension("js"),
+            Some(SupportedLang::JavaScript)
+        );
+        assert_eq!(
+            detect_lang_from_extension("jsx"),
+            Some(SupportedLang::JavaScript)
+        );
+        assert_eq!(
+            detect_lang_from_extension("mjs"),
+            Some(SupportedLang::JavaScript)
+        );
+        assert_eq!(
+            detect_lang_from_extension("cjs"),
+            Some(SupportedLang::JavaScript)
+        );
+    }
+
+    #[test]
+    fn detect_lang_json_extensions() {
+        assert_eq!(
+            detect_lang_from_extension("json"),
+            Some(SupportedLang::Json)
+        );
+        assert_eq!(
+            detect_lang_from_extension("jsonc"),
+            Some(SupportedLang::Json)
+        );
+    }
+
+    #[test]
+    fn detect_lang_python_pyi_alias() {
+        assert_eq!(
+            detect_lang_from_extension("pyi"),
+            Some(SupportedLang::Python)
+        );
+    }
+
+    #[test]
+    fn detect_lang_extensions_are_case_insensitive() {
+        assert_eq!(
+            detect_lang_from_extension("JSON"),
+            Some(SupportedLang::Json)
+        );
+        assert_eq!(
+            detect_lang_from_extension("MJS"),
+            Some(SupportedLang::JavaScript)
+        );
     }
 }

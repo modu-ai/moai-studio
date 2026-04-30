@@ -113,3 +113,32 @@ Branch: feature/SPEC-V3-006-ms4-katex-mermaid
 ### Deferred to V3-007 wry integration
 - 실제 KaTeX SVG 렌더 (REQ-MV-010) — wry WebView 채택 후
 - 실제 Mermaid 다이어그램 (REQ-MV-011) — C-7 Mermaid Renderer Surface
+
+---
+
+## MS-5 (2026-04-30 sess 8) — JavaScript / JSON tree-sitter 지원 추가
+
+Branch: feature/SPEC-V3-006-ms5-langs
+
+### Implementation
+- `Cargo.toml` (moai-studio-ui): tree-sitter-javascript 0.23 + tree-sitter-json 0.24 추가
+- `viewer/code/languages.rs`: `SupportedLang::JavaScript` / `SupportedLang::Json` enum variant 추가, detect_lang_from_extension 매핑 (js/jsx/mjs/cjs/json/jsonc/pyi 추가, case-insensitive)
+- `viewer/code/highlight.rs`: `map_javascript_kind` (40+ keywords/operators) + `map_json_kind` (string/number/literal/structural punctuation) 추가
+
+### Acceptance Criteria
+| AC | 내용 | 상태 |
+|----|------|------|
+| AC-MV-18 | JS 확장자 감지 (js/jsx/mjs/cjs) | ✅ |
+| AC-MV-19 | JSON 확장자 감지 (json/jsonc) | ✅ |
+| AC-MV-20 | JS keyword/operator/constant/number highlight | ✅ |
+| AC-MV-21 | JSON string/number/literal/punctuation highlight | ✅ |
+| AC-MV-22 | 확장자 case-insensitive 처리 | ✅ |
+| AC-MV-23 | Python `.pyi` alias 추가 | ✅ |
+
+### Test count
+- 신규: 11 (languages 6 + highlight 5)
+- 전체 viewer::code 모듈 27 tests pass, clippy 0, fmt clean
+
+### Deferred
+- 실제 LSP diagnostics squiggly underlines (REQ-MV-040~046) — V3-006 MS-6 또는 후속 SPEC
+- C/C++/Java/Kotlin grammar 추가 — v0.2.0+ 후보
