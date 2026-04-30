@@ -1129,6 +1129,68 @@ impl RootView {
         }
     }
 
+    /// SPEC-V0-1-2-MENUS-001 MS-2 (AC-MN-9 / AC-MN-10): split the focused leaf
+    /// of the active tab in the requested direction.
+    ///
+    /// No-op when:
+    /// - `tab_container` is `None` (workspace not yet active)
+    /// - the active tab has no `last_focused_pane` (defensive — should not
+    ///   happen because `Tab::new` seeds the focus)
+    /// - the focused pane id no longer exists in the tree (e.g. a previous
+    ///   close removed it without updating focus)
+    ///
+    /// The new pane carries an empty payload because the active payload type
+    /// is `PaneTree<String>`; a follow-up SPEC will switch to `PaneTree<LeafKind>`
+    /// so that splits can mount Terminal/Markdown/Code surfaces directly.
+    pub fn handle_split_action(
+        &mut self,
+        direction: panes::tree::SplitDirection,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(container) = self.tab_container.clone() else {
+            tracing::debug!("split_action: tab_container is None — ignored");
+            return;
+        };
+        let focused = container.read(cx).active_tab().last_focused_pane.clone();
+        let Some(focused) = focused else {
+            tracing::debug!("split_action: no focused pane — ignored");
+            return;
+        };
+        let new_id = panes::PaneId::new_unique();
+        let result = container.update(cx, |tc, _cx| {
+            let tree = &mut tc.active_tab_mut().pane_tree;
+            match direction {
+                panes::tree::SplitDirection::Horizontal => {
+                    tree.split_horizontal(&focused, new_id, String::new())
+                }
+                panes::tree::SplitDirection::Vertical => {
+                    tree.split_vertical(&focused, new_id, String::new())
+                }
+            }
+        });
+        if let Err(e) = result {
+            tracing::warn!(?e, ?direction, "split_action failed");
+        }
+        cx.notify();
+    }
+
+    /// SPEC-V0-1-2-MENUS-001 MS-2 (AC-MN-8): mount or dismiss the SPEC panel
+    /// overlay. Mirrors the body of `handle_spec_key_event` so menu/keybinding
+    /// dispatch and the legacy direct key handler stay in sync.
+    pub fn handle_open_spec_panel(&mut self, cx: &mut Context<Self>) {
+        // Single-overlay invariant: respect existing modals.
+        if self.palette.is_visible() || self.settings_modal.is_some() {
+            return;
+        }
+        if self.spec_panel.is_none() {
+            let specs_dir = self.storage_path.join(".moai").join("specs");
+            self.spec_panel = Some(spec_ui::SpecPanelView::new(specs_dir));
+        } else {
+            self.spec_panel = None;
+        }
+        cx.notify();
+    }
+
     /// 파일 열기 이벤트를 처리한다 (REQ-MV-080).
     ///
     /// SPEC-V3-005 의 `OpenFileEvent` 를 소비하여:
@@ -1339,11 +1401,17 @@ impl Render for RootView {
                 this.user_settings.appearance.theme = next;
                 cx.notify();
             }))
-            .on_action(cx.listener(|_this, _: &SplitRight, _window, _cx| {
-                info!("SplitRight — pane splitting deferred to SPEC-V3-003");
+            // SPEC-V0-1-2-MENUS-001 MS-2 (AC-MN-9): SplitRight wires to
+            // PaneTree::split_horizontal on the active tab's focused leaf.
+            // The new pane is created with an empty payload (PaneTree<String>);
+            // a follow-up SPEC will switch the payload type to LeafKind so the
+            // new pane can be mounted with a Terminal/Markdown surface.
+            .on_action(cx.listener(|this, _: &SplitRight, _window, cx| {
+                this.handle_split_action(panes::tree::SplitDirection::Horizontal, cx);
             }))
-            .on_action(cx.listener(|_this, _: &SplitDown, _window, _cx| {
-                info!("SplitDown — pane splitting deferred to SPEC-V3-003");
+            // SPEC-V0-1-2-MENUS-001 MS-2 (AC-MN-10): SplitDown vertical split.
+            .on_action(cx.listener(|this, _: &SplitDown, _window, cx| {
+                this.handle_split_action(panes::tree::SplitDirection::Vertical, cx);
             }))
             .on_action(cx.listener(|_this, _: &ClosePane, _window, _cx| {
                 info!("ClosePane — pane management deferred");
@@ -1365,6 +1433,18 @@ impl Render for RootView {
                     info!("NewCodeViewerSurface — surface creation deferred");
                 }),
             )
+            // SPEC-V0-1-2-MENUS-001 MS-2 (AC-MN-7): Cmd+K / Go menu →
+            // command palette toggle. Reuses the existing palette overlay so
+            // the keybinding handler and the menu dispatch share state.
+            .on_action(cx.listener(|this, _: &OpenCommandPalette, _window, cx| {
+                this.toggle_cmd_palette();
+                cx.notify();
+            }))
+            // SPEC-V0-1-2-MENUS-001 MS-2 (AC-MN-8): Cmd+Shift+P / Go menu →
+            // SPEC panel mount/dismiss with single-overlay invariant.
+            .on_action(cx.listener(|this, _: &OpenSpecPanel, _window, cx| {
+                this.handle_open_spec_panel(cx);
+            }))
             .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _window, cx| {
                 // settings 키 먼저 처리 — 소비되면 나머지 스킵.
                 if this.handle_settings_key_event(ev) {
@@ -3492,5 +3572,183 @@ mod tests {
                 assert_eq!(view.pending_toasts.len(), 0);
             });
         });
+    }
+
+    // ============================================================
+    // SPEC-V0-1-2-MENUS-001 MS-2 — Action handler wiring polish
+    // (AC-MN-7 / AC-MN-8 / AC-MN-9 / AC-MN-10 / AC-MN-11)
+    // ============================================================
+
+    /// AC-MN-9: SplitRight on the focused leaf turns the tree into a Horizontal split.
+    #[test]
+    fn split_right_action_horizontal_splits_focused_leaf() {
+        use gpui::{AppContext, TestAppContext};
+        use panes::tree::SplitDirection;
+
+        let mut cx = TestAppContext::single();
+        let root_entity = cx.new(|cx| {
+            let mut rv = RootView::new(vec![], dummy_path());
+            rv.tab_container = Some(cx.new(|_| tabs::container::TabContainer::new()));
+            rv
+        });
+
+        cx.update(|app| {
+            root_entity.update(app, |view: &mut RootView, cx| {
+                view.handle_split_action(SplitDirection::Horizontal, cx);
+            });
+        });
+
+        cx.read(|app| {
+            let tc = root_entity
+                .read(app)
+                .tab_container
+                .as_ref()
+                .unwrap()
+                .read(app);
+            let tree = &tc.active_tab().pane_tree;
+            match tree {
+                panes::PaneTree::Split { direction, .. } => {
+                    assert_eq!(*direction, SplitDirection::Horizontal);
+                }
+                panes::PaneTree::Leaf(_) => {
+                    panic!("expected Horizontal split, found Leaf")
+                }
+            }
+        });
+    }
+
+    /// AC-MN-10: SplitDown turns the tree into a Vertical split.
+    #[test]
+    fn split_down_action_vertical_splits_focused_leaf() {
+        use gpui::{AppContext, TestAppContext};
+        use panes::tree::SplitDirection;
+
+        let mut cx = TestAppContext::single();
+        let root_entity = cx.new(|cx| {
+            let mut rv = RootView::new(vec![], dummy_path());
+            rv.tab_container = Some(cx.new(|_| tabs::container::TabContainer::new()));
+            rv
+        });
+
+        cx.update(|app| {
+            root_entity.update(app, |view: &mut RootView, cx| {
+                view.handle_split_action(SplitDirection::Vertical, cx);
+            });
+        });
+
+        cx.read(|app| {
+            let tc = root_entity
+                .read(app)
+                .tab_container
+                .as_ref()
+                .unwrap()
+                .read(app);
+            let tree = &tc.active_tab().pane_tree;
+            match tree {
+                panes::PaneTree::Split { direction, .. } => {
+                    assert_eq!(*direction, SplitDirection::Vertical);
+                }
+                panes::PaneTree::Leaf(_) => {
+                    panic!("expected Vertical split, found Leaf")
+                }
+            }
+        });
+    }
+
+    /// AC-MN-11: split action without a tab_container is a safe no-op.
+    #[test]
+    fn split_action_without_tab_container_is_noop() {
+        use gpui::{AppContext, TestAppContext};
+        use panes::tree::SplitDirection;
+
+        let mut cx = TestAppContext::single();
+        let root_entity = cx.new(|_| RootView::new(vec![], dummy_path()));
+
+        cx.update(|app| {
+            root_entity.update(app, |view: &mut RootView, cx| {
+                view.handle_split_action(SplitDirection::Horizontal, cx);
+                // Should not panic, should not mutate any state we own.
+                assert!(view.tab_container.is_none());
+            });
+        });
+    }
+
+    /// AC-MN-8: OpenSpecPanel toggles the spec_panel slot from None to Some.
+    #[test]
+    fn open_spec_panel_action_mounts_when_dismissed() {
+        use gpui::{AppContext, TestAppContext};
+
+        let mut cx = TestAppContext::single();
+        let root_entity = cx.new(|_| RootView::new(vec![], dummy_path()));
+
+        cx.update(|app| {
+            root_entity.update(app, |view: &mut RootView, cx| {
+                assert!(view.spec_panel.is_none());
+                view.handle_open_spec_panel(cx);
+                assert!(view.spec_panel.is_some(), "spec_panel must mount");
+            });
+        });
+    }
+
+    /// AC-MN-8: a second invocation dismisses the panel.
+    #[test]
+    fn open_spec_panel_action_dismisses_when_visible() {
+        use gpui::{AppContext, TestAppContext};
+
+        let mut cx = TestAppContext::single();
+        let root_entity = cx.new(|_| RootView::new(vec![], dummy_path()));
+
+        cx.update(|app| {
+            root_entity.update(app, |view: &mut RootView, cx| {
+                view.handle_open_spec_panel(cx); // mount
+                assert!(view.spec_panel.is_some());
+                view.handle_open_spec_panel(cx); // dismiss
+                assert!(view.spec_panel.is_none(), "second dispatch must dismiss");
+            });
+        });
+    }
+
+    /// AC-MN-8 (overlay invariant): mount is suppressed while a settings modal is open.
+    #[test]
+    fn open_spec_panel_action_respects_settings_modal_invariant() {
+        use gpui::{AppContext, TestAppContext};
+
+        let mut cx = TestAppContext::single();
+        let root_entity = cx.new(|_| {
+            let mut rv = RootView::new(vec![], dummy_path());
+            let mut modal = settings::SettingsModal::new();
+            modal.mount();
+            rv.settings_modal = Some(modal);
+            rv
+        });
+
+        cx.update(|app| {
+            root_entity.update(app, |view: &mut RootView, cx| {
+                view.handle_open_spec_panel(cx);
+                assert!(
+                    view.spec_panel.is_none(),
+                    "spec_panel must not mount while settings modal is active"
+                );
+            });
+        });
+    }
+
+    /// AC-MN-7: OpenCommandPalette toggles the cmd palette state.
+    #[test]
+    fn open_command_palette_action_toggles_cmd_palette() {
+        let mut view = RootView::new(vec![], dummy_path());
+        assert!(view.palette.active_variant.is_none());
+
+        view.toggle_cmd_palette();
+        assert!(
+            view.palette.active_variant.is_some(),
+            "first toggle opens the palette"
+        );
+
+        view.toggle_cmd_palette();
+        assert!(
+            view.palette.active_variant.is_none(),
+            "second toggle dismisses the palette"
+        );
     }
 }
