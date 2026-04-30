@@ -87,3 +87,29 @@
 - katex-mermaid-rendering-strategy-v3-006: (c) Text fallback for MS-1/MS-2, WebView deferred
 - tree-sitter-language-priority-v3-006: (a) 4 langs — Rust + Go + Python + TypeScript
 - lsp-server-binary-discovery-v3-006: (i) Graceful degradation with banner
+
+---
+
+## MS-4 (2026-04-30 sess 8) — KaTeX/Mermaid placeholder enrichment
+
+Branch: feature/SPEC-V3-006-ms4-katex-mermaid
+
+### Implementation
+- `markdown/math_unicode.rs` (신규) — best-effort LaTeX→Unicode preview converter (superscripts, subscripts, Greek, operators, set/relation symbols). 15 unit tests.
+- `markdown/mermaid_meta.rs` (신규) — Mermaid diagram type detector (flowchart/sequence/class/state/er/journey/gantt/pie/mindmap/timeline/gitGraph). 13 unit tests.
+- `markdown/mod.rs` — render_block: Math 블록은 `MATH · {unicode-preview}` 헤더 + 원문, Mermaid 블록은 `MERMAID ({type}) · C-7 pending` 헤더 + 원문 표시.
+
+### Acceptance Criteria
+| AC | 내용 | 상태 |
+|----|------|------|
+| AC-MV-15 | Math 블록 placeholder가 가능한 곳까지 Unicode preview 표시 (e.g., `E=mc^2` → `E=mc²`) | ✅ |
+| AC-MV-16 | Mermaid 블록 placeholder가 diagram type 라벨 표시 | ✅ |
+| AC-MV-17 | 변환 실패 시 원본 LaTeX 그대로 통과 (panic 없음) | ✅ |
+
+### Test count
+- 신규: 28 (math_unicode 15 + mermaid_meta 13)
+- 전체 markdown 모듈 67 tests pass, clippy 0, fmt clean
+
+### Deferred to V3-007 wry integration
+- 실제 KaTeX SVG 렌더 (REQ-MV-010) — wry WebView 채택 후
+- 실제 Mermaid 다이어그램 (REQ-MV-011) — C-7 Mermaid Renderer Surface
