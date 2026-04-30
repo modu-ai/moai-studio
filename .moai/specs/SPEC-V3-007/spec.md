@@ -9,7 +9,7 @@ priority: High
 issue_number: 0
 depends_on: [SPEC-V3-004]
 parallel_with: [SPEC-V3-005, SPEC-V3-006, SPEC-V3-008, SPEC-V3-009]
-milestones: [MS-1, MS-2, MS-3]
+milestones: [MS-1, MS-2, MS-3, MS-4]
 language: ko
 labels: [phase-3, ui, gpui, webview, wry, browser, in-app-docs, dev-server-preview, oauth]
 revision: v1.0.0 (initial draft, 4-surface vision 의 4번째 surface)
@@ -360,6 +360,22 @@ window.studio._reply(id, result) ◀─────────┘
 - **범위**: JS↔Rust bridge 양방향 + trusted_domains 검증 + dev-server URL auto-detect (PTY hook + debouncer + toast) + persistence schema 의 `LeafState::Web { url }` minor extension + crash recovery (state == Crashed 토스트 + reload).
 - **포함 요구사항**: REQ-WB-006, REQ-WB-030 ~ REQ-WB-035, REQ-WB-050 ~ REQ-WB-055.
 - **시연 가능 상태**: 별도 터미널에서 `python -m http.server 8080` 실행 → 토스트 → 클릭 → 새 탭 webview 가시. JS 콘솔에서 `window.studio.send(...)` → tracing log 가시. Studio 재시작 후 마지막 webview 의 URL 복원.
+
+### MS-4: RootView integration polish — TerminalSurface ↔ url_detector ↔ pending_toasts ↔ TabContainer 와이어링 (C-4 통합)
+
+- **범위 (v0.1.2 Task 6 / C-4 polish)**: MS-1~3 의 web 모듈은 완성되어 있으나 RootView level 의 통합이 미완료된 부분을 마감. `feature = "web"` 가드 하에서 (a) TerminalSurface 가 stdout chunk 를 `TerminalStdoutEvent` 로 emit, (b) RootView 가 그 이벤트를 subscribe 하여 `UrlDetectionDebouncer` 에 push, (c) emit 된 새 URL 을 `pending_toasts` 에 추가, (d) toast click 시 `TabContainer::new_tab` + `LeafKind::Web` 마운트 → `WebViewSurface::navigate` 호출. 신규 코드는 모두 `#[cfg(feature = "web")]` 가드.
+- **포함 요구사항**: REQ-WB-031 (stdout observer hook 의 ui-side 진입점), REQ-WB-032 (toast UI 렌더), REQ-WB-033 (toast click → new tab), REQ-WB-035 (dedupe + silence 통합 검증), REQ-WB-064 (terminal/mod.rs 공개 API 보존).
+- **변경 금지**: `crates/moai-studio-terminal/**` 무변경 (REQ-WB-060). `web/url_detector.rs` 의 unit 테스트 11 건 회귀 0. SPEC-V3-002/003/004 의 모든 테스트 GREEN.
+- **시연 가능 상태 (manual smoke)**: `cargo run -p moai-studio-app --features moai-studio-ui/web` → 별도 터미널에서 `python -m http.server 8080` 출력을 PTY 에 입력 (혹은 직접 stdout 시뮬레이션) → 우측 하단 토스트 가시 → 클릭 → 새 탭이 `LeafKind::Web` 으로 마운트 + 해당 URL navigate.
+
+#### MS-4 Acceptance Criteria
+
+| AC ID | Given | When | Then | 검증 수단 |
+|-------|-------|------|------|-----------|
+| AC-WB-INT-1 | RootView 가 `feature = "web"` 빌드, `pending_toasts` 비어있음 | TerminalSurface 가 `Serving HTTP on 0.0.0.0 port 8080\n` chunk emit | (a) `RootView.url_detector` 가 `http://localhost:8080` 매치, (b) `pending_toasts` 에 1 개 push, (c) 같은 URL 의 두 번째 chunk 가 5 초 내 도착 시 `pending_toasts` 미증가 (dedupe) | unit test (`wire_terminal_stdout_callback` mock + RootView 직접 mutation 검증) |
+| AC-WB-INT-2 | RootView 에 `pending_toasts` 1 개, TabContainer 활성 (탭 1 개) | 사용자가 토스트의 "Open" 액션 호출 (helper 메서드 직접) | (a) TabContainer 의 tab_count 가 +1, (b) `active_tab_idx` 가 새 탭 인덱스, (c) 새 탭의 leaf 가 `LeafKind::Web(Entity<WebViewSurface>)`, (d) WebViewSurface 의 `url` 이 토스트 URL 과 일치, (e) 사용된 토스트가 `pending_toasts` 에서 제거 | integration test (TestAppContext + leaf_payloads 검증) |
+| AC-WB-INT-3 | RootView 에 `pending_toasts` 1 개 | 사용자가 토스트 dismiss 액션 호출 | (a) `pending_toasts` 에서 해당 항목 제거, (b) `url_detector` 의 dismissed_urls 에 URL 등록, (c) 30 분 silence 동안 같은 URL 재 detect 시 toast 재push 미발생 | unit test (시뮬레이션 시간 + Debouncer.dismiss 호출) |
+| AC-WB-INT-4 | 전체 MS-4 적용 후 | `cargo test --workspace --all-targets` 실행 (default features) | SPEC-V3-002/003/004/006/007 MS-1~3 의 모든 unit/integration tests GREEN. 회귀 0. | CI / 로컬 cargo test |
 
 ---
 

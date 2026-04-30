@@ -204,6 +204,14 @@ impl WebViewSurface {
         &self.state
     }
 
+    /// Current URL displayed in the URL bar (SPEC-V3-007 MS-4 integration).
+    ///
+    /// Used by RootView integration tests (AC-WB-INT-2) to assert that a
+    /// toast click correctly mounts a `LeafKind::Web` with the detected URL.
+    pub fn current_url(&self) -> &str {
+        &self.url_bar_text
+    }
+
     /// Set the webview state (MS-3)
     pub fn set_state(&mut self, state: WebViewState) {
         self.state = state;

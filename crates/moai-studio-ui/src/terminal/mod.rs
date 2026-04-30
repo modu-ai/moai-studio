@@ -93,6 +93,24 @@ pub enum TerminalClickEvent {
 }
 
 // ============================================================
+// TerminalStdoutEvent — SPEC-V3-007 MS-4 (REQ-WB-031)
+// ============================================================
+
+/// Emitted by TerminalSurface for each printable PTY stdout chunk.
+///
+/// Used by RootView to feed downstream consumers (e.g. URL auto-detector
+/// for the WebView surface, RG-WB-4). The payload only contains ASCII-safe
+/// printable characters plus spaces because the upstream `on_output` filter
+/// already strips control bytes for placeholder rendering.
+///
+/// The event is intentionally cheap (single owned String) so subscribers
+/// that do not enable `feature = "web"` simply ignore it.
+pub enum TerminalStdoutEvent {
+    /// A chunk of stdout text suitable for text-pattern matching.
+    Chunk(String),
+}
+
+// ============================================================
 // TerminalState — T3 완료 후 RenderSnapshot 으로 교체 예정
 // ============================================================
 
@@ -155,17 +173,32 @@ impl TerminalSurface {
     /// PTY stdout 출력 바이트를 처리한다 (T3 완료 후 PtyEvent::Output 으로 전환).
     ///
     /// AC-T-6: cx.notify() 호출로 content_area re-render 트리거.
+    /// SPEC-V3-007 MS-4 (REQ-WB-031): emit TerminalStdoutEvent so RootView
+    /// can feed the chunk into url_detector / pending_toasts pipeline.
     pub fn on_output(&mut self, bytes: &[u8], cx: &mut Context<Self>) {
         // TODO(T5): VtTerminal::feed(bytes) → render_state() → snapshot 갱신
         self.state.total_bytes += bytes.len();
         // 첫 번째 줄 텍스트 업데이트 (ASCII 안전 부분만 표시)
         let ascii: String = bytes
             .iter()
-            .filter(|b| b.is_ascii_graphic() || **b == b' ')
+            .filter(|b| b.is_ascii_graphic() || **b == b' ' || **b == b'\n' || **b == b'\t')
             .map(|b| *b as char)
             .collect();
         if !ascii.is_empty() {
-            self.state.row0_text = ascii;
+            // Preserve a single-line preview for the placeholder while still
+            // forwarding the multi-line chunk to subscribers.
+            let row0 = ascii
+                .lines()
+                .next()
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            if !row0.is_empty() {
+                self.state.row0_text = row0;
+            }
+            // SPEC-V3-007 MS-4: forward the chunk to subscribers (RG-WB-4).
+            // Use turbofish to disambiguate between TerminalClickEvent and
+            // TerminalStdoutEvent (both are EventEmitter targets).
+            Context::emit::<TerminalStdoutEvent>(cx, TerminalStdoutEvent::Chunk(ascii));
         }
         cx.notify();
     }
@@ -325,6 +358,11 @@ impl Default for TerminalSurface {
 }
 
 impl EventEmitter<TerminalClickEvent> for TerminalSurface {}
+// SPEC-V3-007 MS-4 (REQ-WB-031): TerminalSurface forwards each printable
+// stdout chunk so that downstream consumers (url_detector pipeline) can
+// observe shell output without touching the frozen `moai-studio-terminal`
+// crate.
+impl EventEmitter<TerminalStdoutEvent> for TerminalSurface {}
 
 // ============================================================
 // GPUI Render 구현

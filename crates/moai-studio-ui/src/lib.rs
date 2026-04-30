@@ -15,6 +15,11 @@
 //! - TerminalSurface 가 Some 이면 content_area 는 빈 상태 대신 터미널을 렌더한다.
 
 use crate::terminal::TerminalClickEvent;
+// SPEC-V3-007 MS-4 (REQ-WB-031~033): RootView wires TerminalStdoutEvent
+// into the URL detector so dev-server URLs surfaced from PTY output reach
+// the WebView surface via toast click.
+#[cfg(feature = "web")]
+use crate::terminal::TerminalStdoutEvent;
 
 pub mod agent;
 // SPEC-V0-1-2-MENUS-001 F-3: Toolbar 모듈
@@ -218,6 +223,36 @@ pub struct RootView {
     /// Set by `inject_slash_command`; drained by the render/update loop when a
     /// TerminalSurface Entity context is available.
     pub pending_slash_injection: Option<String>,
+    // ── SPEC-V3-007 MS-4 (RG-WB-4): WebView toast pipeline ──
+    /// URL auto-detection debouncer fed by TerminalStdoutEvent (REQ-WB-031).
+    ///
+    /// Enforces the 5s dedupe window and 30min dismissed-URL silence required
+    /// by REQ-WB-035. Always present so unit tests can exercise the logic
+    /// without enabling the heavy `web` feature; kept feature-gated only for
+    /// the wry-bound surface entities below.
+    #[cfg(feature = "web")]
+    pub url_detector: web::UrlDetectionDebouncer,
+    /// Pending dev-server URL toasts ready to be rendered as an overlay.
+    ///
+    /// Populated by `wire_terminal_stdout_callback` (REQ-WB-032); drained by
+    /// `open_toast_in_new_tab` (REQ-WB-033, AC-WB-INT-2) or `dismiss_toast`
+    /// (AC-WB-INT-3).
+    #[cfg(feature = "web")]
+    pub pending_toasts: Vec<WebToastEntry>,
+}
+
+/// Pending toast entry surfaced for a detected dev-server URL.
+///
+/// Owns its strings so the entry remains valid after the Debouncer purges its
+/// internal cache. The render layer reads these entries to draw the bottom-right
+/// stack defined in AC-WB-INT-2.
+#[cfg(feature = "web")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WebToastEntry {
+    /// Detected URL (e.g. `http://localhost:8080`).
+    pub url: String,
+    /// Source line that produced the match (truncated to a single line).
+    pub source: String,
 }
 
 impl RootView {
@@ -252,6 +287,11 @@ impl RootView {
             toolbar: None, // F-3: toolbar created in run_app after App context available
             project_wizard: None, // G-2: wizard created in run_app after App context available
             pending_slash_injection: None, // MS-4: slash injection buffer (drained by render loop)
+            // SPEC-V3-007 MS-4: WebView toast pipeline initial state.
+            #[cfg(feature = "web")]
+            url_detector: web::UrlDetectionDebouncer::new(),
+            #[cfg(feature = "web")]
+            pending_toasts: Vec::new(),
         }
     }
 
@@ -887,6 +927,208 @@ impl RootView {
         _subscription.detach();
     }
 
+    /// Subscribe to TerminalSurface stdout chunks for the WebView toast pipeline.
+    ///
+    /// SPEC-V3-007 MS-4 (REQ-WB-031~035, AC-WB-INT-1):
+    /// 1. PTY stdout chunk arrives via `TerminalStdoutEvent::Chunk`.
+    /// 2. `web::detect_local_urls` extracts dev-server URLs.
+    /// 3. `UrlDetectionDebouncer` enforces 5s dedupe + 30min dismiss-silence.
+    /// 4. New URLs are pushed to `pending_toasts`, triggering `cx.notify`.
+    ///
+    /// The subscription is attached on the terminal entity so it lives for as
+    /// long as the entity is referenced by RootView. Mirror of the existing
+    /// `wire_terminal_click_callback` pattern.
+    #[cfg(feature = "web")]
+    pub fn wire_terminal_stdout_callback(
+        &mut self,
+        terminal: &Entity<terminal::TerminalSurface>,
+        cx: &mut Context<Self>,
+    ) {
+        let subscription = cx.subscribe(
+            terminal,
+            |this, _terminal, event: &TerminalStdoutEvent, cx| match event {
+                TerminalStdoutEvent::Chunk(chunk) => {
+                    this.ingest_stdout_chunk(chunk, cx);
+                }
+            },
+        );
+        subscription.detach();
+    }
+
+    /// Feed a single stdout chunk through the URL detector + debouncer.
+    ///
+    /// Exposed as a `pub(crate)` helper so unit tests can drive the pipeline
+    /// without spinning up a real TerminalSurface entity. Tests assert that
+    /// `pending_toasts` grows on first match and is unchanged on re-emission
+    /// within the dedupe window (AC-WB-INT-1).
+    #[cfg(feature = "web")]
+    pub(crate) fn ingest_stdout_chunk(&mut self, chunk: &str, cx: &mut Context<Self>) {
+        let detected = web::detect_local_urls(chunk);
+        if detected.is_empty() {
+            return;
+        }
+        let new_urls = self.url_detector.process(detected);
+        if new_urls.is_empty() {
+            return;
+        }
+        for du in new_urls {
+            // Truncate the source to its first line so the toast remains
+            // single-line; the full chunk is already available in the
+            // tracing log if deeper context is needed.
+            let source = du.source.lines().next().unwrap_or("").to_string();
+            self.pending_toasts.push(WebToastEntry {
+                url: du.url,
+                source,
+            });
+        }
+        cx.notify();
+    }
+
+    /// Open the toast at `toast_idx` in a new tab as a `LeafKind::Web`.
+    ///
+    /// AC-WB-INT-2: clicking the toast creates a fresh tab via
+    /// `TabContainer::new_tab`, mounts a `WebViewSurface` entity onto the new
+    /// tab's focused leaf, navigates to the toast URL, and removes the toast
+    /// from `pending_toasts`. Returns the new TabId on success or None when
+    /// the toast index is out of range or no TabContainer is bound.
+    #[cfg(feature = "web")]
+    pub fn open_toast_in_new_tab(
+        &mut self,
+        toast_idx: usize,
+        cx: &mut Context<Self>,
+    ) -> Option<tabs::container::TabId> {
+        let toast = self.pending_toasts.get(toast_idx).cloned()?;
+        let url = toast.url.clone();
+
+        let container = self.tab_container.as_ref()?.clone();
+
+        // 1) Create the new tab inside the container entity.
+        let tab_id = container.update(cx, |tc, _cx| tc.new_tab(None));
+
+        // 2) Resolve the focused leaf id of the just-created (now active) tab.
+        let leaf_id = container.read(cx).active_tab().last_focused_pane.clone()?;
+
+        // 3) Build the WebViewSurface entity and navigate it to the URL.
+        let surface_entity = cx.new(|_cx| {
+            let mut surface = web::WebViewSurface::new(url.clone());
+            surface.navigate(url.clone());
+            surface
+        });
+        self.leaf_payloads
+            .insert(leaf_id, LeafKind::Web(surface_entity));
+
+        // 4) Drop the consumed toast.
+        self.pending_toasts.remove(toast_idx);
+        cx.notify();
+        Some(tab_id)
+    }
+
+    /// Dismiss the toast at `toast_idx`, registering the URL for 30 min silence.
+    ///
+    /// AC-WB-INT-3: subsequent detections of the same URL during the silence
+    /// window are filtered out by the Debouncer.
+    #[cfg(feature = "web")]
+    pub fn dismiss_toast(&mut self, toast_idx: usize, cx: &mut Context<Self>) {
+        if toast_idx >= self.pending_toasts.len() {
+            return;
+        }
+        let toast = self.pending_toasts.remove(toast_idx);
+        self.url_detector.dismiss(toast.url);
+        cx.notify();
+    }
+
+    /// Render the WebView dev-server toast overlay (REQ-WB-032).
+    ///
+    /// Returns an empty vector when no toasts are pending or when the `web`
+    /// feature is disabled, allowing `.children(...)` to be a no-op overlay.
+    #[cfg(feature = "web")]
+    fn render_web_toasts(&self, cx: &mut Context<Self>) -> Vec<gpui::AnyElement> {
+        if self.pending_toasts.is_empty() {
+            return Vec::new();
+        }
+        // Build a single absolutely-positioned stack at the bottom-right.
+        let toast_rows: Vec<gpui::AnyElement> = self
+            .pending_toasts
+            .iter()
+            .enumerate()
+            .map(|(idx, toast)| {
+                let url_label = format!("Open {} in Studio?", toast.url);
+                let open_listener = cx.listener(move |this, _ev, _window, cx| {
+                    this.open_toast_in_new_tab(idx, cx);
+                });
+                let dismiss_listener = cx.listener(move |this, _ev, _window, cx| {
+                    this.dismiss_toast(idx, cx);
+                });
+                div()
+                    .id(("web-toast", idx))
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .gap_3()
+                    .px_3()
+                    .py_2()
+                    .bg(rgb(tok::BG_SURFACE))
+                    .border_1()
+                    .border_color(rgb(tok::BORDER_SUBTLE))
+                    .rounded_md()
+                    .shadow_md()
+                    .child(div().text_color(rgb(tok::FG_PRIMARY)).child(url_label))
+                    .child(
+                        div()
+                            .id(("web-toast-open", idx))
+                            .px_2()
+                            .py_1()
+                            .bg(rgb(tok::BG_ELEVATED))
+                            .text_color(rgb(tok::FG_PRIMARY))
+                            .rounded_sm()
+                            .cursor_pointer()
+                            .child("Open")
+                            .on_mouse_down(MouseButton::Left, open_listener),
+                    )
+                    .child(
+                        div()
+                            .id(("web-toast-dismiss", idx))
+                            .px_2()
+                            .py_1()
+                            .text_color(rgb(tok::BORDER_SUBTLE))
+                            .cursor_pointer()
+                            .child("Dismiss")
+                            .on_mouse_down(MouseButton::Left, dismiss_listener),
+                    )
+                    .into_any_element()
+            })
+            .collect();
+
+        let stack = div()
+            .absolute()
+            .bottom_4()
+            .right_4()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .children(toast_rows)
+            .into_any_element();
+        vec![stack]
+    }
+
+    /// Stub used when the `web` feature is disabled — overlay renders nothing.
+    #[cfg(not(feature = "web"))]
+    fn render_web_toasts(&self, _cx: &mut Context<Self>) -> Vec<gpui::AnyElement> {
+        Vec::new()
+    }
+
+    /// Pending dev-server toast count (always 0 when `web` feature is off).
+    pub fn toast_count(&self) -> usize {
+        #[cfg(feature = "web")]
+        {
+            self.pending_toasts.len()
+        }
+        #[cfg(not(feature = "web"))]
+        {
+            0
+        }
+    }
+
     /// 파일 열기 이벤트를 처리한다 (REQ-MV-080).
     ///
     /// SPEC-V3-005 의 `OpenFileEvent` 를 소비하여:
@@ -1167,6 +1409,10 @@ impl Render for RootView {
             .children(has_spec_panel.then(render_spec_panel_overlay))
             // G-2: Project Wizard overlay (rendered when visible)
             .children(self.project_wizard.clone())
+            // SPEC-V3-007 MS-4 (REQ-WB-032, AC-WB-INT-2): WebView dev-server toast stack.
+            // The overlay is a no-op stack when `feature = "web"` is disabled or
+            // `pending_toasts` is empty — render_web_toasts returns None in either case.
+            .children(self.render_web_toasts(cx))
     }
 }
 
@@ -3047,5 +3293,204 @@ mod tests {
     fn pending_slash_injection_initially_none() {
         let view = RootView::new(vec![], dummy_path());
         assert!(view.pending_slash_injection.is_none());
+    }
+
+    // ============================================================
+    // SPEC-V3-007 MS-4 — RootView ↔ WebView toast pipeline tests
+    // (AC-WB-INT-1, AC-WB-INT-2, AC-WB-INT-3)
+    // ============================================================
+
+    /// AC-WB-INT-1 (initial state): pending_toasts starts empty when feature is on.
+    #[cfg(feature = "web")]
+    #[test]
+    fn web_toasts_initially_empty() {
+        let view = RootView::new(vec![], dummy_path());
+        assert_eq!(view.pending_toasts.len(), 0);
+        assert_eq!(view.toast_count(), 0);
+    }
+
+    /// AC-WB-INT-1: stdout chunk containing a localhost URL pushes one toast.
+    #[cfg(feature = "web")]
+    #[test]
+    fn web_ingest_stdout_chunk_pushes_toast_for_localhost_url() {
+        use gpui::{AppContext, TestAppContext};
+
+        let mut cx = TestAppContext::single();
+        let root_entity = cx.new(|_| RootView::new(vec![], dummy_path()));
+        cx.update(|app| {
+            root_entity.update(app, |view: &mut RootView, cx| {
+                view.ingest_stdout_chunk(
+                    "Serving HTTP on 0.0.0.0 port 8080 http://localhost:8080/ ...\n",
+                    cx,
+                );
+            });
+        });
+        let toast_url = cx.read(|app| {
+            let v = root_entity.read(app);
+            assert_eq!(v.pending_toasts.len(), 1);
+            v.pending_toasts[0].url.clone()
+        });
+        assert_eq!(toast_url, "http://localhost:8080/");
+    }
+
+    /// AC-WB-INT-1 (dedupe): the same URL emitted twice within 5s yields a single toast.
+    #[cfg(feature = "web")]
+    #[test]
+    fn web_ingest_stdout_chunk_dedupes_same_url_within_window() {
+        use gpui::{AppContext, TestAppContext};
+
+        let mut cx = TestAppContext::single();
+        let root_entity = cx.new(|_| RootView::new(vec![], dummy_path()));
+        cx.update(|app| {
+            root_entity.update(app, |view: &mut RootView, cx| {
+                view.ingest_stdout_chunk("vite dev http://localhost:5173", cx);
+                view.ingest_stdout_chunk("ready: http://localhost:5173", cx);
+            });
+        });
+        let count = cx.read(|app| root_entity.read(app).pending_toasts.len());
+        assert_eq!(count, 1, "second emission must be deduped within 5s");
+    }
+
+    /// AC-WB-INT-1 (no match): a chunk without any URL leaves pending_toasts empty.
+    #[cfg(feature = "web")]
+    #[test]
+    fn web_ingest_stdout_chunk_no_match_keeps_toasts_empty() {
+        use gpui::{AppContext, TestAppContext};
+
+        let mut cx = TestAppContext::single();
+        let root_entity = cx.new(|_| RootView::new(vec![], dummy_path()));
+        cx.update(|app| {
+            root_entity.update(app, |view: &mut RootView, cx| {
+                view.ingest_stdout_chunk("warning: nothing to do here", cx);
+            });
+        });
+        let count = cx.read(|app| root_entity.read(app).pending_toasts.len());
+        assert_eq!(count, 0);
+    }
+
+    /// AC-WB-INT-2: clicking a toast creates a new tab whose focused leaf is
+    /// LeafKind::Web with the detected URL, and removes the consumed toast.
+    #[cfg(feature = "web")]
+    #[test]
+    fn web_open_toast_creates_new_tab_with_leaf_web() {
+        use gpui::{AppContext, TestAppContext};
+
+        let mut cx = TestAppContext::single();
+        let root_entity = cx.new(|cx| {
+            let mut rv = RootView::new(vec![], dummy_path());
+            rv.tab_container = Some(cx.new(|_| tabs::container::TabContainer::new()));
+            rv
+        });
+
+        // Push a synthetic toast directly to bypass the detector for focus.
+        cx.update(|app| {
+            root_entity.update(app, |view: &mut RootView, cx| {
+                view.pending_toasts.push(WebToastEntry {
+                    url: "http://localhost:9000/".to_string(),
+                    source: "Listening on http://localhost:9000/".to_string(),
+                });
+                let new_id = view.open_toast_in_new_tab(0, cx);
+                assert!(new_id.is_some(), "open_toast_in_new_tab must return TabId");
+            });
+        });
+
+        cx.read(|app| {
+            let v = root_entity.read(app);
+            assert_eq!(v.pending_toasts.len(), 0, "consumed toast removed");
+
+            // tab_container now has 2 tabs (initial + new), and the new one is active.
+            let tc = v.tab_container.as_ref().unwrap().read(app);
+            assert_eq!(tc.tab_count(), 2);
+            // active is the just-created tab → its last_focused_pane should be present.
+            let leaf_id = tc
+                .active_tab()
+                .last_focused_pane
+                .clone()
+                .expect("new tab seeds a last_focused_pane");
+            let leaf = v
+                .leaf_payloads
+                .get(&leaf_id)
+                .expect("LeafKind::Web mounted on the new tab's focused leaf");
+            match leaf {
+                LeafKind::Web(entity) => {
+                    let surface = entity.read(app);
+                    assert_eq!(surface.current_url(), "http://localhost:9000/");
+                }
+                _ => panic!("expected LeafKind::Web on the new tab's focused leaf"),
+            }
+        });
+    }
+
+    /// AC-WB-INT-2 (no container): without a TabContainer, open_toast returns None
+    /// without panicking and leaves the toast in place for retry.
+    #[cfg(feature = "web")]
+    #[test]
+    fn web_open_toast_without_tab_container_returns_none() {
+        use gpui::{AppContext, TestAppContext};
+
+        let mut cx = TestAppContext::single();
+        let root_entity = cx.new(|_| RootView::new(vec![], dummy_path()));
+
+        cx.update(|app| {
+            root_entity.update(app, |view: &mut RootView, cx| {
+                view.pending_toasts.push(WebToastEntry {
+                    url: "http://localhost:1234/".to_string(),
+                    source: "n/a".to_string(),
+                });
+                let result = view.open_toast_in_new_tab(0, cx);
+                assert!(result.is_none(), "no tab_container → None");
+            });
+        });
+
+        // Toast is still pending so the user can retry once a workspace is active.
+        let count = cx.read(|app| root_entity.read(app).pending_toasts.len());
+        assert_eq!(count, 1, "toast preserved when open could not proceed");
+    }
+
+    /// AC-WB-INT-3: dismissing a toast removes it and silences future detections.
+    #[cfg(feature = "web")]
+    #[test]
+    fn web_dismiss_toast_silences_future_detections() {
+        use gpui::{AppContext, TestAppContext};
+
+        let mut cx = TestAppContext::single();
+        let root_entity = cx.new(|_| RootView::new(vec![], dummy_path()));
+
+        cx.update(|app| {
+            root_entity.update(app, |view: &mut RootView, cx| {
+                // First detection adds a toast.
+                view.ingest_stdout_chunk("dev server: http://localhost:7000", cx);
+                assert_eq!(view.pending_toasts.len(), 1);
+
+                // Dismiss the toast.
+                view.dismiss_toast(0, cx);
+                assert_eq!(view.pending_toasts.len(), 0);
+
+                // Second detection of the same URL during silence stays empty.
+                view.ingest_stdout_chunk("dev server: http://localhost:7000", cx);
+                assert_eq!(
+                    view.pending_toasts.len(),
+                    0,
+                    "dismissed URL must remain silent"
+                );
+            });
+        });
+    }
+
+    /// AC-WB-INT-3 (out-of-range): dismiss with an invalid index is a no-op.
+    #[cfg(feature = "web")]
+    #[test]
+    fn web_dismiss_toast_out_of_range_is_noop() {
+        use gpui::{AppContext, TestAppContext};
+
+        let mut cx = TestAppContext::single();
+        let root_entity = cx.new(|_| RootView::new(vec![], dummy_path()));
+
+        cx.update(|app| {
+            root_entity.update(app, |view: &mut RootView, cx| {
+                view.dismiss_toast(99, cx);
+                assert_eq!(view.pending_toasts.len(), 0);
+            });
+        });
     }
 }
