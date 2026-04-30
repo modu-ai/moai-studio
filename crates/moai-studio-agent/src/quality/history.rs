@@ -241,10 +241,7 @@ mod tests {
     /// Snapshot with_commit stores the hash.
     #[test]
     fn snapshot_with_commit_stores_hash() {
-        let snap = QualitySnapshot::with_commit(
-            make_score(0.5, 0.5, 0.5, 0.5, 0.5),
-            "abc1234",
-        );
+        let snap = QualitySnapshot::with_commit(make_score(0.5, 0.5, 0.5, 0.5, 0.5), "abc1234");
         assert_eq!(snap.commit_hash.as_deref(), Some("abc1234"));
     }
 

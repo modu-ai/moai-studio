@@ -14,13 +14,7 @@ use moai_studio_agent::quality::QualityHistory;
 use crate::design::tokens as tok;
 
 /// Full dimension names in T, R, U, S, K order.
-const DIMENSION_NAMES: [&str; 5] = [
-    "Tested",
-    "Readable",
-    "Unified",
-    "Secured",
-    "Trackable",
-];
+const DIMENSION_NAMES: [&str; 5] = ["Tested", "Readable", "Unified", "Secured", "Trackable"];
 
 /// Default sparkline height in pixels.
 const DEFAULT_SPARKLINE_HEIGHT: f32 = 80.0;

@@ -780,3 +780,35 @@ SPEC-V3-003 은 본 sprint 종료 시 **functionally complete**. 후속:
 2. SPEC-V3-002 와 함께 v0.1.0 release/ 분기 candidate
 3. AC-P-26 tmux e2e 는 billing 해소 후 ci-v3-pane.yml 첫 GREEN run 시 자동 검증 (이미 #[ignore] + tmux-test job 으로 wired)
 
+---
+
+## MS-4 (2026-04-30 sess 8) — Persistence round-trip + Tab CRUD
+
+Cross-spec milestone shared with SPEC-V3-004. Branch: feature/SPEC-V3-003-004-ms4-persistence.
+
+### Implementation
+- `PaneLayoutV1.active_tab_idx: usize` 필드 추가 (#[serde(default)] backward-compat)
+- `tab_container_to_layout_v1()` / `layout_v1_to_tab_inputs()` round-trip helpers
+- `TabContainer::move_tab(from, to) -> Result<(), MoveTabError>` (drag-reorder + active_tab_idx 보정)
+- `TabContainer::duplicate_tab(idx) -> Result<usize, DuplicateTabError>` (deep clone pane tree)
+
+### Acceptance Criteria
+| AC | 내용 | 상태 |
+|----|------|------|
+| AC-P-30 | Single-leaf round-trip equality | ✅ |
+| AC-P-31 | Horizontal/vertical 1-level split round-trip | ✅ |
+| AC-P-32 | 3-level deep splits round-trip preserves structure | ✅ |
+| AC-P-33 | Mixed splits + special chars in CWD path | ✅ |
+| AC-P-34 | active_tab_idx persist + restore | ✅ |
+| AC-P-35 | last_focused_pane per-tab persist + restore | ✅ |
+| AC-P-36 | move_tab forward/backward/same/out-of-range | ✅ |
+| AC-P-37 | duplicate_tab independent (no shared state) | ✅ |
+
+### Test count
+- 신규: 29 (workspace 18 + ui tabs CRUD 11). All pass.
+- clippy 0, fmt clean.
+
+### Deferred (post-MS-4)
+- 워크스페이스 전환시 자동 save/restore wiring (RootView::handle_workspace_activate) — 별도 SPEC
+- Cmd+Shift+]/Cmd+Shift+[/Cmd+D keybindings — V3-006 MS-6 (native menu) 와 함께
+

@@ -170,9 +170,12 @@ impl UrlDetectionDebouncer {
 
     /// Check if a URL is currently dismissed
     fn is_dismissed(&self, url: &str, now: Instant) -> bool {
-        self.dismissed_urls.iter().any(|(dismissed_url, timestamp)| {
-            dismissed_url == url && now.saturating_duration_since(*timestamp) < self.dismissed_silence
-        })
+        self.dismissed_urls
+            .iter()
+            .any(|(dismissed_url, timestamp)| {
+                dismissed_url == url
+                    && now.saturating_duration_since(*timestamp) < self.dismissed_silence
+            })
     }
 
     /// Check if a URL was seen within the dedupe_window
@@ -392,7 +395,7 @@ mod tests {
         // Duplicate one, add one new
         let urls2 = vec![
             DetectedUrl::new("http://localhost:8080", "Server"), // duplicate
-            DetectedUrl::new("http://127.0.0.1:9000", "Server"),  // new
+            DetectedUrl::new("http://127.0.0.1:9000", "Server"), // new
         ];
         let results2 = debouncer.process(urls2);
         assert_eq!(results2.len(), 1);

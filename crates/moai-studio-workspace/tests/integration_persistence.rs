@@ -26,6 +26,7 @@ fn shutdown_save_then_restart_restores_layout() {
     // --- "shutdown" 단계: layout 구성 후 저장 ---
     let layout = PaneLayoutV1 {
         schema_version: SCHEMA_VERSION.to_string(),
+        active_tab_idx: 0,
         tabs: vec![
             TabSnapshotV1 {
                 id: "tab-1".to_string(),
@@ -126,6 +127,7 @@ fn cwd_deleted_between_runs_falls_back_to_home() {
     // layout 저장: cwd 를 존재하는 임시 디렉토리로 설정
     let layout = PaneLayoutV1 {
         schema_version: SCHEMA_VERSION.to_string(),
+        active_tab_idx: 0,
         tabs: vec![TabSnapshotV1 {
             id: "tab-cwd-test".to_string(),
             title: "CWD Test".to_string(),

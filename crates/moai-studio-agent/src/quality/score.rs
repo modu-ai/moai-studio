@@ -66,7 +66,13 @@ impl Trust5Score {
 
     /// Get a slice of all five dimension scores in order (T, R, U, S, K).
     pub fn as_slice(&self) -> [f32; 5] {
-        [self.tested, self.readable, self.unified, self.secured, self.trackable]
+        [
+            self.tested,
+            self.readable,
+            self.unified,
+            self.secured,
+            self.trackable,
+        ]
     }
 }
 

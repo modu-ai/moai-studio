@@ -69,11 +69,7 @@ impl TestMetrics {
     }
 
     /// Create test metrics with specified values.
-    pub fn new_with_coverage(
-        coverage_percent: f32,
-        pass_count: u32,
-        fail_count: u32,
-    ) -> Self {
+    pub fn new_with_coverage(coverage_percent: f32, pass_count: u32, fail_count: u32) -> Self {
         Self {
             coverage_percent,
             pass_count,
@@ -349,7 +345,10 @@ mod tests {
         let original = GitMetrics::new_with_percentages(75.0, 85.5, 90.0);
         let json = serde_json::to_string(&original).expect("serialize failed");
         let decoded: GitMetrics = serde_json::from_str(&json).expect("deserialize failed");
-        assert_eq!(decoded.conventional_commit_pct, original.conventional_commit_pct);
+        assert_eq!(
+            decoded.conventional_commit_pct,
+            original.conventional_commit_pct
+        );
     }
 
     #[test]

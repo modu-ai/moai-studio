@@ -755,8 +755,7 @@ impl RootView {
                         });
                     }
                 }
-                self.leaf_payloads
-                    .insert(leaf_id, LeafKind::Image(entity));
+                self.leaf_payloads.insert(leaf_id, LeafKind::Image(entity));
                 cx.notify();
             }
             EventResolution::Open(SurfaceHint::Markdown) => {

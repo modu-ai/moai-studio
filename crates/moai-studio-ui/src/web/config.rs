@@ -106,8 +106,7 @@ mod tests {
 
     #[test]
     fn test_web_config_with_trusted_domains() {
-        let config = WebConfig::new()
-            .with_trusted_domains(vec!["example.com".to_string()]);
+        let config = WebConfig::new().with_trusted_domains(vec!["example.com".to_string()]);
 
         assert_eq!(config.trusted_domains.len(), 1);
         assert_eq!(config.trusted_domains[0], "example.com");

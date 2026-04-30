@@ -10,8 +10,8 @@ pub mod input;
 
 use crate::design::tokens::{self as tok, ide_accent};
 use gpui::{
-    Context, EventEmitter, InteractiveElement, IntoElement, Keystroke, MouseButton,
-    MouseDownEvent, ParentElement, Render, Styled, Window, div, px, rgb,
+    Context, EventEmitter, InteractiveElement, IntoElement, Keystroke, MouseButton, MouseDownEvent,
+    ParentElement, Render, Styled, Window, div, px, rgb,
 };
 use moai_studio_terminal::link::ClickAction;
 use std::path::PathBuf;

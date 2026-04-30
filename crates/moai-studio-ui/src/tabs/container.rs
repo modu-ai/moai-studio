@@ -118,6 +118,22 @@ pub enum SwitchTabError {
     IndexOutOfBounds,
 }
 
+/// 탭 이동 실패 원인.
+#[derive(Debug, PartialEq, Eq)]
+pub enum MoveTabError {
+    /// from 인덱스가 범위를 벗어났다.
+    FromOutOfBounds,
+    /// to 인덱스가 범위를 벗어났다.
+    ToOutOfBounds,
+}
+
+/// 탭 복제 실패 원인.
+#[derive(Debug, PartialEq, Eq)]
+pub enum DuplicateTabError {
+    /// 지정 인덱스가 범위를 벗어났다.
+    IndexOutOfBounds,
+}
+
 // ============================================================
 // DividerDragState — MS-3 T7 (REQ-R-020 ~ REQ-R-024)
 // ============================================================
@@ -360,11 +376,142 @@ impl TabContainer {
     pub fn end_drag(&mut self) {
         self.drag_state = None;
     }
+
+    // ----------------------------------------------------------
+    // @MX:ANCHOR: [AUTO] tab-move-api
+    // @MX:REASON: [AUTO] Tab drag-reorder entry point. AC-P-36 contract.
+    //   fan_in >= 3: keys.rs Cmd/Ctrl+Shift+[/], integration tests, future drag-and-drop.
+    // ----------------------------------------------------------
+
+    /// Moves the tab at `from` to `to`, shifting intermediate tabs accordingly.
+    ///
+    /// Moving a tab to the same position is a no-op (succeeds immediately).
+    /// When the active tab is moved, `active_tab_idx` follows it to its new position.
+    ///
+    /// # Errors
+    ///
+    /// - [`MoveTabError::FromOutOfBounds`]: `from >= tabs.len()`
+    /// - [`MoveTabError::ToOutOfBounds`]: `to >= tabs.len()`
+    pub fn move_tab(&mut self, from: usize, to: usize) -> Result<(), MoveTabError> {
+        if from >= self.tabs.len() {
+            return Err(MoveTabError::FromOutOfBounds);
+        }
+        if to >= self.tabs.len() {
+            return Err(MoveTabError::ToOutOfBounds);
+        }
+        if from == to {
+            return Ok(());
+        }
+
+        // Track whether the active tab is being moved.
+        let was_active = self.active_tab_idx == from;
+
+        // Remove and re-insert.
+        let tab = self.tabs.remove(from);
+        self.tabs.insert(to, tab);
+
+        // Update active_tab_idx.
+        if was_active {
+            self.active_tab_idx = to;
+        } else {
+            // Adjust for the index shift caused by the move.
+            let active = self.active_tab_idx;
+            if from < to {
+                // Removed from left of active, inserted right of active.
+                if active > from && active <= to {
+                    self.active_tab_idx -= 1;
+                }
+            } else {
+                // from > to: removed from right, inserted left.
+                if active >= to && active < from {
+                    self.active_tab_idx += 1;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    // ----------------------------------------------------------
+    // @MX:ANCHOR: [AUTO] tab-duplicate-api
+    // @MX:REASON: [AUTO] Tab clone entry point. AC-P-37 contract.
+    //   fan_in >= 3: Cmd+D keybinding, integration tests, future session management.
+    //   Clones pane tree with new PaneIds — no shared state between original and duplicate.
+    // ----------------------------------------------------------
+
+    /// Duplicates the tab at `idx`, appending the clone at the end of the tab list.
+    ///
+    /// The clone receives new unique `TabId` and new unique `PaneId`s so that
+    /// mutations to either tab do not affect the other (independent clone).
+    /// The `title` is preserved. `last_focused_pane` is set to the first leaf of the clone.
+    ///
+    /// Returns the index of the newly created duplicate tab.
+    ///
+    /// # Errors
+    ///
+    /// - [`DuplicateTabError::IndexOutOfBounds`]: `idx >= tabs.len()`
+    pub fn duplicate_tab(&mut self, idx: usize) -> Result<usize, DuplicateTabError> {
+        if idx >= self.tabs.len() {
+            return Err(DuplicateTabError::IndexOutOfBounds);
+        }
+
+        let original = &self.tabs[idx];
+        let new_id = TabId::new_unique();
+        let (cloned_tree, first_pane_id) = clone_pane_tree_with_new_ids(&original.pane_tree);
+
+        let dup = Tab {
+            id: new_id,
+            title: original.title.clone(),
+            pane_tree: cloned_tree,
+            last_focused_pane: Some(first_pane_id),
+        };
+
+        let new_idx = self.tabs.len();
+        self.tabs.push(dup);
+        Ok(new_idx)
+    }
 }
 
 impl Default for TabContainer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// ============================================================
+// Clone helpers for duplicate_tab (AC-P-37)
+// ============================================================
+
+/// Recursively clones a `PaneTree<String>`, assigning new unique `PaneId` and
+/// `SplitNodeId` values so that the clone is fully independent from the original.
+///
+/// Returns `(cloned_tree, first_leaf_pane_id)` where `first_leaf_pane_id` is
+/// the PaneId of the in-order first leaf of the clone (used as `last_focused_pane`).
+fn clone_pane_tree_with_new_ids(tree: &PaneTree<String>) -> (PaneTree<String>, PaneId) {
+    match tree {
+        PaneTree::Leaf(leaf) => {
+            let new_id = PaneId::new_unique();
+            let cloned = PaneTree::new_leaf(new_id.clone(), leaf.payload.clone());
+            (cloned, new_id)
+        }
+        PaneTree::Split {
+            direction,
+            ratio,
+            first,
+            second,
+            ..
+        } => {
+            let (cloned_first, first_leaf_id) = clone_pane_tree_with_new_ids(first);
+            let (cloned_second, _) = clone_pane_tree_with_new_ids(second);
+            let cloned = PaneTree::Split {
+                id: SplitNodeId::new_unique(),
+                direction: *direction,
+                ratio: *ratio,
+                first: Box::new(cloned_first),
+                second: Box::new(cloned_second),
+            };
+            (cloned, first_leaf_id)
+        }
     }
 }
 

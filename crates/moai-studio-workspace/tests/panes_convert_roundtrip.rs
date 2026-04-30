@@ -30,6 +30,7 @@ fn temp_path(name: &str) -> PathBuf {
 fn empty_layout_roundtrip() {
     let layout = PaneLayoutV1 {
         schema_version: SCHEMA_VERSION.to_string(),
+        active_tab_idx: 0,
         tabs: vec![],
     };
 

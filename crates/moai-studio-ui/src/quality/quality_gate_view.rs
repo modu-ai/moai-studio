@@ -5,7 +5,10 @@
 //!
 //! REQ-QD-015~017: Quality gate display with overall pass/fail status.
 
-use gpui::{Context, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb, prelude::FluentBuilder};
+use gpui::{
+    Context, IntoElement, ParentElement, Render, Styled, Window, div, prelude::FluentBuilder, px,
+    rgb,
+};
 use moai_studio_agent::quality::Trust5Score;
 
 use crate::design::tokens as tok;
@@ -295,7 +298,11 @@ mod tests {
         assert!(!view.all_pass(), "Not all pass");
         let failing = view.failing_dimensions();
         // R=0.5 < 0.75, S=0.3 < 0.75, K=0.6 < 0.75
-        assert_eq!(failing, vec!["R", "S", "K"], "Readable, Secured, Trackable should fail");
+        assert_eq!(
+            failing,
+            vec!["R", "S", "K"],
+            "Readable, Secured, Trackable should fail"
+        );
     }
 
     /// REQ-QD-016: Failing dimensions list shows correct labels.
@@ -346,16 +353,10 @@ mod tests {
     /// Threshold is clamped to [0.0, 1.0].
     #[test]
     fn threshold_clamped() {
-        let view = QualityGateView::with_score_and_threshold(
-            Trust5Score::new(),
-            1.5,
-        );
+        let view = QualityGateView::with_score_and_threshold(Trust5Score::new(), 1.5);
         assert!((view.threshold - 1.0).abs() < f32::EPSILON);
 
-        let view = QualityGateView::with_score_and_threshold(
-            Trust5Score::new(),
-            -0.5,
-        );
+        let view = QualityGateView::with_score_and_threshold(Trust5Score::new(), -0.5);
         assert!((view.threshold - 0.0).abs() < f32::EPSILON);
     }
 }

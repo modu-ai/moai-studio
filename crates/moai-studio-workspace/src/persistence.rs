@@ -34,6 +34,9 @@ pub const SCHEMA_VERSION: &str = "moai-studio/panes-v1";
 pub struct PaneLayoutV1 {
     /// 스키마 버전 — 항상 `SCHEMA_VERSION` ("moai-studio/panes-v1").
     pub schema_version: String,
+    /// Active tab index. Defaults to 0 when missing from JSON (backward-compat).
+    #[serde(default)]
+    pub active_tab_idx: usize,
     /// 모든 탭 스냅샷 목록.
     pub tabs: Vec<TabSnapshotV1>,
 }
@@ -42,6 +45,7 @@ impl Default for PaneLayoutV1 {
     fn default() -> Self {
         Self {
             schema_version: SCHEMA_VERSION.to_string(),
+            active_tab_idx: 0,
             tabs: Vec::new(),
         }
     }
@@ -223,6 +227,7 @@ mod tests {
     fn sample_layout() -> PaneLayoutV1 {
         PaneLayoutV1 {
             schema_version: SCHEMA_VERSION.to_string(),
+            active_tab_idx: 0,
             tabs: vec![TabSnapshotV1 {
                 id: "tab-abc".to_string(),
                 title: "main".to_string(),
