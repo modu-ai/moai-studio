@@ -5,6 +5,8 @@
 //!
 //! 상태 전이: Loading → Ready(source) | Error(e).
 
+pub mod math_unicode;
+pub mod mermaid_meta;
 pub mod parser;
 
 // @MX:ANCHOR: [AUTO] markdown-viewer-state
@@ -259,26 +261,40 @@ fn render_block(block: &MarkdownBlock) -> AnyElement {
             .text_size(px(13.))
             .child(format!("`{}`", code))
             .into_any_element(),
-        MarkdownBlock::Math(math) => div()
-            .p(px(8.))
-            .mb(px(4.))
-            .bg(rgb(tok::BG_SURFACE))
-            .rounded_md()
-            .text_color(rgb(tok::FG_SECONDARY))
-            .text_size(px(12.))
-            // C-2: math/katex blocks preserved as-is with renderer-pending note.
-            .child(format!("[KaTeX renderer pending]\n{}", math))
-            .into_any_element(),
-        MarkdownBlock::Mermaid(diagram) => div()
-            .p(px(8.))
-            .mb(px(4.))
-            .bg(rgb(tok::BG_SURFACE))
-            .rounded_md()
-            .text_color(rgb(syntax::VARIABLE))
-            .text_size(px(12.))
-            // C-2: mermaid blocks preserved as-is with renderer-pending note.
-            .child(format!("[Mermaid renderer pending C-7]\n{}", diagram))
-            .into_any_element(),
+        MarkdownBlock::Math(math) => {
+            // SPEC-V3-006 MS-4: best-effort Unicode preview while KaTeX WebView
+            // rendering is deferred. Falls back to raw LaTeX for unsupported
+            // sequences. Full KaTeX renderer remains pending REQ-MV-010.
+            let preview = math_unicode::math_to_unicode(math);
+            div()
+                .p(px(8.))
+                .mb(px(4.))
+                .bg(rgb(tok::BG_SURFACE))
+                .rounded_md()
+                .text_color(rgb(tok::FG_SECONDARY))
+                .text_size(px(12.))
+                .child(format!("MATH  ·  {}\n{}", preview, math))
+                .into_any_element()
+        }
+        MarkdownBlock::Mermaid(diagram) => {
+            // SPEC-V3-006 MS-4: surface diagram type in placeholder header so
+            // users know which Mermaid renderer would handle the block once
+            // wry WebView integration lands per REQ-MV-011.
+            let kind = mermaid_meta::detect_diagram_type(diagram);
+            div()
+                .p(px(8.))
+                .mb(px(4.))
+                .bg(rgb(tok::BG_SURFACE))
+                .rounded_md()
+                .text_color(rgb(syntax::VARIABLE))
+                .text_size(px(12.))
+                .child(format!(
+                    "MERMAID ({})  ·  C-7 pending\n{}",
+                    kind.label(),
+                    diagram
+                ))
+                .into_any_element()
+        }
         MarkdownBlock::List(items) => {
             let mut list = div().flex().flex_col().mb(px(4.));
             for item in items {
