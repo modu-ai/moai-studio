@@ -3,13 +3,13 @@ id: SPEC-V3-012
 version: 1.0.0
 status: implemented
 created_at: 2026-04-26
-updated_at: 2026-04-26
+updated_at: 2026-04-30
 author: MoAI (manager-spec)
 priority: High
 issue_number: 0
 depends_on: [SPEC-V3-001, SPEC-V3-002, SPEC-V3-003, SPEC-V3-004, SPEC-V3-009]
 parallel_with: []
-milestones: [MS-1, MS-2, MS-3]
+milestones: [MS-1, MS-2, MS-3, MS-4]
 language: ko
 labels: [phase-3, ui, palette, command, fuzzy, surface, brand]
 revision: v1.0.0 (initial draft, Palette Surface — CmdPalette/CommandPalette/SlashBar 통합 module)
@@ -402,6 +402,104 @@ If `tokens.json` does not yet contain `round2_component.palette` keys (current s
 - **Subsequence match** — every character of the query appears in the candidate in order, not necessarily contiguous.
 - **Highlight** — the visual emphasis applied to candidate characters that matched the query.
 - **Mutual exclusion** — only one palette variant is visible at any time; opening another dismisses the current.
+
+---
+
+---
+
+## 8. MS-4 Acceptance Criteria (AC-PL-16 ~ AC-PL-22)
+
+### 8.1 배경
+
+MS-1~3 에서 palette surface 의 core, 3-variant, RootView 통합이 완성되었으나 CommandPalette 의 데이터 소스는 mock 10개에 불과했고, CmdPalette 는 단일 File 모드만 지원했으며 RootView 에 실 dispatch 로직이 없었다. MS-4 는 이 세 가지 gap 을 해소한다.
+
+### 8.2 Acceptance Criteria
+
+#### AC-PL-16: CommandRegistry — real structured data source
+
+- **Given** `CommandPalette::new()` is called
+- **When** the internal item list is built
+- **Then** the list is sourced from `CommandRegistry::default_registry()`, not `default_mock_commands()`
+- **And** the registry contains >= 30 entries across 10 categories (File, View, Pane, Tab, Workspace, Surface, Settings, Theme, Git, Agent)
+- **And** all entry ids are namespaced (contain a dot, e.g. `pane.split_horizontal`)
+- **And** no duplicate ids exist
+
+#### AC-PL-17: dispatch_command — settings routing
+
+- **Given** `RootView::dispatch_command("settings.open")` is called
+- **When** the dispatch function runs
+- **Then** `settings_modal` is mounted (not None)
+- **And** `palette.active_variant` is None (palette is dismissed)
+- **And** the function returns `true`
+
+#### AC-PL-18: dispatch_command — theme routing
+
+- **Given** `RootView::dispatch_command("theme.toggle")` is called
+- **When** the dispatch function runs
+- **Then** `active_theme` cycles (Dark → Light or Light → Dark)
+- **And** the function returns `true`
+
+- **Given** `RootView::dispatch_command("theme.dark")` is called
+- **Then** `active_theme` is set to Dark, returns `true`
+
+- **Given** `RootView::dispatch_command("theme.light")` is called
+- **Then** `active_theme` is set to Light, returns `true`
+
+#### AC-PL-19: dispatch_command — tab / pane / surface / workspace routing
+
+- **Given** `RootView::dispatch_command(id)` is called for any id in {tab.*, pane.*, surface.*, workspace.*, git.*, agent.*, file.*, view.*}
+- **When** the dispatch function runs
+- **Then** the function returns `true` (logged, delegated to render cycle)
+- **And** the palette is dismissed
+
+#### AC-PL-20: dispatch_command — unknown id
+
+- **Given** `RootView::dispatch_command("nonexistent.command")` is called
+- **When** the dispatch function runs
+- **Then** the function returns `false`
+- **And** a warning is emitted via `tracing::warn!`
+
+#### AC-PL-21: inject_slash_command — terminal stdin injection
+
+- **Given** `RootView::inject_slash_command("/moai plan")` is called
+- **When** the injection function runs
+- **Then** `pending_slash_injection` is set to `Some("/moai plan\n")`
+- **And** the palette is dismissed
+- **And** the function returns `true`
+
+- **Given** `RootView::inject_slash_command("invalid")` is called (does not start with `/moai`)
+- **Then** `pending_slash_injection` remains `None`, returns `false`
+
+#### AC-PL-22: CmdPalette @mention mode switching
+
+- **Given** `CmdPalette::set_query("@")` is called
+- **When** the mode is detected
+- **Then** `CmdPalette.mode` is `PaletteMode::Symbol`
+- **And** the item list is populated from `MOCK_SYMBOLS`
+
+- **Given** `CmdPalette::set_query("#")` is called
+- **Then** `CmdPalette.mode` is `PaletteMode::Issue`
+- **And** the item list is populated from `MOCK_ISSUES`
+
+- **Given** `CmdPalette::set_query("src")` is called (no prefix)
+- **Then** `CmdPalette.mode` is `PaletteMode::File`
+- **And** the item list is filtered from the file index
+
+### 8.3 Implementation Notes
+
+- `registry.rs` 는 `palette/` 모듈 내 독립 파일. `CommandPalette::new()` 가 `CommandRegistry::default_registry()` 를 호출.
+- `default_mock_commands()` 는 `#[deprecated]` 로 마킹하되 삭제하지 않음 (하위 호환성).
+- `pending_slash_injection: Option<String>` 는 RootView 필드. render/update 루프에서 TerminalSurface 컨텍스트 가용 시 drain.
+- `PaletteMode::detect(query: &str)` 는 첫 문자를 보고 `@` → Symbol, `#` → Issue, otherwise File.
+- 실 file-index 소스 wiring (V3-PALETTE-001) 은 본 MS-4 범위 외.
+
+### 8.4 Quality Gates (MS-4)
+
+| Check | Command | Threshold |
+|-------|---------|-----------|
+| Tests | `cargo test -p moai-studio-ui` | 33+ new tests pass |
+| Clippy | `cargo clippy -p moai-studio-ui --all-targets -- -D warnings` | 0 warnings |
+| Fmt | `cargo fmt --all -- --check` | No diff |
 
 ---
 
