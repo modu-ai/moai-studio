@@ -903,27 +903,36 @@ impl RootView {
         terminal: &Entity<terminal::TerminalSurface>,
         cx: &mut Context<Self>,
     ) {
-        let _subscription = cx.subscribe(terminal, |this, _terminal, event: &TerminalClickEvent, cx| {
-            match event {
-                TerminalClickEvent::OpenFile { path, line: _, col: _ } => {
-                    // Note: current OpenFileEvent doesn't support line/col, so they're ignored
-                    let ev = viewer::OpenFileEvent {
-                        path: path.clone(),
-                        surface_hint: None,
-                    };
-                    this.handle_open_file(&ev, cx);
+        let _subscription = cx.subscribe(
+            terminal,
+            |this, _terminal, event: &TerminalClickEvent, cx| {
+                match event {
+                    TerminalClickEvent::OpenFile {
+                        path,
+                        line: _,
+                        col: _,
+                    } => {
+                        // Note: current OpenFileEvent doesn't support line/col, so they're ignored
+                        let ev = viewer::OpenFileEvent {
+                            path: path.clone(),
+                            surface_hint: None,
+                        };
+                        this.handle_open_file(&ev, cx);
+                    }
+                    TerminalClickEvent::OpenUrl(url) => {
+                        // @MX:WARN: URL passed to system without validation
+                        // @MX:REASON: GPUI open_url delegates to OS handler which applies its own safety checks
+                        cx.open_url(url);
+                    }
+                    TerminalClickEvent::OpenSpec(spec_id) => {
+                        // SPEC-V3-009 MS-4a (AC-SU-13~16): wire OpenSpec event to
+                        // SpecPanelView mount + select_spec. Respects the
+                        // single-overlay invariant by deferring to RootView helper.
+                        this.handle_terminal_open_spec(spec_id, cx);
+                    }
                 }
-                TerminalClickEvent::OpenUrl(url) => {
-                    // @MX:WARN: URL passed to system without validation
-                    // @MX:REASON: GPUI open_url delegates to OS handler which applies its own safety checks
-                    cx.open_url(url);
-                }
-                TerminalClickEvent::OpenSpec(spec_id) => {
-                    // TODO(SPEC-V3-LINK-001 MS-3): Wire to SpecPanel open action
-                    tracing::info!(spec_id = %spec_id, "Terminal emitted OpenSpec event — panel wiring pending");
-                }
-            }
-        });
+            },
+        );
         _subscription.detach();
     }
 
@@ -1187,6 +1196,34 @@ impl RootView {
             self.spec_panel = Some(spec_ui::SpecPanelView::new(specs_dir));
         } else {
             self.spec_panel = None;
+        }
+        cx.notify();
+    }
+
+    /// SPEC-V3-009 MS-4a (AC-SU-13~16): handle a `TerminalClickEvent::OpenSpec`
+    /// emission by mounting (if dismissed) the SPEC panel and selecting the
+    /// requested SPEC. Respects the single-overlay invariant — when the
+    /// palette or settings modal is active, the click is logged and ignored
+    /// so the user's current overlay focus is not disrupted.
+    ///
+    /// `select_spec` itself is documented as graceful: an unknown spec_id
+    /// keeps the prior selection (no panic, no stale state).
+    pub fn handle_terminal_open_spec(&mut self, spec_id: &str, cx: &mut Context<Self>) {
+        // Overlay invariant — do not steal focus from active modals.
+        if self.palette.is_visible() || self.settings_modal.is_some() {
+            tracing::info!(
+                spec_id = %spec_id,
+                "Terminal emitted OpenSpec but another overlay is active — ignored"
+            );
+            return;
+        }
+        // Lazy mount the SPEC panel if not already visible.
+        if self.spec_panel.is_none() {
+            let specs_dir = self.storage_path.join(".moai").join("specs");
+            self.spec_panel = Some(spec_ui::SpecPanelView::new(specs_dir));
+        }
+        if let Some(panel) = self.spec_panel.as_mut() {
+            panel.select_spec(moai_studio_spec::SpecId::new(spec_id));
         }
         cx.notify();
     }
@@ -3750,5 +3787,128 @@ mod tests {
             view.palette.active_variant.is_none(),
             "second toggle dismisses the palette"
         );
+    }
+
+    // ============================================================
+    // SPEC-V3-009 MS-4a — Terminal SPEC-ID click wiring tests
+    // (AC-SU-13 / AC-SU-14 / AC-SU-15 / AC-SU-16)
+    // ============================================================
+
+    /// AC-SU-13: OpenSpec event with no panel mounted lazily mounts the panel.
+    /// The id may not exist in the index when running tests against a tmp
+    /// storage_path, so we only assert mount + no-panic; AC-SU-16 covers the
+    /// graceful no-op selection contract.
+    #[test]
+    fn terminal_open_spec_lazy_mounts_spec_panel() {
+        use gpui::{AppContext, TestAppContext};
+
+        let mut cx = TestAppContext::single();
+        let root_entity = cx.new(|_| RootView::new(vec![], dummy_path()));
+
+        cx.update(|app| {
+            root_entity.update(app, |view: &mut RootView, cx| {
+                assert!(view.spec_panel.is_none());
+                view.handle_terminal_open_spec("SPEC-V3-007", cx);
+                assert!(
+                    view.spec_panel.is_some(),
+                    "spec_panel must mount when OpenSpec arrives"
+                );
+            });
+        });
+    }
+
+    /// AC-SU-14: a second OpenSpec for a different id reuses the existing
+    /// panel without unmounting it.
+    #[test]
+    fn terminal_open_spec_with_existing_panel_keeps_it_mounted() {
+        use gpui::{AppContext, TestAppContext};
+
+        let mut cx = TestAppContext::single();
+        let root_entity = cx.new(|_| RootView::new(vec![], dummy_path()));
+
+        cx.update(|app| {
+            root_entity.update(app, |view: &mut RootView, cx| {
+                view.handle_terminal_open_spec("SPEC-V3-007", cx);
+                let was_mounted = view.spec_panel.is_some();
+                view.handle_terminal_open_spec("SPEC-V3-009", cx);
+                let is_mounted = view.spec_panel.is_some();
+                assert!(
+                    was_mounted && is_mounted,
+                    "panel must stay mounted across consecutive OpenSpec events"
+                );
+            });
+        });
+    }
+
+    /// AC-SU-15: OpenSpec respects the single-overlay invariant — palette
+    /// active means the click is logged and discarded.
+    #[test]
+    fn terminal_open_spec_ignored_when_palette_visible() {
+        use gpui::{AppContext, TestAppContext};
+
+        let mut cx = TestAppContext::single();
+        let root_entity = cx.new(|_| {
+            let mut rv = RootView::new(vec![], dummy_path());
+            rv.palette.toggle(palette::PaletteVariant::CommandPalette);
+            rv
+        });
+
+        cx.update(|app| {
+            root_entity.update(app, |view: &mut RootView, cx| {
+                assert!(view.palette.is_visible(), "test prerequisite");
+                view.handle_terminal_open_spec("SPEC-V3-007", cx);
+                assert!(
+                    view.spec_panel.is_none(),
+                    "spec_panel must not mount while palette is visible"
+                );
+            });
+        });
+    }
+
+    /// AC-SU-15 (companion): same invariant for the settings modal.
+    #[test]
+    fn terminal_open_spec_ignored_when_settings_modal_open() {
+        use gpui::{AppContext, TestAppContext};
+
+        let mut cx = TestAppContext::single();
+        let root_entity = cx.new(|_| {
+            let mut rv = RootView::new(vec![], dummy_path());
+            let mut modal = settings::SettingsModal::new();
+            modal.mount();
+            rv.settings_modal = Some(modal);
+            rv
+        });
+
+        cx.update(|app| {
+            root_entity.update(app, |view: &mut RootView, cx| {
+                view.handle_terminal_open_spec("SPEC-V3-007", cx);
+                assert!(
+                    view.spec_panel.is_none(),
+                    "spec_panel must not mount while settings modal is active"
+                );
+            });
+        });
+    }
+
+    /// AC-SU-16: an unknown spec_id is a graceful no-op for selection.
+    /// The panel still mounts because mounting is always a safe view change,
+    /// but `select_spec` keeps the prior selection (None) per its docs.
+    #[test]
+    fn terminal_open_spec_with_unknown_id_does_not_select() {
+        use gpui::{AppContext, TestAppContext};
+
+        let mut cx = TestAppContext::single();
+        let root_entity = cx.new(|_| RootView::new(vec![], dummy_path()));
+
+        cx.update(|app| {
+            root_entity.update(app, |view: &mut RootView, cx| {
+                view.handle_terminal_open_spec("SPEC-DOES-NOT-EXIST", cx);
+                let panel = view.spec_panel.as_ref().expect("panel mounted");
+                assert!(
+                    panel.list.selected_id.is_none(),
+                    "selected_id stays None when spec_id is missing from index"
+                );
+            });
+        });
     }
 }
