@@ -22,6 +22,7 @@ revision: v1.0.0 (initial draft, 4-surface 비전의 viewer 두 개 통합 SPEC)
 | 버전 | 날짜 | 변경 |
 |------|------|------|
 | 1.0.0-draft | 2026-04-25 | 초안 작성. moai-studio 4-surface 비전 (Terminal / FileTree / Markdown / Code) 의 viewer 두 surface 통합 SPEC. SPEC-V3-004 의 `render_pane_tree<L>` generic 위에 `LeafKind` enum 으로 4 surface 다형성을 도입. KaTeX/Mermaid 렌더 전략 + tree-sitter 언어 priority + LSP server binary discovery 의 3 USER-DECISION 게이트. v2 SPEC-M3-001 의 SwiftTreeSitter 결정을 Rust `tree-sitter` crate 로 등가 매핑. |
+| 1.7.0 | 2026-05-01 | MS-7 milestone 추가. F-4 Status Bar (audit) — agent / git / LSP widgets skeleton + 외부 주입 API. lib.rs `status_bar()` free fn → state-bearing render 호출 교체. AC-SB-1~6 + REQ-SB-MS7-1~3 [frozen-zone] 추가. 실제 git/LSP/agent 통합은 후속 PR. |
 
 ---
 
@@ -399,6 +400,22 @@ MarkdownViewer::open(path)
 - **USER-DECISION (1 개, MS-3 진입 직전)**:
   - lsp-server-binary-discovery-v3-006 (default = i, graceful degradation)
 
+### MS-7: F-4 Status Bar — agent / git / LSP widgets skeleton (audit F-4)
+
+후속 milestone (post-implementation, 2026-05-01 sess 8 추가). audit F-4 의 PARTIAL 상태 ("Area exists; widgets pending") 해소를 위한 skeleton 도입.
+
+- **범위**: `crates/moai-studio-ui/src/status_bar.rs` 모듈 신규 — `StatusBarState` struct + 3 widget skeleton (`AgentPill`, `GitWidget`, `LspWidget`) + 외부 주입 API (`set_agent_mode` / `set_git_branch` / `set_lsp_status` / `clear_lsp_status`). `lib.rs` 의 free function `status_bar()` 를 state-bearing render 호출로 교체. 기존 정적 텍스트 (no git / version / ⌘K hint) 는 default state 로 보존.
+- **포함 요구사항**:
+  - **REQ-SB-MS7-1** [frozen-zone]: status bar 가 state-bearing 으로 추출되고 render fn 이 외부에서 호출 가능해야 한다. 기존 정적 텍스트 default 가 그대로 유지된다.
+  - **REQ-SB-MS7-2** [frozen-zone]: 외부 호출자가 `set_agent_mode(&str)` / `set_git_branch(&str, dirty: bool)` / `set_lsp_status(&str, LspState)` / `clear_lsp_status()` 4 개 mutation API 로 widget 상태를 갱신할 수 있어야 한다.
+  - **REQ-SB-MS7-3** [frozen-zone]: 본 milestone 은 skeleton + render API 까지만 도입한다 (실제 git2 / LSP / agent broadcasting 은 follow-up). 기존 status_bar 호출부 1067 (lib.rs) 호출 동작에 regression 0.
+- **제외 (Deferred carry)**:
+  - 실제 git CLI / git2 통합 (current branch 자동 감지 + dirty marker) — 후속 SPEC 또는 V3-008 (git surface) 와 연결.
+  - 실제 LSP client status broadcasting — V3-006 MS-3a 의 mock provider 와 connect 하는 후속 PR.
+  - Agent mode broadcasting (current SPEC ID, palette mode 등) — V3-012 command registry 와 연결하는 후속 PR.
+- **AC**: AC-SB-1 ~ AC-SB-6 (§10 표 참조).
+- **시연 가능 상태**: 외부 코드가 mutation API 호출 시 status bar 가 즉시 갱신. default state (no mutation) 에서는 기존 노출 그대로.
+
 ---
 
 ## 9. 파일 레이아웃 (canonical)
@@ -452,6 +469,12 @@ MarkdownViewer::open(path)
 | AC-MV-10 | RG-MV-1 (REQ-MV-007), RG-MV-5 (REQ-MV-056) | MS-3 | MarkdownViewer 가 `.moai/specs/SPEC-V3-006/spec.md` 를 표시 중. 본문에 `SPEC-V3-004` 텍스트가 link 로 detected. | 사용자가 그 link 클릭 | `OpenFileEvent { path: ".moai/specs/SPEC-V3-004/spec.md", hint: Markdown }` 발행되어 본 SPEC 의 라우터로 진입, 활성 leaf 가 새 MarkdownViewer 로 교체. | integration test + manual smoke |
 | AC-MV-11 | RG-MV-8 (REQ-MV-083) | MS-1 | binary 파일 (예: PNG) 의 `OpenFileEvent` 발행. | RootView::handle_open_file 호출 | viewer 가 마운트되지 않고 status bar 또는 toast 에 "Cannot open binary file: {path}" 메시지 1 회 표시. activetab leaf 변경 없음. | unit test (mock binary signature) |
 | AC-MV-12 | NFR-MV-7, NFR-MV-8, NFR-MV-9 | MS-3 | CodeViewer 가 활성화된 viewer 를 close. | viewer 가 dropped 후 5 초 대기. | (a) `ps` 또는 `lsof` 결과에 spawn 한 LSP server child process 없음. (b) tree-sitter 파서 스레드 종료 또는 sleep. (c) 메모리 RSS 증가 ≤ 5 MB. | integration + ps + memory profile |
+| AC-SB-1 | REQ-SB-MS7-1 | MS-7 | `StatusBarState::default()` 로 인스턴스 생성, mutation API 미호출. | `StatusBar::render(state, cx)` 호출 | 기존 정적 텍스트 (no git / `moai-studio v{version}` / `⌘K to search`) 가 그대로 노출되고 panic 없음. element tree 의 root 가 28pt 높이 div 로 유지된다. | unit test (default state render) |
+| AC-SB-2 | REQ-SB-MS7-2 | MS-7 | StatusBarState 에 `set_agent_mode("Plan")` 호출. | render | AgentPill 영역에 mode label "Plan" 가 가시. visible_agent_mode() 가 Some("Plan") 반환. | unit test |
+| AC-SB-3 | REQ-SB-MS7-2 | MS-7 | StatusBarState 에 `set_git_branch("main", false)` 호출. | render | GitWidget 영역에 "main" branch 텍스트 (dirty marker 없음). visible_git_label() 가 "main" 반환. | unit test |
+| AC-SB-4 | REQ-SB-MS7-2 | MS-7 | StatusBarState 에 `set_git_branch("feature/x", true)` 호출. | render | GitWidget 영역에 "feature/x*" (dirty marker `*` 포함). visible_git_label() 가 "feature/x*" 반환. | unit test |
+| AC-SB-5 | REQ-SB-MS7-2 | MS-7 | StatusBarState 에 `set_lsp_status("rust-analyzer", LspState::Ready)` 호출. | render | LspWidget 영역에 server name + Ready badge. visible_lsp_label() 가 "rust-analyzer · ready" 형태 반환. | unit test |
+| AC-SB-6 | REQ-SB-MS7-2 | MS-7 | StatusBarState 에 `set_lsp_status(...)` 후 `clear_lsp_status()` 호출. | render | LspWidget 영역 비표시 (no chip). visible_lsp_label() 가 None 반환. | unit test |
 
 ---
 
