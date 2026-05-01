@@ -17,6 +17,23 @@
 - [x] MS-1: SettingsModal + AppearancePane — PR #23 (AC-V13-1~6)
 - [x] MS-2: KeyboardPane + 4 sub-panes — PR #25 (AC-V13-7~9)
 - [x] MS-3: UserSettings persistence + ActiveTheme + RootView integration — PR #27 (AC-V13-10~12)
+- [x] MS-4a: HooksPane skeleton (audit G-1 첫 패널, v0.1.2 Task 9 sub-PR) — AC-V13-13~16
+
+### MS-4a Acceptance Criteria
+
+| AC ID | Given | When | Then |
+|-------|-------|------|------|
+| AC-V13-13 | (메타데이터) | `HooksPane::title()` / `description()` 호출 | title == "Hooks", description 비어있지 않고 "27" 카탈로그 사이즈를 언급 |
+| AC-V13-14 | (카탈로그) | `HooksPane::known_events()` 호출 | 정확히 27 개 hook event 반환, unique, 핵심 이벤트 (PreToolUse, PostToolUse, Stop, UserPromptSubmit, WorktreeCreate, WorktreeRemove) 포함 |
+| AC-V13-15 | HooksPane(state.event_filter == "worktree") | `visible_events()` 호출 | filter 가 case-insensitive substring 매치, WorktreeCreate + WorktreeRemove 2 건 반환. 매치 없는 filter 는 빈 Vec |
+| AC-V13-16 | event_filter 가 비어있지 않은 상태 | `clear_event_filter()` 호출 | event_filter 는 빈 문자열, visible_count == 27 (전체 카탈로그 복귀) |
+
+#### MS-4a Frozen-zone (REQ-V13-MS4a-1)
+
+- moai-studio-terminal/** 무변경
+- moai-studio-workspace/** 무변경
+- 기존 6 SettingsSection variant 의 동작/시그니처 무변경 (Hooks variant 추가, sections() return type 6 → 7, label/active_section_title match arm 만 확장)
+- UserSettings 의 영속화 schema 무변경 (HooksState 는 in-memory only, MS-3 schema v1 carry)
 
 ## Key Files Changed
 
