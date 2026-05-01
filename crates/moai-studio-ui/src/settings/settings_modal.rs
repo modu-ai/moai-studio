@@ -6,7 +6,7 @@
 //! RootView 배선 + Cmd+, keybinding 은 lib.rs 와 함께 MS-3 에서.
 
 use crate::settings::panes::{
-    AdvancedPane, AgentPane, AppearancePane, EditorPane, KeyboardPane, TerminalPane,
+    AdvancedPane, AgentPane, AppearancePane, EditorPane, HooksPane, KeyboardPane, TerminalPane,
 };
 use crate::settings::settings_state::{SettingsSection, SettingsViewState};
 
@@ -98,8 +98,8 @@ impl SettingsModal {
         self.view_state.selected_section
     }
 
-    /// sidebar 의 6개 section 을 정해진 순서로 반환한다 (AC-V13-2).
-    pub fn sections(&self) -> [SettingsSection; 6] {
+    /// sidebar 의 7개 section 을 정해진 순서로 반환한다 (AC-V13-2 + MS-4a).
+    pub fn sections(&self) -> [SettingsSection; 7] {
         SettingsSection::all()
     }
 
@@ -130,6 +130,11 @@ impl SettingsModal {
         self.view_state.selected_section == SettingsSection::Agent
     }
 
+    /// 현재 선택된 section 이 HooksPane 에 해당하는지 여부 (MS-4a).
+    pub fn is_hooks_active(&self) -> bool {
+        self.view_state.selected_section == SettingsSection::Hooks
+    }
+
     /// 현재 선택된 section 이 AdvancedPane 에 해당하는지 여부.
     pub fn is_advanced_active(&self) -> bool {
         self.view_state.selected_section == SettingsSection::Advanced
@@ -143,6 +148,7 @@ impl SettingsModal {
             SettingsSection::Editor => EditorPane::title(),
             SettingsSection::Terminal => TerminalPane::title(),
             SettingsSection::Agent => AgentPane::title(),
+            SettingsSection::Hooks => HooksPane::title(),
             SettingsSection::Advanced => AdvancedPane::title(),
         }
     }
@@ -294,10 +300,10 @@ mod tests {
     // ---- sidebar section tests ----
 
     #[test]
-    /// sections() 가 6개 section 을 반환한다 (AC-V13-2).
-    fn sections_returns_six() {
+    /// sections() 가 7개 section 을 반환한다 (AC-V13-2 + MS-4a).
+    fn sections_returns_seven() {
         let modal = SettingsModal::new();
-        assert_eq!(modal.sections().len(), 6);
+        assert_eq!(modal.sections().len(), 7);
     }
 
     #[test]
@@ -326,7 +332,7 @@ mod tests {
     }
 
     #[test]
-    /// sections() 의 첫 번째가 Appearance, 두 번째가 Keyboard 이다 (REQ-V13-010).
+    /// sections() 의 첫 번째가 Appearance, 두 번째가 Keyboard 이다 (REQ-V13-010 + MS-4a).
     fn sections_order_is_correct() {
         let modal = SettingsModal::new();
         let sections = modal.sections();
@@ -335,7 +341,8 @@ mod tests {
         assert_eq!(sections[2], SettingsSection::Editor);
         assert_eq!(sections[3], SettingsSection::Terminal);
         assert_eq!(sections[4], SettingsSection::Agent);
-        assert_eq!(sections[5], SettingsSection::Advanced);
+        assert_eq!(sections[5], SettingsSection::Hooks);
+        assert_eq!(sections[6], SettingsSection::Advanced);
     }
 
     // ---- MS-2: section routing tests (AC-V13-9) ----
@@ -402,6 +409,8 @@ mod tests {
         assert_eq!(modal.active_section_title(), "Terminal");
         modal.select_section(SettingsSection::Agent);
         assert_eq!(modal.active_section_title(), "Agent");
+        modal.select_section(SettingsSection::Hooks);
+        assert_eq!(modal.active_section_title(), "Hooks");
         modal.select_section(SettingsSection::Advanced);
         assert_eq!(modal.active_section_title(), "Advanced");
     }
@@ -417,6 +426,7 @@ mod tests {
                 m.is_editor_active(),
                 m.is_terminal_active(),
                 m.is_agent_active(),
+                m.is_hooks_active(),
                 m.is_advanced_active(),
             ]
         };

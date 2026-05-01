@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 // Section 열거형 (6 sections)
 // ============================================================
 
-/// SettingsModal 의 6개 section 식별자.
+/// SettingsModal 의 7개 section 식별자.
+///
+/// MS-4a (SPEC-V3-013, v0.1.2 Task 9): `Hooks` variant 추가 (audit G-1).
 ///
 /// @MX:ANCHOR: [AUTO] settings-section-enum
 /// @MX:REASON: [AUTO] sidebar row 렌더, main pane swap, selected_section 상태 전이의 공통 타입.
@@ -26,6 +28,8 @@ pub enum SettingsSection {
     Terminal,
     /// 에이전트 설정 (skeleton)
     Agent,
+    /// Claude Code Hooks 설정 (read-only skeleton, MS-4a)
+    Hooks,
     /// 고급 설정 (skeleton)
     Advanced,
 }
@@ -39,18 +43,23 @@ impl SettingsSection {
             Self::Editor => "Editor",
             Self::Terminal => "Terminal",
             Self::Agent => "Agent",
+            Self::Hooks => "Hooks",
             Self::Advanced => "Advanced",
         }
     }
 
-    /// 6개 section 을 정해진 순서대로 반환한다 (REQ-V13-010).
-    pub fn all() -> [SettingsSection; 6] {
+    /// 7개 section 을 정해진 순서대로 반환한다 (REQ-V13-010 + MS-4a).
+    ///
+    /// 순서는 sidebar 표시 순서와 일치한다. Hooks 는 Agent 다음 위치에 들어가
+    /// 관련 설정 (Agent — Hooks — Advanced) 이 시각적으로 인접하도록 한다.
+    pub fn all() -> [SettingsSection; 7] {
         [
             Self::Appearance,
             Self::Keyboard,
             Self::Editor,
             Self::Terminal,
             Self::Agent,
+            Self::Hooks,
             Self::Advanced,
         ]
     }
@@ -401,6 +410,39 @@ impl AgentState {
 }
 
 // ============================================================
+// HooksState — HooksPane in-memory state (MS-4a skeleton)
+// ============================================================
+
+/// HooksPane 의 read-only in-memory 상태 (v0.1.2 Task 9 / MS-4a).
+///
+/// audit G-1 (Settings Hooks pane) skeleton. v0.1.2 단계에서는 Claude Code
+/// hook event 카탈로그를 read-only 로 노출만 하며, enable/disable 토글과
+/// hook script 편집은 향후 SPEC 으로 carry.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct HooksState {
+    /// 사용자 입력 search query — 빈 문자열이면 전체 노출.
+    pub event_filter: String,
+}
+
+impl HooksState {
+    /// `event_filter` 에 매치되는 known hook event 만 반환한다.
+    ///
+    /// 매치는 case-insensitive substring. 빈 filter 는 전체를 반환한다.
+    /// `'static` 보장은 입력 slice 의 element 들이 `&'static str` 인 데서 온다.
+    pub fn filtered_events(&self, events: &[&'static str]) -> Vec<&'static str> {
+        if self.event_filter.is_empty() {
+            return events.to_vec();
+        }
+        let needle = self.event_filter.to_ascii_lowercase();
+        events
+            .iter()
+            .copied()
+            .filter(|name| name.to_ascii_lowercase().contains(&needle))
+            .collect()
+    }
+}
+
+// ============================================================
 // AdvancedState — AdvancedPane in-memory 상태 (MS-2 skeleton)
 // ============================================================
 
@@ -433,6 +475,8 @@ pub struct SettingsViewState {
     pub terminal: TerminalState,
     /// AgentPane 의 in-memory 상태.
     pub agent: AgentState,
+    /// HooksPane 의 in-memory 상태 (MS-4a, audit G-1).
+    pub hooks: HooksState,
     /// AdvancedPane 의 in-memory 상태.
     pub advanced: AdvancedState,
     /// SettingsModal 이 표시 중인지 여부 (mount/dismiss 상태).
@@ -448,6 +492,7 @@ impl Default for SettingsViewState {
             editor: EditorState::default(),
             terminal: TerminalState::default(),
             agent: AgentState::default(),
+            hooks: HooksState::default(),
             advanced: AdvancedState::default(),
             is_visible: false,
         }
@@ -487,16 +532,17 @@ mod tests {
     // ---- SettingsSection tests ----
 
     #[test]
-    /// SettingsSection::all() 이 6개를 정해진 순서로 반환한다 (REQ-V13-010).
-    fn section_all_returns_six_in_order() {
+    /// SettingsSection::all() 이 7개를 정해진 순서로 반환한다 (REQ-V13-010 + MS-4a).
+    fn section_all_returns_seven_in_order() {
         let all = SettingsSection::all();
-        assert_eq!(all.len(), 6);
+        assert_eq!(all.len(), 7);
         assert_eq!(all[0], SettingsSection::Appearance);
         assert_eq!(all[1], SettingsSection::Keyboard);
         assert_eq!(all[2], SettingsSection::Editor);
         assert_eq!(all[3], SettingsSection::Terminal);
         assert_eq!(all[4], SettingsSection::Agent);
-        assert_eq!(all[5], SettingsSection::Advanced);
+        assert_eq!(all[5], SettingsSection::Hooks);
+        assert_eq!(all[6], SettingsSection::Advanced);
     }
 
     #[test]
@@ -507,6 +553,7 @@ mod tests {
         assert_eq!(SettingsSection::Editor.label(), "Editor");
         assert_eq!(SettingsSection::Terminal.label(), "Terminal");
         assert_eq!(SettingsSection::Agent.label(), "Agent");
+        assert_eq!(SettingsSection::Hooks.label(), "Hooks");
         assert_eq!(SettingsSection::Advanced.label(), "Advanced");
     }
 
