@@ -20,6 +20,7 @@
 - [x] MS-4a: HooksPane skeleton (audit G-1 첫 패널, v0.1.2 Task 9 sub-PR) — AC-V13-13~16
 - [x] MS-4b: McpPane skeleton (audit G-1 두 번째 패널, v0.1.2 Task 9b sub-PR) — AC-V13-17~21
 - [x] MS-4c: SkillsPane skeleton (audit G-1 세 번째 패널, v0.1.2 Task 9c sub-PR) — AC-V13-22~26
+- [x] MS-4d: RulesPane skeleton (audit G-1 마지막 패널 — Task 9 4 sub-PR 완성, v0.1.2 Task 9d sub-PR) — AC-V13-27~31
 
 ### MS-4a Acceptance Criteria
 
@@ -70,6 +71,24 @@
 - moai-studio-workspace/** 무변경
 - 기존 8 SettingsSection variant (MS-4b 후) 의 동작/시그니처 무변경 (Skills variant 추가, sections() return type 8 → 9, label/active_section_title match arm 만 확장)
 - UserSettings 의 영속화 schema 무변경 (SkillsPaneState 는 in-memory only, ~/.claude/skills/ 자동 스캔 wiring 은 별 SPEC)
+
+### MS-4d Acceptance Criteria
+
+| AC ID | Given | When | Then |
+|-------|-------|------|------|
+| AC-V13-27 | (메타데이터) | `RulesPane::title()` / `description()` 호출 | title == "Rules", description 비어있지 않고 "Rules" 키워드 포함 |
+| AC-V13-28 | 빈 rule 목록 | `total_count()` / `set_rules([3개])` 호출 | 빈 상태 0/0, 주입 후 total=3 + visible=3 (filter 빈) |
+| AC-V13-29 | sample rules 3개 (constitution/spec-workflow/rust) | `set_rule_filter("CONSTITUTION")` / `"workflow"` / `"nonexistent"` 호출 | "CONSTITUTION" → 1건 (case-insensitive name), "workflow" → 1건 (description match), "nonexistent" → 0건 |
+| AC-V13-30 | filter 가 활성 (visible 1) | `clear_rule_filter()` 호출 | filter == "" + visible_count == 3 (전체 복귀) |
+| AC-V13-31 | enabled=2 + disabled=1 rule 주입 | `visible_rules()` 검사 | enabled 와 disabled 모두 노출 (read-only viewer) |
+
+#### MS-4d Frozen-zone (REQ-V13-MS4d-1)
+
+- moai-studio-terminal/** 무변경
+- moai-studio-workspace/** 무변경
+- 기존 9 SettingsSection variant (MS-4c 후) 의 동작/시그니처 무변경 (Rules variant 추가, sections() return type 9 → 10, label/active_section_title match arm 만 확장)
+- UserSettings 의 영속화 schema 무변경 (RulesPaneState 는 in-memory only, .claude/rules/ 자동 스캔 wiring 은 별 SPEC)
+- audit G-1 의 4 missing panes (Hooks/MCP/Skills/Rules) 모두 skeleton 추가 완료 — Task 9 의 4 sub-PR 완성 (4a~4d)
 
 ## Key Files Changed
 

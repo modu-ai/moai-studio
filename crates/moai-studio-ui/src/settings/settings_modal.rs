@@ -7,7 +7,7 @@
 
 use crate::settings::panes::{
     AdvancedPane, AgentPane, AppearancePane, EditorPane, HooksPane, KeyboardPane, McpPane,
-    SkillsPane, TerminalPane,
+    RulesPane, SkillsPane, TerminalPane,
 };
 use crate::settings::settings_state::{SettingsSection, SettingsViewState};
 
@@ -99,8 +99,8 @@ impl SettingsModal {
         self.view_state.selected_section
     }
 
-    /// sidebar 의 9개 section 을 정해진 순서로 반환한다 (AC-V13-2 + MS-4a/4b/4c).
-    pub fn sections(&self) -> [SettingsSection; 9] {
+    /// sidebar 의 10개 section 을 정해진 순서로 반환한다 (AC-V13-2 + MS-4a/4b/4c/4d).
+    pub fn sections(&self) -> [SettingsSection; 10] {
         SettingsSection::all()
     }
 
@@ -146,6 +146,11 @@ impl SettingsModal {
         self.view_state.selected_section == SettingsSection::Skills
     }
 
+    /// 현재 선택된 section 이 RulesPane 에 해당하는지 여부 (MS-4d).
+    pub fn is_rules_active(&self) -> bool {
+        self.view_state.selected_section == SettingsSection::Rules
+    }
+
     /// 현재 선택된 section 이 AdvancedPane 에 해당하는지 여부.
     pub fn is_advanced_active(&self) -> bool {
         self.view_state.selected_section == SettingsSection::Advanced
@@ -162,6 +167,7 @@ impl SettingsModal {
             SettingsSection::Hooks => HooksPane::title(),
             SettingsSection::Mcp => McpPane::title(),
             SettingsSection::Skills => SkillsPane::title(),
+            SettingsSection::Rules => RulesPane::title(),
             SettingsSection::Advanced => AdvancedPane::title(),
         }
     }
@@ -313,10 +319,10 @@ mod tests {
     // ---- sidebar section tests ----
 
     #[test]
-    /// sections() 가 9개 section 을 반환한다 (AC-V13-2 + MS-4a/4b/4c).
-    fn sections_returns_nine() {
+    /// sections() 가 10개 section 을 반환한다 (AC-V13-2 + MS-4a/4b/4c/4d).
+    fn sections_returns_ten() {
         let modal = SettingsModal::new();
-        assert_eq!(modal.sections().len(), 9);
+        assert_eq!(modal.sections().len(), 10);
     }
 
     #[test]
@@ -345,7 +351,7 @@ mod tests {
     }
 
     #[test]
-    /// sections() 의 첫 번째가 Appearance, 두 번째가 Keyboard 이다 (REQ-V13-010 + MS-4a/4b/4c).
+    /// sections() 의 첫 번째가 Appearance, 두 번째가 Keyboard 이다 (REQ-V13-010 + MS-4a/4b/4c/4d).
     fn sections_order_is_correct() {
         let modal = SettingsModal::new();
         let sections = modal.sections();
@@ -357,7 +363,8 @@ mod tests {
         assert_eq!(sections[5], SettingsSection::Hooks);
         assert_eq!(sections[6], SettingsSection::Mcp);
         assert_eq!(sections[7], SettingsSection::Skills);
-        assert_eq!(sections[8], SettingsSection::Advanced);
+        assert_eq!(sections[8], SettingsSection::Rules);
+        assert_eq!(sections[9], SettingsSection::Advanced);
     }
 
     // ---- MS-2: section routing tests (AC-V13-9) ----
@@ -430,6 +437,8 @@ mod tests {
         assert_eq!(modal.active_section_title(), "MCP");
         modal.select_section(SettingsSection::Skills);
         assert_eq!(modal.active_section_title(), "Skills");
+        modal.select_section(SettingsSection::Rules);
+        assert_eq!(modal.active_section_title(), "Rules");
         modal.select_section(SettingsSection::Advanced);
         assert_eq!(modal.active_section_title(), "Advanced");
     }
@@ -448,6 +457,7 @@ mod tests {
                 m.is_hooks_active(),
                 m.is_mcp_active(),
                 m.is_skills_active(),
+                m.is_rules_active(),
                 m.is_advanced_active(),
             ]
         };
