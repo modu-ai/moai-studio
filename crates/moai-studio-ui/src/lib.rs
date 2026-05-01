@@ -22,6 +22,8 @@ use crate::terminal::TerminalClickEvent;
 use crate::terminal::TerminalStdoutEvent;
 
 pub mod agent;
+// SPEC-V3-006 MS-7 (audit F-4): state-bearing StatusBar widget surface.
+pub mod status_bar;
 // SPEC-V0-1-2-MENUS-001 F-3: Toolbar 모듈
 pub mod toolbar;
 // G-2: Project Wizard 모듈
@@ -223,6 +225,14 @@ pub struct RootView {
     /// Set by `inject_slash_command`; drained by the render/update loop when a
     /// TerminalSurface Entity context is available.
     pub pending_slash_injection: Option<String>,
+    // ── SPEC-V3-006 MS-7 (audit F-4): state-bearing status bar widgets ──
+    /// Injected widget state for the bottom 28pt status bar.
+    ///
+    /// Default state preserves the pre-MS-7 static rendering ("no git",
+    /// version, ⌘K hint). External callers populate AgentPill / GitWidget /
+    /// LspWidget via mutation API in `crate::status_bar`. Real broadcasting
+    /// from git2 / LSP / agent runtime is follow-up (REQ-SB-MS7-3).
+    pub status_bar: status_bar::StatusBarState,
     // ── SPEC-V3-007 MS-4 (RG-WB-4): WebView toast pipeline ──
     /// URL auto-detection debouncer fed by TerminalStdoutEvent (REQ-WB-031).
     ///
@@ -287,6 +297,8 @@ impl RootView {
             toolbar: None, // F-3: toolbar created in run_app after App context available
             project_wizard: None, // G-2: wizard created in run_app after App context available
             pending_slash_injection: None, // MS-4: slash injection buffer (drained by render loop)
+            // SPEC-V3-006 MS-7 (audit F-4): default state preserves pre-MS-7 static rendering.
+            status_bar: status_bar::StatusBarState::default(),
             // SPEC-V3-007 MS-4: WebView toast pipeline initial state.
             #[cfg(feature = "web")]
             url_detector: web::UrlDetectionDebouncer::new(),
@@ -1516,7 +1528,7 @@ impl Render for RootView {
                 tab_container,
                 create_first_btn,
             ))
-            .child(status_bar())
+            .child(status_bar::render_status_bar(&self.status_bar))
             .children(
                 self.cmd_palette
                     .as_ref()
@@ -2139,42 +2151,15 @@ fn render_spec_panel_overlay() -> impl IntoElement {
 
 // ============================================================
 // 3) StatusBar — 28pt 하단
+//
+// SPEC-V3-006 MS-7 (audit F-4): the prior free function `status_bar()`
+// was extracted into the `crate::status_bar` module as a state-bearing
+// surface. RootView::render now calls
+// `crate::status_bar::render_status_bar(&self.status_bar)` which preserves
+// the pre-MS-7 layout when `StatusBarState::default()` is used and exposes
+// `set_agent_mode` / `set_git_branch` / `set_lsp_status` / `clear_lsp_status`
+// for follow-up wiring of git2 / LSP / agent broadcasting (REQ-SB-MS7-3).
 // ============================================================
-
-fn status_bar() -> impl IntoElement {
-    div()
-        .flex()
-        .flex_row()
-        .items_center()
-        .w_full()
-        .h(px(28.))
-        .px_3()
-        .gap_3()
-        .bg(rgb(tok::BG_ELEVATED))
-        .border_t_1()
-        .border_color(rgb(tok::BORDER_SUBTLE))
-        .child(
-            div()
-                .text_xs()
-                .text_color(rgb(tok::FG_MUTED))
-                .child("no git"),
-        )
-        .child(div().text_xs().text_color(rgb(tok::FG_DISABLED)).child("·"))
-        .child(
-            div()
-                .text_xs()
-                .text_color(rgb(tok::FG_MUTED))
-                .child(format!("moai-studio v{}", env!("CARGO_PKG_VERSION"))),
-        )
-        .child(div().flex_grow())
-        // 우측 — ⌘K 힌트 (Command Palette 발견성)
-        .child(
-            div()
-                .text_xs()
-                .text_color(rgb(tok::FG_MUTED))
-                .child("⌘K to search"),
-        )
-}
 
 // ============================================================
 // 앱 엔트리

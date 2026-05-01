@@ -142,3 +142,33 @@ Branch: feature/SPEC-V3-006-ms5-langs
 ### Deferred
 - 실제 LSP diagnostics squiggly underlines (REQ-MV-040~046) — V3-006 MS-6 또는 후속 SPEC
 - C/C++/Java/Kotlin grammar 추가 — v0.2.0+ 후보
+
+---
+
+## MS-7 (2026-05-01 sess 8) — F-4 Status Bar skeleton (audit F-4)
+
+Branch: feature/SPEC-V3-006-ms7-status-bar
+
+### Implementation
+- `crates/moai-studio-ui/src/status_bar.rs` (신규) — `StatusBarState` struct + 3 widget skeleton (`AgentPill`, `GitWidget`, `LspWidget`) + 4 mutation API (`set_agent_mode` / `set_git_branch` / `set_lsp_status` / `clear_lsp_status`) + 3 visibility helper (`visible_agent_mode` / `visible_git_label` / `visible_lsp_label`) + `LspState` enum (`Ready` / `Indexing` / `Error` / `NotAvailable`).
+- `crates/moai-studio-ui/src/lib.rs` — `pub mod status_bar` 등록, `RootView::status_bar: status_bar::StatusBarState` 필드 신규, `RootView::new` 에서 default 초기화, `RootView::render` 의 `.child(status_bar())` 호출을 `.child(status_bar::render_status_bar(&self.status_bar))` 로 교체. 기존 free function `fn status_bar()` 제거 (state-bearing 모듈 안으로 흡수). default state 에서 pre-MS-7 정적 텍스트 ("no git" / version / ⌘K hint) 그대로 유지.
+
+### Acceptance Criteria
+| AC | 내용 | 상태 |
+|----|------|------|
+| AC-SB-1 | default state 가 pre-MS-7 정적 텍스트 보존 + render panic 없음 | ✅ |
+| AC-SB-2 | `set_agent_mode("Plan")` → AgentPill 가시 | ✅ |
+| AC-SB-3 | `set_git_branch("main", false)` → "main" 라벨 (no dirty marker) | ✅ |
+| AC-SB-4 | `set_git_branch("feature/x", true)` → "feature/x*" (dirty marker) | ✅ |
+| AC-SB-5 | `set_lsp_status("rust-analyzer", LspState::Ready)` → "rust-analyzer · ready" | ✅ |
+| AC-SB-6 | `clear_lsp_status()` → LSP chip 비표시 | ✅ |
+
+### Test count
+- 신규: 13 (status_bar::tests — default/agent/git clean/git dirty/git clear/lsp ready/lsp indexing/lsp na/lsp clear/independent mutations/render default/render populated)
+- 전체 ui crate tests 1118 → 1131, clippy 0, fmt clean
+
+### Deferred (carry to follow-up PR)
+- 실제 git CLI / git2 통합 — workspace root 의 current branch + dirty 상태 자동 감지
+- 실제 LSP client status broadcasting — V3-006 MS-3a `lsp.rs` mock provider 와 connect
+- Agent mode broadcasting — V3-012 command registry / palette mode 와 연결
+- Status bar 영역 클릭 인터랙션 (예: branch 클릭 → git surface, LSP chip 클릭 → LSP server 정보 popover) — UX 후속 SPEC
