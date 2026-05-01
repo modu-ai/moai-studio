@@ -24,6 +24,8 @@ use crate::terminal::TerminalStdoutEvent;
 pub mod agent;
 // SPEC-V3-006 MS-7 (audit F-4): state-bearing StatusBar widget surface.
 pub mod status_bar;
+// SPEC-V3-004 MS-4 (audit D-2): sidebar workspace context menu skeleton.
+pub mod workspace_menu;
 // SPEC-V0-1-2-MENUS-001 F-3: Toolbar 모듈
 pub mod toolbar;
 // G-2: Project Wizard 모듈
