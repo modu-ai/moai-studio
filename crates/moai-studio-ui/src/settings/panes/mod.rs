@@ -6,6 +6,7 @@ pub mod appearance;
 pub mod editor;
 pub mod hooks;
 pub mod keyboard;
+pub mod mcp;
 pub mod terminal;
 
 pub use advanced::AdvancedPane;
@@ -14,4 +15,5 @@ pub use appearance::AppearancePane;
 pub use editor::EditorPane;
 pub use hooks::HooksPane;
 pub use keyboard::KeyboardPane;
+pub use mcp::McpPane;
 pub use terminal::TerminalPane;
