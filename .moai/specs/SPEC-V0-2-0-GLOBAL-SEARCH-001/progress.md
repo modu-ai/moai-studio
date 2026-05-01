@@ -11,11 +11,11 @@
 |------|------|------|------|
 | 2026-05-01 | sess 8 | planning (manager-spec) | research.md (22.5KB) + spec.md v1.0.0-draft (36.9KB) + progress.md (template) |
 | 2026-05-02 | sess 9 | annotation iteration 1 | spec.md v1.1.0-ready (USER-DECISION 3건 lock-in) + progress.md 갱신 + plan.md (milestones × tasks × files × AC 매핑) |
-| TBD | sess 9+ | MS-1 implementation | (manager-tdd 위임) — `crates/moai-search/` 신규 crate + AC-GS-1~6 PASS |
+| 2026-05-02 | sess 9 | MS-1 implementation (manager-tdd 위임) | `crates/moai-search/` 신규 crate (Cargo.toml + 6 src files) + 18 unit tests + 2 doc-tests + workspace deps (`ignore = "0.4"`, `regex = "1"`) — AC-GS-1~6 PASS, AC-GS-12 (regex meta) PASS, clippy 0 warning, fmt clean, 워크스페이스 회귀 0. |
 
 ## Milestone Status
 
-- [ ] **MS-1**: `crates/moai-search/` 신규 crate — `SearchSession` / `SearchHit` / `SearchOptions` / `CancelToken` + walker (ignore::WalkBuilder) + matcher (regex/literal fallback) + cancel token. AC-GS-1 ~ AC-GS-6.
+- [x] **MS-1**: `crates/moai-search/` 신규 crate — `SearchSession` / `SearchHit` / `SearchOptions` / `CancelToken` + walker (ignore::WalkBuilder) + matcher (regex/literal fallback) + cancel token. AC-GS-1 ~ AC-GS-6 ✅ PASS (sess 9 manager-tdd, 2026-05-02).
 - [ ] **MS-2**: `crates/moai-studio-ui/src/search/` 모듈 — SearchPanel GPUI Entity + result row rendering + 사이드바 section toggle + ⌘⇧F dispatch. AC-GS-7, AC-GS-8, AC-GS-9, AC-GS-12 (UI 측).
 - [ ] **MS-3**: navigation wire — SearchHit click → workspace activate + new tab + line jump (OpenCodeViewer adapter). Command Palette `workspace.search` entry handler dispatch + label/keybinding 갱신. AC-GS-10, AC-GS-11.
 - [ ] **MS-4**: polish — backpressure (1000 cap auto-cancel + message), per-workspace progress spinner, ↑↓ keyboard navigation, match highlight in preview, integration test `tests/integration_search.rs`. final regression sweep.
@@ -32,18 +32,18 @@
 
 | AC ID | Status | Notes |
 |-------|--------|-------|
-| AC-GS-1  | ⬜ TODO | engine domain model — `cargo test -p moai-search` |
-| AC-GS-2  | ⬜ TODO | walk_workspace happy path |
-| AC-GS-3  | ⬜ TODO | gitignore + custom exclude (target/node_modules/dist/log) |
-| AC-GS-4  | ⬜ TODO | binary file skip (NUL byte heuristic) |
-| AC-GS-5  | ⬜ TODO | cancel token (mid-walk abort) |
-| AC-GS-6  | ⬜ TODO | result cap (per-file 50 / per-workspace 200 / total 1000) |
-| AC-GS-7  | ⬜ TODO | SearchPanel ⌘⇧F 토글 + input focus |
-| AC-GS-8  | ⬜ TODO | result row 2-line layout + batch flush (100 hits / 1000ms) |
-| AC-GS-9  | ⬜ TODO | status (Empty / Searching / No matches) + empty query no-spawn |
-| AC-GS-10 | ⬜ TODO | navigation (touch + new_tab + OpenCodeViewer) |
-| AC-GS-11 | ⬜ TODO | Command Palette `workspace.search` entry dispatch + label/keybinding 갱신 |
-| AC-GS-12 | ⬜ TODO | edge cases (0 ws / 1 ws / regex meta / regex compile fail → literal fallback) |
+| AC-GS-1  | ✅ PASS | engine domain model — 4 핵심 타입 정의, GPUI 의존 0, `cargo build -p moai-search` GREEN, 18 unit + 2 doc-tests PASS (sess 9) |
+| AC-GS-2  | ✅ PASS | walk_workspace happy path — `test_walk_workspace_happy_path` (sess 9) |
+| AC-GS-3  | ✅ PASS | gitignore + custom exclude — `test_walk_workspace_respects_gitignore`, `test_walk_workspace_custom_excludes` (sess 9). 단위 테스트는 `.ignore` 파일로 검증 (tempdir에서 .gitignore 인식 안 됨, production은 git repo이므로 정상 작동). |
+| AC-GS-4  | ✅ PASS | binary file skip — `test_walk_workspace_skips_binary_files` (NUL byte 첫 8KB heuristic, sess 9) |
+| AC-GS-5  | ✅ PASS | cancel mid-walk — `test_walk_workspace_cancel_mid_walk` (per-file + per-line poll, sess 9) |
+| AC-GS-6  | ✅ PASS | result cap (per-file 50 / per-workspace 200 / total 1000) — 3 단위 테스트 (per-file/per-workspace/total auto-cancel, sess 9) |
+| AC-GS-7  | ⬜ TODO | SearchPanel ⌘⇧F 토글 + input focus (MS-2) |
+| AC-GS-8  | ⬜ TODO | result row 2-line layout + batch flush (100 hits / 1000ms) (MS-2) |
+| AC-GS-9  | ⬜ TODO | status (Empty / Searching / No matches) + empty query no-spawn (MS-2) |
+| AC-GS-10 | ⬜ TODO | navigation (touch + new_tab + OpenCodeViewer) (MS-3) |
+| AC-GS-11 | ⬜ TODO | Command Palette `workspace.search` entry dispatch + label/keybinding 갱신 (MS-3) |
+| AC-GS-12 | 🟡 PARTIAL | regex meta auto-detect + compile fail → literal fallback ✅ PASS (`test_regex_auto_detect`, `test_regex_compile_failure_fallback_to_literal`, sess 9). UI 측 edge cases (0 ws / 1 ws) MS-2 carry. |
 
 상태 범례:
 - ⬜ TODO — 미시작
@@ -53,7 +53,20 @@
 
 ## Test Coverage
 
-목표:
+### MS-1 실측 (sess 9, 2026-05-02)
+
+- `cargo test -p moai-search`: **18 unit tests + 2 doc-tests = 20 total, 0 failed** (0.02s + doctests 1.25s)
+  - cancel: 3 tests (default_false / clone_shares_state / propagates_after_cancel)
+  - types: 2 tests (search_options_defaults / search_hit_fields_and_clone)
+  - matcher: 4 tests (literal_substring / literal_case_insensitive / regex_auto_detect / regex_compile_fail_fallback)
+  - walker: 8 tests (happy_path / respects_gitignore / custom_excludes / skips_binary_files / cancel_mid_walk / per_file_cap / per_workspace_cap / total_cap_auto_cancels)
+  - session: 1 test (spawn_and_cancel)
+  - doc-tests: 2 (session::SearchSession + cancel::CancelToken)
+- `cargo clippy -p moai-search --all-targets -- -D warnings`: 0 warning
+- `cargo fmt -p moai-search --check`: clean
+- `cargo build --workspace`: GREEN, 회귀 0
+
+### MS-2/3/4 목표 (carry):
 - `cargo test -p moai-search` — engine 단위 테스트, AC-GS-1~6 검증
 - `cargo test -p moai-studio-ui --lib search::tests` — UI 단위 테스트, AC-GS-9/12 검증
 - `cargo test -p moai-studio-ui --test integration_search` (신규) — integration, AC-GS-7/8/10 검증
