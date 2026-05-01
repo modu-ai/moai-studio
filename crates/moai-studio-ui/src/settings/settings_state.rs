@@ -9,10 +9,11 @@ use serde::{Deserialize, Serialize};
 // Section 열거형 (6 sections)
 // ============================================================
 
-/// SettingsModal 의 8개 section 식별자.
+/// SettingsModal 의 9개 section 식별자.
 ///
 /// MS-4a (SPEC-V3-013, v0.1.2 Task 9a): `Hooks` variant 추가 (audit G-1).
 /// MS-4b (SPEC-V3-013, v0.1.2 Task 9b): `Mcp` variant 추가 (audit G-1).
+/// MS-4c (SPEC-V3-013, v0.1.2 Task 9c): `Skills` variant 추가 (audit G-1).
 ///
 /// @MX:ANCHOR: [AUTO] settings-section-enum
 /// @MX:REASON: [AUTO] sidebar row 렌더, main pane swap, selected_section 상태 전이의 공통 타입.
@@ -33,6 +34,8 @@ pub enum SettingsSection {
     Hooks,
     /// MCP servers 설정 (read-only skeleton, MS-4b)
     Mcp,
+    /// Claude Code Skills 설정 (read-only skeleton, MS-4c)
+    Skills,
     /// 고급 설정 (skeleton)
     Advanced,
 }
@@ -48,16 +51,16 @@ impl SettingsSection {
             Self::Agent => "Agent",
             Self::Hooks => "Hooks",
             Self::Mcp => "MCP",
+            Self::Skills => "Skills",
             Self::Advanced => "Advanced",
         }
     }
 
-    /// 8개 section 을 정해진 순서대로 반환한다 (REQ-V13-010 + MS-4a/MS-4b).
+    /// 9개 section 을 정해진 순서대로 반환한다 (REQ-V13-010 + MS-4a/4b/4c).
     ///
-    /// 순서는 sidebar 표시 순서와 일치한다. Hooks 와 Mcp 는 Agent 다음 위치에
-    /// 들어가 관련 설정 (Agent — Hooks — MCP — Advanced) 이 시각적으로
-    /// 인접하도록 한다.
-    pub fn all() -> [SettingsSection; 8] {
+    /// 순서는 sidebar 표시 순서와 일치한다. 새 카탈로그 패널들 (Hooks/MCP/
+    /// Skills) 은 Agent 다음 위치에 인접 그룹으로 배치한다.
+    pub fn all() -> [SettingsSection; 9] {
         [
             Self::Appearance,
             Self::Keyboard,
@@ -66,6 +69,7 @@ impl SettingsSection {
             Self::Agent,
             Self::Hooks,
             Self::Mcp,
+            Self::Skills,
             Self::Advanced,
         ]
     }
@@ -522,6 +526,76 @@ impl McpPaneState {
 }
 
 // ============================================================
+// Skill + SkillsPaneState — SkillsPane in-memory state (MS-4c skeleton)
+// ============================================================
+
+/// 단일 Claude Code Skill 의 read-only 메타데이터.
+///
+/// SPEC-V3-013 MS-4c (audit G-1) — `~/.claude/skills/*` 또는 plugin-bundled
+/// skills 의 frontmatter 와 호환되는 최소 필드만 노출한다. 실제 토글 /
+/// 편집은 후속 SPEC.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Skill {
+    /// skill 의 고유 이름 (frontmatter `name:` 또는 디렉터리 이름).
+    pub name: String,
+    /// frontmatter `description:` (없으면 빈 문자열).
+    pub description: String,
+    /// 등록된 source — "user" / "project" / 플러그인 namespace.
+    pub source: String,
+    /// 활성화 여부 (settings.json `disabledSkills` 미포함이면 true).
+    pub enabled: bool,
+}
+
+impl Skill {
+    /// 새 Skill 메타데이터를 생성한다.
+    pub fn new(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        source: impl Into<String>,
+        enabled: bool,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            description: description.into(),
+            source: source.into(),
+            enabled,
+        }
+    }
+}
+
+/// SkillsPane 의 read-only in-memory 상태 (v0.1.2 Task 9c / MS-4c).
+///
+/// 외부 (lib.rs) 가 ~/.claude/skills/ 또는 plugin manifest 를 스캔하여
+/// `set_skills` 로 주입한다. v0.1.2 단계에서는 자동 로드 wiring 미포함.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct SkillsPaneState {
+    /// 사용자 입력 search query — 빈 문자열이면 전체 노출.
+    pub skill_filter: String,
+    /// 외부에서 주입된 skill 목록.
+    pub skills: Vec<Skill>,
+}
+
+impl SkillsPaneState {
+    /// `skill_filter` 에 매치되는 skill 만 반환한다.
+    ///
+    /// 매치는 case-insensitive substring 으로 name + description 양쪽을 검사.
+    /// 빈 filter 는 전체를 반환한다.
+    pub fn filtered_skills(&self) -> Vec<&Skill> {
+        if self.skill_filter.is_empty() {
+            return self.skills.iter().collect();
+        }
+        let needle = self.skill_filter.to_ascii_lowercase();
+        self.skills
+            .iter()
+            .filter(|s| {
+                s.name.to_ascii_lowercase().contains(&needle)
+                    || s.description.to_ascii_lowercase().contains(&needle)
+            })
+            .collect()
+    }
+}
+
+// ============================================================
 // AdvancedState — AdvancedPane in-memory 상태 (MS-2 skeleton)
 // ============================================================
 
@@ -558,6 +632,8 @@ pub struct SettingsViewState {
     pub hooks: HooksState,
     /// McpPane 의 in-memory 상태 (MS-4b, audit G-1).
     pub mcp: McpPaneState,
+    /// SkillsPane 의 in-memory 상태 (MS-4c, audit G-1).
+    pub skills: SkillsPaneState,
     /// AdvancedPane 의 in-memory 상태.
     pub advanced: AdvancedState,
     /// SettingsModal 이 표시 중인지 여부 (mount/dismiss 상태).
@@ -575,6 +651,7 @@ impl Default for SettingsViewState {
             agent: AgentState::default(),
             hooks: HooksState::default(),
             mcp: McpPaneState::default(),
+            skills: SkillsPaneState::default(),
             advanced: AdvancedState::default(),
             is_visible: false,
         }
@@ -614,10 +691,10 @@ mod tests {
     // ---- SettingsSection tests ----
 
     #[test]
-    /// SettingsSection::all() 이 8개를 정해진 순서로 반환한다 (REQ-V13-010 + MS-4a/MS-4b).
-    fn section_all_returns_eight_in_order() {
+    /// SettingsSection::all() 이 9개를 정해진 순서로 반환한다 (REQ-V13-010 + MS-4a/4b/4c).
+    fn section_all_returns_nine_in_order() {
         let all = SettingsSection::all();
-        assert_eq!(all.len(), 8);
+        assert_eq!(all.len(), 9);
         assert_eq!(all[0], SettingsSection::Appearance);
         assert_eq!(all[1], SettingsSection::Keyboard);
         assert_eq!(all[2], SettingsSection::Editor);
@@ -625,7 +702,8 @@ mod tests {
         assert_eq!(all[4], SettingsSection::Agent);
         assert_eq!(all[5], SettingsSection::Hooks);
         assert_eq!(all[6], SettingsSection::Mcp);
-        assert_eq!(all[7], SettingsSection::Advanced);
+        assert_eq!(all[7], SettingsSection::Skills);
+        assert_eq!(all[8], SettingsSection::Advanced);
     }
 
     #[test]
@@ -638,6 +716,7 @@ mod tests {
         assert_eq!(SettingsSection::Agent.label(), "Agent");
         assert_eq!(SettingsSection::Hooks.label(), "Hooks");
         assert_eq!(SettingsSection::Mcp.label(), "MCP");
+        assert_eq!(SettingsSection::Skills.label(), "Skills");
         assert_eq!(SettingsSection::Advanced.label(), "Advanced");
     }
 

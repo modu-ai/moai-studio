@@ -19,6 +19,7 @@
 - [x] MS-3: UserSettings persistence + ActiveTheme + RootView integration — PR #27 (AC-V13-10~12)
 - [x] MS-4a: HooksPane skeleton (audit G-1 첫 패널, v0.1.2 Task 9 sub-PR) — AC-V13-13~16
 - [x] MS-4b: McpPane skeleton (audit G-1 두 번째 패널, v0.1.2 Task 9b sub-PR) — AC-V13-17~21
+- [x] MS-4c: SkillsPane skeleton (audit G-1 세 번째 패널, v0.1.2 Task 9c sub-PR) — AC-V13-22~26
 
 ### MS-4a Acceptance Criteria
 
@@ -52,6 +53,23 @@
 - moai-studio-workspace/** 무변경
 - 기존 7 SettingsSection variant (MS-4a 후) 의 동작/시그니처 무변경 (Mcp variant 추가, sections() return type 7 → 8, label/active_section_title match arm 만 확장)
 - UserSettings 의 영속화 schema 무변경 (McpPaneState 는 in-memory only, .claude/settings.json 자동 로드 wiring 은 별 SPEC)
+
+### MS-4c Acceptance Criteria
+
+| AC ID | Given | When | Then |
+|-------|-------|------|------|
+| AC-V13-22 | (메타데이터) | `SkillsPane::title()` / `description()` 호출 | title == "Skills", description 비어있지 않고 "Skills" 키워드 포함 |
+| AC-V13-23 | 빈 skill 목록 | `total_count()` / `set_skills([3개])` 호출 | 빈 상태 0/0, 주입 후 total=3 + visible=3 (filter 빈) |
+| AC-V13-24 | sample skills 3개 (foundation/tdd/frontend) | `set_skill_filter("FOUNDATION")` / `"test-driven"` / `"nonexistent"` 호출 | "FOUNDATION" → 1건 (case-insensitive name), "test-driven" → 1건 (description match), "nonexistent" → 0건 |
+| AC-V13-25 | filter 가 활성 (visible 1) | `clear_skill_filter()` 호출 | filter == "" + visible_count == 3 (전체 복귀) |
+| AC-V13-26 | enabled=2 + disabled=1 skill 주입 | `visible_skills()` 검사 | enabled 와 disabled 모두 노출 (read-only viewer) |
+
+#### MS-4c Frozen-zone (REQ-V13-MS4c-1)
+
+- moai-studio-terminal/** 무변경
+- moai-studio-workspace/** 무변경
+- 기존 8 SettingsSection variant (MS-4b 후) 의 동작/시그니처 무변경 (Skills variant 추가, sections() return type 8 → 9, label/active_section_title match arm 만 확장)
+- UserSettings 의 영속화 schema 무변경 (SkillsPaneState 는 in-memory only, ~/.claude/skills/ 자동 스캔 wiring 은 별 SPEC)
 
 ## Key Files Changed
 
