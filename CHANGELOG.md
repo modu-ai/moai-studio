@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-05-01
+
+v0.1.2 는 v0.1.1 GA 직후 audit (`.moai/specs/RELEASE-V0.1.2/feature-audit.md`) 기반 16-task plan 의 incremental polish + skeleton release. 모든 변경은 single-session 14 PR 연속 회귀 0 으로 머지됨 (#63 ~ #76). audit feature mapping 의 stale 항목 7건 식별 및 v0.2.0 deferred backlog 정리.
+
+### Added
+
+- **feat(palette)**: SPEC-V3-012 MS-4 — CommandRegistry 40+ commands + RootView dispatch + @mention mode + slash bar pending_slash_injection (PR #63, AC-PL-21)
+- **feat(panes)**: SPEC-V3-003/004 MS-4 — PaneLayoutV1.active_tab_idx round-trip + TabContainer::move_tab/duplicate_tab (PR #64, AC-P-30~37)
+- **feat(viewer)**: SPEC-V3-006 MS-4 — Markdown KaTeX/Mermaid placeholder enrichment (math_unicode LaTeX→Unicode 89 LOC + mermaid_meta diagram type detection 70 LOC, PR #65, AC-MV-15~17)
+- **feat(viewer)**: SPEC-V3-006 MS-5 — JavaScript / JSON tree-sitter 추가 (.js/.jsx/.mjs/.cjs/.json/.jsonc/.pyi 매핑, PR #66, AC-MV-18~23)
+- **feat(web)**: SPEC-V3-007 MS-4 — Browser surface 통합 (TerminalStdoutEvent → URL detector → toast → TabContainer::new_tab, default 빌드 영향 0, PR #67, AC-WB-INT-1~4)
+- **feat(menus)**: SPEC-V0-1-2-MENUS-001 MS-2 — Native Menu polish (4 stub action handler 를 functional 동작으로 교체, PR #68, AC-MN-7~11)
+- **feat(spec-ui,terminal)**: SPEC-V3-009 MS-4a — 터미널 SPEC-ID 클릭이 SpecPanel mount + select 와이어링 (PR #69, AC-SU-13~16)
+- **feat(settings)**: SPEC-V3-013 MS-4a/b/c/d — Hooks/MCP/Skills/Rules pane skeleton (4 sub-PR 분할, settings_modal sections() 6 → 10, PR #70~73, AC-V13-13~31)
+- **feat(status-bar)**: SPEC-V3-006 MS-7 — F-4 Status Bar widgets skeleton (state-bearing `crate::status_bar` 모듈 + AgentPill / GitWidget / LspWidget + 4 mutation API, PR #74, AC-SB-1~6)
+- **feat(spec-ui)**: SPEC-V3-009 MS-4b — SpecListView card AC chip row (FULL/PARTIAL/DEFERRED/FAIL/PENDING + counts, detail_view::ac_state_color 단일 진실원 재사용, PR #75, AC-SU-17~20)
+- **feat(workspace)**: SPEC-V3-004 MS-4 — D-2 workspace switcher context menu skeleton (`crate::workspace_menu` 모듈 + WorkspaceMenuAction 4 variant + WorkspaceMenu single-menu invariant, PR #76, AC-D2-1~5)
+
+### Changed
+
+- **chore(audit)**: feature-audit.md 의 stale 매핑 7건 식별 — Task 1 V3-LINK-001 (이미 implemented), Task 12 V3-008/E-6 Kanban (실제 owner = SPEC-V3-009 RG-SU-3, PR #31 implemented), Task 13 V3-010 (MS-1/2/3 implemented, E-4/5/8 별도 SPEC), Task 14 V3-FS-WATCHER-001 (PR #43/#48 implemented), Task 15 V3-DIST-001 (PR #49/50/60 implemented), Task 16 V3-005 surface mapping (file explorer SPEC, B-6/B-7/C-6/C-7 별도 도메인). v0.2.0 audit 재작성 시 owner mapping 정정 권장.
+
+### Test Coverage
+
+- ui crate tests: 1066 → 1148 (+82 신규 tests over 14 PR), clippy 0 warnings, fmt clean across all PRs.
+- 14 PR 연속 회귀 0 (one-session execution, #63 ~ #76, all admin-merged).
+
+### Deferred to v0.2.0
+
+audit 매핑 정정 + carry list:
+- D-4 / D-5 / D-6 (workspace global search / color tags / drag-and-drop add)
+- E-4 / E-5 / E-7 / E-8 (hook GPUI wire-up / Mission Control parallel agent grid / Memory Viewer / CG Mode)
+- B-6 / B-7 (terminal output Mermaid 감지 / file path hover preview)
+- C-4 / C-5 / C-6 / C-7 (Browser surface polish / Image / JSON / Mermaid render surfaces — 별도 SPEC)
+- Quick switcher (⌘/Ctrl+,) — V3-004 D-2 carry
+- F-3 / F-4 / F-6 — Toolbar / Status Bar / Onboarding 실제 wiring (skeleton 만 도입됨)
+- SPEC-V3-004 D-2 follow-up (rename modal, delete confirmation, reorder dispatch, RootView 우클릭 와이어링)
+- SPEC-V3-009 follow-up (SpecPanelView master-detail 통합, AC inline expansion)
+
+## [Unreleased — pre v0.1.2]
+
 ### Added
 
 - **feat(panes)**: MS-3b Find/Replace 기능 구현 (SPEC-V3-006)
