@@ -303,6 +303,22 @@ GPUI Stateful<Div>::on_mouse_down(MouseButton::Left)
 - **포함 요구사항**: RG-R-3, RG-R-5 전체.
 - **시연 가능 상태**: 사용자가 divider 를 드래그하여 비율을 바꾸고, 한쪽이 너무 작아지려 하면 멈춤. AC-R-5 / AC-R-7 PASS.
 
+### MS-4: D-2 Workspace switcher polish (audit D-2)
+
+후속 milestone (post-implementation, 2026-05-01 sess 8 추가). audit feature-audit.md D-2 의 PARTIAL 상태 ("Sidebar lists workspaces, active highlighting works. Missing: drag-to-reorder, context menu (rename/delete), quick switcher") 해소를 위한 skeleton 도입.
+
+- **범위**: `crates/moai-studio-ui/src/workspace_menu.rs` 모듈 신규 — `WorkspaceMenuAction` enum (Rename / Delete / MoveUp / MoveDown) + `WorkspaceMenu` struct (target id + visible position) + mutation API (`open_for` / `close` / `is_visible_for`). `explorer/context_menu.rs` 패턴 재사용.
+- **포함 요구사항** (frozen-zone):
+  - **REQ-D2-MS4-1**: WorkspaceMenuAction 4 variant (Rename / Delete / MoveUp / MoveDown) 가 stable enum 으로 노출된다.
+  - **REQ-D2-MS4-2**: 외부 호출자가 `WorkspaceMenu::open_for(workspace_id, x, y)` / `close()` / `is_visible_for(workspace_id)` 로 menu 상태를 조작할 수 있다. 동일 시점에 여러 workspace 의 menu 가 동시에 열리지 않는다.
+  - **REQ-D2-MS4-3**: 본 milestone 은 skeleton 까지만 도입한다. 실제 rename modal / delete confirmation / reorder dispatch 와 RootView 통합은 후속 PR. 기존 workspace_row 호출 동작에 regression 0.
+- **제외 (Deferred carry to v0.2.0)**:
+  - D-4 (Global search across workspaces), D-5 (Workspace color tags), D-6 (Drag-and-drop workspace add) — audit 명시 "deferred to v0.2.0".
+  - Quick switcher (⌘/Ctrl+,) — audit line 143 carry, 별도 PR.
+  - Real rename / delete / reorder dispatch — RootView store mutation 과 결합 필요.
+- **AC**: AC-D2-1 ~ AC-D2-5 (§10 표).
+- **시연 가능 상태**: 외부 코드가 mutation API 호출 시 menu state 가 정확히 갱신. 단일 menu invariant 유지.
+
 ---
 
 ## 9. 파일 레이아웃 (canonical)
@@ -346,6 +362,11 @@ GPUI Stateful<Div>::on_mouse_down(MouseButton::Left)
 | AC-R-6 | RG-R-1 (REQ-R-005), USER-DECISION 게이트 직접 검증 | MS-1 | gpui crate 가 `features = ["test-support"]` 활성화 (USER-DECISION 결과 채택 시) 또는 비활성 (비채택 시 — logic-level fallback) | `cargo test -p moai-studio-ui --tests` 실행 | (a) 채택 시: integration_render.rs 테스트가 빌드 + 실행 GREEN. (b) 비채택 시: logic-level 대체 unit test 가 GREEN, README 또는 spec.md 의 USER-DECISION 항목에 비채택 사실 명시 + AC-R-2/3/4/5 가 logic-level 로 검증되었음을 progress.md 에 기록. | cargo test + progress.md 검토 |
 | AC-R-7 | RG-R-5 (REQ-R-040 ~ REQ-R-042) — **SPEC-V3-003 AC-P-4 의 element-tree 측 검증** | MS-3 | TabContainer 의 활성 탭이 3 level split (1 horizontal + 2 vertical = 4 leaf) | RootView 렌더 시점 | render 결과 element tree 에 divider element 가 정확히 3 개 (split 노드 수와 일치) 존재한다. divider 의 orientation (수직/수평) 이 각 split 의 direction 과 일치. | unit test (render_pane_tree 결과 element tree 자식 수 검증) — TestAppContext 비채택 시 가능 |
 | AC-R-8 | RG-R-6 (REQ-R-060 ~ REQ-R-063) | 전체 | 전체 milestone 완료 후 | `cargo test -p moai-studio-terminal` + `cargo test -p moai-studio-workspace` + `cargo test -p moai-studio-ui --lib panes::` + `cargo test -p moai-studio-ui --lib tabs::` 실행 | SPEC-V3-002/003 기존 tests 전원 GREEN. terminal crate, panes/tabs 의 기존 unit tests, workspace crate 의 persistence tests 모두 0 regression. | CI gate / cargo test |
+| AC-D2-1 | REQ-D2-MS4-1 | MS-4 | `WorkspaceMenuAction::all()` 또는 enum exhaustive match | 4 variant 모두 (Rename / Delete / MoveUp / MoveDown) 노출, label 매핑 비어있지 않음 | unit test (`label()` 모든 variant 검증) |
+| AC-D2-2 | REQ-D2-MS4-2 | MS-4 | `WorkspaceMenu::default()` 인스턴스 | `is_visible_for("ws-1")` 호출 | false 반환 (menu closed by default), `visible_target()` Some/None 분기 정상 | unit test |
+| AC-D2-3 | REQ-D2-MS4-2 | MS-4 | `open_for("ws-1", 100.0, 200.0)` 호출 후 | `is_visible_for("ws-1")` + `is_visible_for("ws-2")` + `visible_target()` | "ws-1" → true, "ws-2" → false, target = Some("ws-1"), position = (100, 200) | unit test |
+| AC-D2-4 | REQ-D2-MS4-2 (single-menu invariant) | MS-4 | menu 가 "ws-1" 으로 열려 있는 상태 | `open_for("ws-2", ...)` 호출 | menu target 이 "ws-2" 로 교체. "ws-1" → false, "ws-2" → true (single-menu invariant 유지) | unit test |
+| AC-D2-5 | REQ-D2-MS4-2 | MS-4 | menu 가 어떤 workspace 로 열려 있는 상태 | `close()` 호출 | menu invisible, `visible_target()` = None, `is_visible_for(*)` = false | unit test |
 
 ---
 
