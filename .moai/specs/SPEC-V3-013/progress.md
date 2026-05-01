@@ -18,6 +18,7 @@
 - [x] MS-2: KeyboardPane + 4 sub-panes — PR #25 (AC-V13-7~9)
 - [x] MS-3: UserSettings persistence + ActiveTheme + RootView integration — PR #27 (AC-V13-10~12)
 - [x] MS-4a: HooksPane skeleton (audit G-1 첫 패널, v0.1.2 Task 9 sub-PR) — AC-V13-13~16
+- [x] MS-4b: McpPane skeleton (audit G-1 두 번째 패널, v0.1.2 Task 9b sub-PR) — AC-V13-17~21
 
 ### MS-4a Acceptance Criteria
 
@@ -34,6 +35,23 @@
 - moai-studio-workspace/** 무변경
 - 기존 6 SettingsSection variant 의 동작/시그니처 무변경 (Hooks variant 추가, sections() return type 6 → 7, label/active_section_title match arm 만 확장)
 - UserSettings 의 영속화 schema 무변경 (HooksState 는 in-memory only, MS-3 schema v1 carry)
+
+### MS-4b Acceptance Criteria
+
+| AC ID | Given | When | Then |
+|-------|-------|------|------|
+| AC-V13-17 | (메타데이터) | `McpPane::title()` / `description()` 호출 | title == "MCP", description 비어있지 않고 "MCP" 또는 "Model Context Protocol" 을 언급 |
+| AC-V13-18 | 빈 server 목록 | `total_count()` / `visible_count()` / `set_servers([3개])` 호출 | 빈 상태에서 0/0, 주입 후 total=3, visible=3 (filter 빈) |
+| AC-V13-19 | 3 sample servers (context7/playwright/github) | `set_server_filter("CONTEXT")` / `"npx"` / `"nonexistent"` 호출 | "CONTEXT" → context7 1건 (case-insensitive), "npx" → 2건 (command match), "nonexistent" → 0건 |
+| AC-V13-20 | filter 가 활성 상태 (visible 1) | `clear_server_filter()` 호출 | filter == "" + visible_count == 3 (전체 복귀) |
+| AC-V13-21 | enabled=2 + disabled=1 server 주입 | `visible_servers()` 검사 | enabled 와 disabled 모두 노출 (read-only viewer 의미) |
+
+#### MS-4b Frozen-zone (REQ-V13-MS4b-1)
+
+- moai-studio-terminal/** 무변경
+- moai-studio-workspace/** 무변경
+- 기존 7 SettingsSection variant (MS-4a 후) 의 동작/시그니처 무변경 (Mcp variant 추가, sections() return type 7 → 8, label/active_section_title match arm 만 확장)
+- UserSettings 의 영속화 schema 무변경 (McpPaneState 는 in-memory only, .claude/settings.json 자동 로드 wiring 은 별 SPEC)
 
 ## Key Files Changed
 
