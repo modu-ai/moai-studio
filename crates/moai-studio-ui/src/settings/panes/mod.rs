@@ -7,6 +7,7 @@ pub mod editor;
 pub mod hooks;
 pub mod keyboard;
 pub mod mcp;
+pub mod skills;
 pub mod terminal;
 
 pub use advanced::AdvancedPane;
@@ -16,4 +17,5 @@ pub use editor::EditorPane;
 pub use hooks::HooksPane;
 pub use keyboard::KeyboardPane;
 pub use mcp::McpPane;
+pub use skills::SkillsPane;
 pub use terminal::TerminalPane;
