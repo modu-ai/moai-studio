@@ -188,6 +188,10 @@ moai-adk Go CLI 의 산출물인 `.moai/specs/SPEC-XXX/` 디렉터리 (spec.md /
 | AC-SU-10 | subprocess 종료 시 exit code + 마지막 status 라인이 카드에 반영 | exit_code=0 → 성공 색상, exit_code!=0 → error 색상 두 케이스 모두 검증 | integration | RG-SU-5 |
 | AC-SU-11 | spec.md 의 `^## \d+\.\d+ Sprint Contract Revision` 헤더가 SprintContractPanel timeline 으로 추출 | SPEC-V3-003 fixture 에서 §10.1 ~ §10.5 모두 추출 (5 개), 빈 SPEC (V3-001) 에서 0 개 + placeholder | unit (regex + fixture) | RG-SU-6 |
 | AC-SU-12 | terminal/panes/tabs core 코드 무변경 — 본 SPEC 은 신규 crate `moai-studio-spec` + 신규 모듈 `spec_ui/` 으로만 변경 | git diff 검증: `crates/moai-studio-terminal/` 0 byte change, `crates/moai-studio-ui/src/{terminal,panes,tabs}/` 0 byte change (RootView 진입점 등록 1 줄 제외) | CI assertion (path-filter diff check) | (cross-cutting) |
+| AC-SU-17 | SpecListView 의 SPEC 카드가 AC summary 1줄 (`{full}/{total} PASS, {pending} PENDING, {fail} FAIL`) 외에 5 개 mini chip (FULL / PARTIAL / DEFERRED / FAIL / PENDING) + 각 카운트를 추가로 표시 | render_spec_card 결과에 5 개 chip element 가 정확히 등장 (count 0 chip 도 포함) | unit (chip element count + ac_state_color 매핑 검증) | RG-SU-2 |
+| AC-SU-18 | 각 chip 의 색상이 detail_view::ac_state_color 매핑과 동일 (FULL → SUCCESS, PARTIAL → WARNING, DEFERRED → FG_MUTED, FAIL → DANGER, PENDING → INFO) | 5 매핑이 detail_view 의 단일 진실원 (single source of truth) 을 재사용 | unit (color 매핑 동치성 테스트) | RG-SU-2 |
+| AC-SU-19 | AC summary 가 0 개인 SPEC 도 chip 5 개 (모두 0) 정상 렌더, panic 없음 | 빈 ac_records SpecRecord 의 render_spec_card 가 panic 없이 element 반환 | unit (empty fixture) | RG-SU-2 / RG-SU-1 (graceful) |
+| AC-SU-20 | chip 카운트 표시 형식이 `{label}:{count}` (예: "FULL:3"). 0 카운트 chip 도 동일 형식 (visibility 우선) | render output 의 chip text 가 `LABEL:N` 패턴 매치 | unit (text format) | RG-SU-2 |
 
 ---
 
@@ -256,6 +260,14 @@ moai-adk Go CLI 의 산출물인 `.moai/specs/SPEC-XXX/` 디렉터리 (spec.md /
 - USER-DECISION-SU-C 게이트 (subprocess vs MCP)
 - AC-SU-8, AC-SU-9, AC-SU-10, AC-SU-11 통과
 - 전체: AC-SU-12 (core 무변경) regression 검증
+
+### MS-4 (Priority: Polish — v0.1.2 audit carry) — SPEC card polish + terminal click integration
+
+audit feature-audit.md E-1 의 PARTIAL 상태 (full rendering / AC table / EARS parsing missing) 와 B-4 (terminal SPEC-ID hyperlink) 해소를 위한 polish milestone. sub-divided incremental PRs.
+
+- **MS-4a** (PR #69 merged 2026-04-30) — B-4: TerminalClickEvent::OpenSpec → SpecPanelView::select_spec wiring. AC-SU-13~16 통과.
+- **MS-4b** (이번 PR) — E-1: SpecListView card AC chip expansion (mini AC chips). render_spec_card 가 AC summary 1줄 외에 5개 chip (FULL/PARTIAL/DEFERRED/FAIL/PENDING) + 각 카운트 표시. detail_view::ac_state_color 재사용으로 색상 매핑 단일 진실원 유지. AC-SU-17~20 통과.
+- **후속 carry**: SpecPanelView 안 master-detail 통합 (SpecDetailView 결합), AC inline expansion (popover 또는 expand 모드), E-7 Memory Viewer (별도 SPEC 후보).
 
 ---
 

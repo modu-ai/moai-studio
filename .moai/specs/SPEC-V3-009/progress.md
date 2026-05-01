@@ -20,6 +20,7 @@
 - [x] MS-2: Kanban Board + sidecar persist — PR #31 (24 new tests)
 - [x] MS-3: CLI integration + branch parser + Sprint Contract panel — PR #32 (30 new tests)
 - [x] MS-4a: Terminal `TerminalClickEvent::OpenSpec` wires `SpecPanelView::select_spec` (B-4 detection, v0.1.2 Task 8 sub-PR)
+- [x] MS-4b: SpecListView card AC chip expansion — 5 mini chips (FULL/PARTIAL/DEFERRED/FAIL/PENDING) with counts (E-1 polish, v0.1.2 Task 8b)
 
 ### MS-4a Acceptance Criteria
 
@@ -29,6 +30,15 @@
 | AC-SU-14 | RootView with `spec_panel = Some(_)` already mounted | TerminalSurface emits OpenSpec for a different known SPEC | spec_panel stays mounted; `select_spec` updates `selected_id` and rebinds the sprint panel |
 | AC-SU-15 | RootView with palette overlay active OR settings modal active | TerminalSurface emits OpenSpec | spec_panel state unchanged (overlay invariant), tracing log emitted, no panic |
 | AC-SU-16 | RootView, OpenSpec for an unknown spec_id | Event arrives | spec_panel mounts (or stays); `select_spec` is documented graceful no-op when the id is missing from the index, so `selected_id` keeps its prior value |
+
+### MS-4b Acceptance Criteria
+
+| AC ID | Given | When | Then |
+|-------|-------|------|------|
+| AC-SU-17 | SpecListView with at least one record having a non-zero AC count | render_spec_card invoked | element tree includes `render_ac_chip_row` output with exactly 5 chip elements (FULL/PARTIAL/DEFERRED/FAIL/PENDING) |
+| AC-SU-18 | render_ac_chip(state, count) called for any AcState variant | inspect chip foreground color | color equals `detail_view::ac_state_color(state)` — single source of truth preserved |
+| AC-SU-19 | SpecRecord with empty `ac_records` (no progress.md or AC missing) | render_spec_card invoked | render emits 5 chips (all `:0`), no panic, missing-file placeholders also rendered |
+| AC-SU-20 | Any chip rendered | inspect chip text | format is `LABEL:N` (e.g., "FULL:3"), with LABEL ∈ {FULL, PARTIAL, DEFERRED, FAIL, PENDING} |
 
 ## Key Files Changed
 

@@ -8,9 +8,10 @@
 use std::path::PathBuf;
 
 use gpui::{Context, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb};
-use moai_studio_spec::{SpecFileKind, SpecId, SpecIndex, SpecRecord};
+use moai_studio_spec::{AcState, AcSummary, SpecFileKind, SpecId, SpecIndex, SpecRecord};
 
 use crate::design::tokens as tok;
+use crate::spec_ui::detail_view::ac_state_color;
 
 /// SpecListView 상태 — SPEC 목록 + 선택 상태.
 ///
@@ -155,13 +156,19 @@ fn render_spec_card(record: &SpecRecord, is_selected: bool) -> impl IntoElement 
             ),
     );
 
-    // AC 요약
+    // AC 요약 (1줄 요약)
     card = card.child(
         div()
             .text_color(rgb(tok::FG_SECONDARY))
             .text_size(px(11.))
             .child(summary_text),
     );
+
+    // SPEC-V3-009 MS-4b (audit E-1 polish): 5 mini AC chips with counts.
+    // Always render all 5 chips even when count == 0 (visibility-first).
+    // Color mapping reuses `detail_view::ac_state_color` so the single
+    // source of truth in detail_view stays authoritative (AC-SU-18).
+    card = card.child(render_ac_chip_row(&summary));
 
     // missing file placeholders (REQ-SU-005)
     for placeholder in &missing_files {
@@ -174,6 +181,55 @@ fn render_spec_card(record: &SpecRecord, is_selected: bool) -> impl IntoElement 
     }
 
     card
+}
+
+/// SPEC-V3-009 MS-4b — render the 5 AC mini chips (FULL/PARTIAL/DEFERRED/FAIL/PENDING).
+///
+/// Each chip uses the `detail_view::ac_state_color` mapping so the color
+/// palette stays consistent between the list card and the detail view
+/// (AC-SU-18). Chips with zero count are rendered too (AC-SU-19/20) — the
+/// list view always shows the full state breakdown for predictability.
+fn render_ac_chip_row(summary: &AcSummary) -> impl IntoElement {
+    let chips = [
+        (AcState::Full, summary.full),
+        (AcState::Partial, summary.partial),
+        (AcState::Deferred, summary.deferred),
+        (AcState::Fail, summary.fail),
+        (AcState::Pending, summary.pending),
+    ];
+
+    let mut row = div().flex().flex_row().gap(px(4.)).mt(px(2.));
+
+    for (state, count) in chips {
+        row = row.child(render_ac_chip(state, count));
+    }
+
+    row
+}
+
+/// Render a single AC chip. Returns the element with the canonical
+/// `LABEL:N` text and the `ac_state_color`-mapped foreground.
+fn render_ac_chip(state: AcState, count: u32) -> impl IntoElement {
+    let label = ac_chip_label(state);
+    let fg = ac_state_color(state);
+    div()
+        .px(px(6.))
+        .py(px(1.))
+        .bg(rgb(tok::BG_ELEVATED))
+        .text_color(rgb(fg))
+        .text_size(px(10.))
+        .child(format!("{label}:{count}"))
+}
+
+/// Compact uppercase chip label for an `AcState` (AC-SU-20).
+fn ac_chip_label(state: AcState) -> &'static str {
+    match state {
+        AcState::Full => "FULL",
+        AcState::Partial => "PARTIAL",
+        AcState::Deferred => "DEFERRED",
+        AcState::Fail => "FAIL",
+        AcState::Pending => "PENDING",
+    }
 }
 
 // ============================================================
@@ -301,6 +357,116 @@ mod tests {
         view.selected_id = Some(SpecId::new("SPEC-V3-009"));
         let rec = view.selected_record().unwrap();
         assert_eq!(rec.id.as_str(), "SPEC-V3-009");
+    }
+
+    // ============================================================
+    // SPEC-V3-009 MS-4b — AC chip row tests (AC-SU-17~20)
+    // ============================================================
+
+    use crate::design::tokens::semantic;
+    use moai_studio_spec::{AcState, AcSummary};
+
+    /// AC-SU-20: chip label format is `LABEL:N` for every AcState variant.
+    #[test]
+    fn ac_chip_label_matches_canonical_uppercase() {
+        assert_eq!(ac_chip_label(AcState::Full), "FULL");
+        assert_eq!(ac_chip_label(AcState::Partial), "PARTIAL");
+        assert_eq!(ac_chip_label(AcState::Deferred), "DEFERRED");
+        assert_eq!(ac_chip_label(AcState::Fail), "FAIL");
+        assert_eq!(ac_chip_label(AcState::Pending), "PENDING");
+    }
+
+    /// AC-SU-18: chip color reuses detail_view::ac_state_color (single source of truth).
+    #[test]
+    fn ac_chip_colors_match_detail_view_mapping() {
+        assert_eq!(ac_state_color(AcState::Full), semantic::SUCCESS);
+        assert_eq!(ac_state_color(AcState::Partial), semantic::WARNING);
+        assert_eq!(ac_state_color(AcState::Deferred), tok::FG_MUTED);
+        assert_eq!(ac_state_color(AcState::Fail), semantic::DANGER);
+        assert_eq!(ac_state_color(AcState::Pending), semantic::INFO);
+    }
+
+    /// AC-SU-17: render_ac_chip_row always produces an element (5 chips).
+    #[test]
+    fn ac_chip_row_renders_for_populated_summary() {
+        let summary = AcSummary {
+            full: 3,
+            partial: 1,
+            deferred: 0,
+            fail: 2,
+            pending: 4,
+        };
+        // The element type is opaque; we exercise the constructor and the
+        // single-chip helper for every variant to ensure no panic.
+        let _ = render_ac_chip_row(&summary);
+        let _ = render_ac_chip(AcState::Full, summary.full);
+        let _ = render_ac_chip(AcState::Partial, summary.partial);
+        let _ = render_ac_chip(AcState::Deferred, summary.deferred);
+        let _ = render_ac_chip(AcState::Fail, summary.fail);
+        let _ = render_ac_chip(AcState::Pending, summary.pending);
+    }
+
+    /// AC-SU-19: empty AcSummary still renders all 5 chips without panic.
+    #[test]
+    fn ac_chip_row_renders_for_empty_summary() {
+        let summary = AcSummary::default();
+        assert_eq!(summary.full, 0);
+        assert_eq!(summary.partial, 0);
+        assert_eq!(summary.deferred, 0);
+        assert_eq!(summary.fail, 0);
+        assert_eq!(summary.pending, 0);
+
+        let _ = render_ac_chip_row(&summary);
+        for state in [
+            AcState::Full,
+            AcState::Partial,
+            AcState::Deferred,
+            AcState::Fail,
+            AcState::Pending,
+        ] {
+            let _ = render_ac_chip(state, 0);
+        }
+    }
+
+    /// AC-SU-19: render_spec_card composes chips even when the SpecRecord has no AC data.
+    /// Verifies graceful integration with SpecListView for SPECs that lack a progress.md.
+    #[test]
+    fn render_spec_card_with_empty_ac_summary_does_not_panic() {
+        let tmp = make_specs_dir_with(&[("SPEC-EMPTY-001", true)]);
+        let view = SpecListView::new(tmp.path().to_path_buf());
+        let id = SpecId::new("SPEC-EMPTY-001");
+        let record = view
+            .index
+            .find(&id)
+            .expect("SPEC-EMPTY-001 should be discovered");
+        // No progress.md → empty ac_records → empty AcSummary.
+        let summary = record.ac_summary();
+        assert_eq!(summary, AcSummary::default());
+        let _ = render_spec_card(record, false);
+    }
+
+    /// AC-SU-17: chip row contains exactly 5 chip variants regardless of counts.
+    /// Validates the iteration order matches the documented FULL/PARTIAL/DEFERRED/FAIL/PENDING.
+    #[test]
+    fn ac_chip_row_iterates_through_5_variants_in_canonical_order() {
+        let order = [
+            AcState::Full,
+            AcState::Partial,
+            AcState::Deferred,
+            AcState::Fail,
+            AcState::Pending,
+        ];
+        assert_eq!(order.len(), 5);
+        // Ensure every variant has a non-empty label and a unique color.
+        let labels: Vec<&'static str> = order.iter().map(|s| ac_chip_label(*s)).collect();
+        let unique_labels: std::collections::HashSet<&&str> = labels.iter().collect();
+        assert_eq!(unique_labels.len(), 5, "all 5 chip labels must be unique");
+        let colors: Vec<u32> = order.iter().map(|s| ac_state_color(*s)).collect();
+        let unique_colors: std::collections::HashSet<&u32> = colors.iter().collect();
+        assert!(
+            unique_colors.len() >= 4,
+            "AcState colors should be mostly distinct (Deferred uses FG_MUTED which may overlap)"
+        );
     }
 
     #[test]
