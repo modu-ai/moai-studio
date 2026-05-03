@@ -123,9 +123,386 @@ impl WorkspaceMenu {
     }
 }
 
+// ============================================================
+// RenameModal — REQ-D2-MS5-3
+// ============================================================
+
+// @MX:NOTE: [AUTO] REQ-D2-MS5-3 — RenameModal encapsulates the rename UI state
+//   (target id + text buffer). Logic-level only; render is deferred to a follow-up PR.
+/// Rename modal state: target workspace id and current text buffer.
+///
+/// Default state is closed (target is `None`, buffer is empty).
+/// `commit()` returns `None` when the buffer trims to blank, leaving the
+/// modal open so the caller can show an error hint.
+#[derive(Debug, Default, Clone)]
+pub struct RenameModal {
+    target_id: Option<String>,
+    buffer: String,
+}
+
+impl RenameModal {
+    /// Open the modal for the given workspace, pre-filling the buffer with the
+    /// current workspace name.
+    pub fn open(&mut self, ws_id: impl Into<String>, current_name: impl Into<String>) {
+        self.target_id = Some(ws_id.into());
+        self.buffer = current_name.into();
+    }
+
+    /// Update the text buffer (called on every keystroke in the text field).
+    pub fn set_buffer(&mut self, s: impl Into<String>) {
+        self.buffer = s.into();
+    }
+
+    /// Attempt to commit the rename.
+    ///
+    /// Returns `Some((ws_id, new_name))` when the buffer is non-empty after
+    /// trimming, and closes the modal. Returns `None` (modal stays open) when
+    /// the buffer is blank.
+    pub fn commit(&mut self) -> Option<(String, String)> {
+        let trimmed = self.buffer.trim().to_string();
+        if trimmed.is_empty() {
+            return None;
+        }
+        let id = self.target_id.take()?;
+        self.buffer.clear();
+        Some((id, trimmed))
+    }
+
+    /// Cancel and reset to default closed state.
+    pub fn cancel(&mut self) {
+        self.target_id = None;
+        self.buffer.clear();
+    }
+
+    /// True when the modal is currently open (has a target workspace).
+    pub fn is_open(&self) -> bool {
+        self.target_id.is_some()
+    }
+
+    /// The workspace id the modal is open for, if any.
+    pub fn target_id(&self) -> Option<&str> {
+        self.target_id.as_deref()
+    }
+
+    /// Current text buffer contents.
+    pub fn buffer(&self) -> &str {
+        &self.buffer
+    }
+}
+
+// ============================================================
+// DeleteConfirmation — REQ-D2-MS5-4
+// ============================================================
+
+// @MX:NOTE: [AUTO] REQ-D2-MS5-4 — DeleteConfirmation holds the pending delete target.
+//   Logic-level only; the confirmation dialog rendering is a follow-up PR.
+/// Delete confirmation state: tracks which workspace is pending deletion.
+///
+/// Default state is closed (no target).
+#[derive(Debug, Default, Clone)]
+pub struct DeleteConfirmation {
+    target_id: Option<String>,
+}
+
+impl DeleteConfirmation {
+    /// Open the confirmation for `ws_id`.
+    pub fn open(&mut self, ws_id: impl Into<String>) {
+        self.target_id = Some(ws_id.into());
+    }
+
+    /// Confirm the deletion.
+    ///
+    /// Returns `Some(ws_id)` and closes the dialog, or `None` if already closed.
+    pub fn confirm(&mut self) -> Option<String> {
+        self.target_id.take()
+    }
+
+    /// Cancel and close without deleting.
+    pub fn cancel(&mut self) {
+        self.target_id = None;
+    }
+
+    /// True when a workspace is pending confirmation.
+    pub fn is_open(&self) -> bool {
+        self.target_id.is_some()
+    }
+
+    /// The workspace id pending deletion, if any.
+    pub fn target_id(&self) -> Option<&str> {
+        self.target_id.as_deref()
+    }
+}
+
+// ============================================================
+// WorkspaceMenuOutcome + dispatch_workspace_menu_action — REQ-D2-MS5-5
+// ============================================================
+
+// @MX:NOTE: [AUTO] REQ-D2-MS5-5 — WorkspaceMenuOutcome is the result type of the
+//   dispatch adapter. Allows callers to react without coupling to store internals.
+/// Outcome of dispatching a workspace context-menu action.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WorkspaceMenuOutcome {
+    /// The Rename action was triggered; caller should open a `RenameModal`
+    /// pre-filled with `current_name`.
+    OpenRenameModal { ws_id: String, current_name: String },
+    /// The Delete action was triggered; caller should open a `DeleteConfirmation`.
+    OpenDeleteConfirmation { ws_id: String },
+    /// A reorder (MoveUp / MoveDown) completed successfully.
+    Reordered,
+    /// The action could not be applied (e.g. workspace not found in store).
+    Unknown,
+}
+
+// @MX:ANCHOR: [AUTO] dispatch-workspace-menu-action
+// @MX:REASON: [AUTO] REQ-D2-MS5-5. dispatch_workspace_menu_action is the single
+//   adapter between WorkspaceMenuAction enum and WorkspacesStore mutations.
+//   fan_in >= 3: RootView::handle_workspace_menu_action (T7), T6 tests,
+//   future sidebar right-click wire (next MS).
+/// Translate a `WorkspaceMenuAction` into a `WorkspaceMenuOutcome`, applying
+/// any required `WorkspacesStore` mutations along the way.
+///
+/// - `Rename` — looks up the workspace name and returns `OpenRenameModal`.
+/// - `Delete` — returns `OpenDeleteConfirmation` (actual removal is deferred
+///   until the user confirms).
+/// - `MoveUp` / `MoveDown` — mutates the store and returns `Reordered`.
+/// - Any store error (e.g. workspace not found) → `Unknown`.
+pub fn dispatch_workspace_menu_action(
+    action: WorkspaceMenuAction,
+    ws_id: &str,
+    store: &mut moai_studio_workspace::WorkspacesStore,
+) -> WorkspaceMenuOutcome {
+    match action {
+        WorkspaceMenuAction::Rename => {
+            let current_name = match store.list().iter().find(|w| w.id == ws_id) {
+                Some(ws) => ws.name.clone(),
+                None => return WorkspaceMenuOutcome::Unknown,
+            };
+            WorkspaceMenuOutcome::OpenRenameModal {
+                ws_id: ws_id.to_string(),
+                current_name,
+            }
+        }
+        WorkspaceMenuAction::Delete => WorkspaceMenuOutcome::OpenDeleteConfirmation {
+            ws_id: ws_id.to_string(),
+        },
+        WorkspaceMenuAction::MoveUp => match store.move_up(ws_id) {
+            Ok(()) => WorkspaceMenuOutcome::Reordered,
+            Err(_) => WorkspaceMenuOutcome::Unknown,
+        },
+        WorkspaceMenuAction::MoveDown => match store.move_down(ws_id) {
+            Ok(()) => WorkspaceMenuOutcome::Reordered,
+            Err(_) => WorkspaceMenuOutcome::Unknown,
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── T4: RenameModal ──────────────────────────────────────────────────────
+
+    #[test]
+    fn test_rename_modal_default_closed() {
+        let modal = RenameModal::default();
+        assert!(!modal.is_open());
+        assert_eq!(modal.target_id(), None);
+        assert_eq!(modal.buffer(), "");
+    }
+
+    #[test]
+    fn test_rename_modal_open_sets_target_and_buffer() {
+        let mut modal = RenameModal::default();
+        modal.open("ws-1", "OldName");
+        assert!(modal.is_open());
+        assert_eq!(modal.target_id(), Some("ws-1"));
+        assert_eq!(modal.buffer(), "OldName");
+    }
+
+    #[test]
+    fn test_rename_modal_commit_returns_id_name() {
+        let mut modal = RenameModal::default();
+        modal.open("ws-1", "OldName");
+        modal.set_buffer("NewName");
+        let result = modal.commit();
+        assert_eq!(result, Some(("ws-1".to_string(), "NewName".to_string())));
+        assert!(!modal.is_open());
+    }
+
+    #[test]
+    fn test_rename_modal_commit_empty_buffer_returns_none() {
+        let mut modal = RenameModal::default();
+        modal.open("ws-1", "OldName");
+        modal.set_buffer("   ");
+        let result = modal.commit();
+        assert_eq!(result, None);
+        // Modal remains open when commit fails (empty buffer)
+        assert!(modal.is_open());
+    }
+
+    #[test]
+    fn test_rename_modal_cancel_clears() {
+        let mut modal = RenameModal::default();
+        modal.open("ws-1", "OldName");
+        modal.cancel();
+        assert!(!modal.is_open());
+        assert_eq!(modal.target_id(), None);
+        assert_eq!(modal.buffer(), "");
+    }
+
+    // ── T5: DeleteConfirmation ───────────────────────────────────────────────
+
+    #[test]
+    fn test_delete_confirmation_default_closed() {
+        let conf = DeleteConfirmation::default();
+        assert!(!conf.is_open());
+        assert_eq!(conf.target_id(), None);
+    }
+
+    #[test]
+    fn test_delete_confirmation_open_sets_target() {
+        let mut conf = DeleteConfirmation::default();
+        conf.open("ws-2");
+        assert!(conf.is_open());
+        assert_eq!(conf.target_id(), Some("ws-2"));
+    }
+
+    #[test]
+    fn test_delete_confirmation_confirm_returns_id() {
+        let mut conf = DeleteConfirmation::default();
+        conf.open("ws-2");
+        let result = conf.confirm();
+        assert_eq!(result, Some("ws-2".to_string()));
+        assert!(!conf.is_open());
+    }
+
+    #[test]
+    fn test_delete_confirmation_cancel_clears() {
+        let mut conf = DeleteConfirmation::default();
+        conf.open("ws-2");
+        conf.cancel();
+        assert!(!conf.is_open());
+        assert_eq!(conf.target_id(), None);
+    }
+
+    // ── T6: WorkspaceMenuOutcome + dispatch_workspace_menu_action ────────────
+
+    #[test]
+    fn test_dispatch_rename_returns_open_rename_modal() {
+        let tmp_file = std::env::temp_dir().join("moai-dispatch-rename.json");
+        std::fs::remove_file(&tmp_file).ok();
+        let project = std::env::temp_dir().join("moai-dispatch-rename-project");
+        std::fs::create_dir_all(&project).unwrap();
+
+        let mut store = moai_studio_workspace::WorkspacesStore::load(&tmp_file).unwrap();
+        let ws = moai_studio_workspace::Workspace::from_path(&project).unwrap();
+        let id = ws.id.clone();
+        let name = ws.name.clone();
+        store.add(ws).unwrap();
+
+        let outcome = dispatch_workspace_menu_action(WorkspaceMenuAction::Rename, &id, &mut store);
+        match outcome {
+            WorkspaceMenuOutcome::OpenRenameModal {
+                ws_id,
+                current_name,
+            } => {
+                assert_eq!(ws_id, id);
+                assert_eq!(current_name, name);
+            }
+            other => panic!("expected OpenRenameModal, got {other:?}"),
+        }
+
+        std::fs::remove_file(&tmp_file).ok();
+        std::fs::remove_dir_all(&project).ok();
+    }
+
+    #[test]
+    fn test_dispatch_delete_returns_open_delete_confirmation() {
+        let tmp_file = std::env::temp_dir().join("moai-dispatch-delete.json");
+        std::fs::remove_file(&tmp_file).ok();
+        let project = std::env::temp_dir().join("moai-dispatch-delete-project");
+        std::fs::create_dir_all(&project).unwrap();
+
+        let mut store = moai_studio_workspace::WorkspacesStore::load(&tmp_file).unwrap();
+        let ws = moai_studio_workspace::Workspace::from_path(&project).unwrap();
+        let id = ws.id.clone();
+        store.add(ws).unwrap();
+
+        let outcome = dispatch_workspace_menu_action(WorkspaceMenuAction::Delete, &id, &mut store);
+        match outcome {
+            WorkspaceMenuOutcome::OpenDeleteConfirmation { ws_id } => {
+                assert_eq!(ws_id, id);
+            }
+            other => panic!("expected OpenDeleteConfirmation, got {other:?}"),
+        }
+
+        std::fs::remove_file(&tmp_file).ok();
+        std::fs::remove_dir_all(&project).ok();
+    }
+
+    #[test]
+    fn test_dispatch_move_up_calls_store_and_returns_reordered() {
+        let tmp_file = std::env::temp_dir().join("moai-dispatch-moveup.json");
+        std::fs::remove_file(&tmp_file).ok();
+        let p1 = std::env::temp_dir().join("moai-dispatch-moveup-a");
+        let p2 = std::env::temp_dir().join("moai-dispatch-moveup-b");
+        std::fs::create_dir_all(&p1).unwrap();
+        std::fs::create_dir_all(&p2).unwrap();
+
+        let mut store = moai_studio_workspace::WorkspacesStore::load(&tmp_file).unwrap();
+        let ws1 = moai_studio_workspace::Workspace::from_path(&p1).unwrap();
+        let ws2 = moai_studio_workspace::Workspace::from_path(&p2).unwrap();
+        let id2 = ws2.id.clone();
+        store.add(ws1).unwrap();
+        store.add(ws2).unwrap();
+
+        let outcome = dispatch_workspace_menu_action(WorkspaceMenuAction::MoveUp, &id2, &mut store);
+        assert!(matches!(outcome, WorkspaceMenuOutcome::Reordered));
+        assert_eq!(store.list()[0].id, id2);
+
+        std::fs::remove_file(&tmp_file).ok();
+        std::fs::remove_dir_all(&p1).ok();
+        std::fs::remove_dir_all(&p2).ok();
+    }
+
+    #[test]
+    fn test_dispatch_move_down_calls_store_and_returns_reordered() {
+        let tmp_file = std::env::temp_dir().join("moai-dispatch-movedown.json");
+        std::fs::remove_file(&tmp_file).ok();
+        let p1 = std::env::temp_dir().join("moai-dispatch-movedown-a");
+        let p2 = std::env::temp_dir().join("moai-dispatch-movedown-b");
+        std::fs::create_dir_all(&p1).unwrap();
+        std::fs::create_dir_all(&p2).unwrap();
+
+        let mut store = moai_studio_workspace::WorkspacesStore::load(&tmp_file).unwrap();
+        let ws1 = moai_studio_workspace::Workspace::from_path(&p1).unwrap();
+        let ws2 = moai_studio_workspace::Workspace::from_path(&p2).unwrap();
+        let id1 = ws1.id.clone();
+        store.add(ws1).unwrap();
+        store.add(ws2).unwrap();
+
+        let outcome =
+            dispatch_workspace_menu_action(WorkspaceMenuAction::MoveDown, &id1, &mut store);
+        assert!(matches!(outcome, WorkspaceMenuOutcome::Reordered));
+        assert_eq!(store.list()[1].id, id1);
+
+        std::fs::remove_file(&tmp_file).ok();
+        std::fs::remove_dir_all(&p1).ok();
+        std::fs::remove_dir_all(&p2).ok();
+    }
+
+    #[test]
+    fn test_dispatch_unknown_workspace_returns_unknown() {
+        let tmp_file = std::env::temp_dir().join("moai-dispatch-unknown.json");
+        std::fs::remove_file(&tmp_file).ok();
+
+        let mut store = moai_studio_workspace::WorkspacesStore::load(&tmp_file).unwrap();
+        let outcome =
+            dispatch_workspace_menu_action(WorkspaceMenuAction::MoveUp, "no-such-id", &mut store);
+        assert!(matches!(outcome, WorkspaceMenuOutcome::Unknown));
+
+        std::fs::remove_file(&tmp_file).ok();
+    }
 
     /// AC-D2-1: all four actions are exposed and have non-empty labels.
     #[test]

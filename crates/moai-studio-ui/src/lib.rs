@@ -270,6 +270,23 @@ pub struct RootView {
     /// (AC-WB-INT-3).
     #[cfg(feature = "web")]
     pub pending_toasts: Vec<WebToastEntry>,
+    // ── SPEC-V3-004 MS-5 (REQ-D2-MS5-3): rename modal state ──
+    // @MX:NOTE: [AUTO] REQ-D2-MS5-3 — rename_modal holds rename UI state.
+    //   None = closed, Some = open (target_id + buffer set by WorkspaceMenu dispatch).
+    /// Rename modal slot.  `None` = modal is dismissed.
+    pub rename_modal: Option<workspace_menu::RenameModal>,
+    // ── SPEC-V3-004 MS-5 (REQ-D2-MS5-4): delete confirmation state ──
+    // @MX:NOTE: [AUTO] REQ-D2-MS5-4 — delete_confirmation holds the pending delete target.
+    //   None = no pending delete, Some = awaiting user confirmation.
+    /// Delete confirmation slot.  `None` = no pending deletion.
+    pub delete_confirmation: Option<workspace_menu::DeleteConfirmation>,
+    // ── SPEC-V3-004 MS-5 (REQ-D2-MS5-5): WorkspacesStore owned by RootView ──
+    // @MX:ANCHOR: [AUTO] root-view-store
+    // @MX:REASON: [AUTO] REQ-D2-MS5-5. store is the single owner of WorkspacesStore in
+    //   RootView. fan_in >= 3: handle_workspace_menu_action_logic (dispatch),
+    //   apply_added_workspace (add), remove_workspace (remove).
+    /// Owned WorkspacesStore, populated either from a real load or injected in tests.
+    pub store: moai_studio_workspace::WorkspacesStore,
 }
 
 /// Pending toast entry surfaced for a detected dev-server URL.
@@ -297,6 +314,8 @@ impl RootView {
         let user_settings =
             settings::user_settings::load_or_default(&settings::user_settings::settings_path());
         let active_theme = design::runtime::ActiveTheme::from_settings(&user_settings.appearance);
+        // SPEC-V3-004 MS-5: empty store — real load happens in run_app after path is known.
+        let store = moai_studio_workspace::WorkspacesStore::empty(storage_path.clone());
         Self {
             workspaces,
             active_id,
@@ -327,6 +346,10 @@ impl RootView {
             url_detector: web::UrlDetectionDebouncer::new(),
             #[cfg(feature = "web")]
             pending_toasts: Vec::new(),
+            // SPEC-V3-004 MS-5: workspace context-menu overlay slots (default: closed).
+            rename_modal: None,
+            delete_confirmation: None,
+            store,
         }
     }
 
@@ -348,6 +371,76 @@ impl RootView {
     pub fn apply_added_workspace(&mut self, added: &Workspace, all: Vec<Workspace>) {
         self.workspaces = all;
         self.active_id = Some(added.id.clone());
+    }
+
+    // @MX:ANCHOR: [AUTO] root-view-handle-workspace-menu-action-logic
+    // @MX:REASON: [AUTO] REQ-D2-MS5-5. handle_workspace_menu_action_logic is the
+    //   logic-level bridge between WorkspaceMenuAction dispatch and RootView overlay state.
+    //   fan_in >= 3: T7 unit tests (3 callers), future GPUI handle_workspace_menu_action (cx),
+    //   future sidebar right-click wire (next MS).
+    /// Apply the result of a workspace context-menu action to RootView overlay state.
+    ///
+    /// This method is intentionally free of GPUI `Context` so it can be called from
+    /// both the GPUI event handler (which will add `cx.notify()` calls) and from
+    /// logic-level unit tests.
+    ///
+    /// - `Rename`  → opens `rename_modal` for the targeted workspace.
+    /// - `Delete`  → opens `delete_confirmation` for the targeted workspace.
+    /// - `MoveUp` / `MoveDown` → mutates `self.store` list order (no overlay opened).
+    /// - Unknown workspace → logs a warning, no state change.
+    pub fn handle_workspace_menu_action_logic(
+        &mut self,
+        action: workspace_menu::WorkspaceMenuAction,
+        ws_id: &str,
+    ) {
+        use workspace_menu::{WorkspaceMenuOutcome, dispatch_workspace_menu_action};
+
+        match dispatch_workspace_menu_action(action, ws_id, &mut self.store) {
+            WorkspaceMenuOutcome::OpenRenameModal {
+                ws_id,
+                current_name,
+            } => {
+                self.rename_modal
+                    .get_or_insert_with(Default::default)
+                    .open(ws_id, current_name);
+            }
+            WorkspaceMenuOutcome::OpenDeleteConfirmation { ws_id } => {
+                self.delete_confirmation
+                    .get_or_insert_with(Default::default)
+                    .open(ws_id);
+            }
+            WorkspaceMenuOutcome::Reordered => {
+                // Caller (GPUI handler) is responsible for cx.notify().
+                // No overlay state change needed.
+            }
+            WorkspaceMenuOutcome::Unknown => {
+                tracing::warn!(
+                    ws_id,
+                    "handle_workspace_menu_action_logic: unknown workspace or action failed"
+                );
+            }
+        }
+    }
+
+    /// GPUI-aware wrapper: delegates to `handle_workspace_menu_action_logic` and
+    /// calls `cx.notify()` on reorder so the sidebar re-renders.
+    pub fn handle_workspace_menu_action(
+        &mut self,
+        action: workspace_menu::WorkspaceMenuAction,
+        ws_id: &str,
+        cx: &mut Context<Self>,
+    ) {
+        use workspace_menu::WorkspaceMenuAction;
+
+        // Capture whether this is a reorder before mutating state.
+        let is_reorder = matches!(
+            action,
+            WorkspaceMenuAction::MoveUp | WorkspaceMenuAction::MoveDown
+        );
+        self.handle_workspace_menu_action_logic(action, ws_id);
+        if is_reorder {
+            cx.notify();
+        }
     }
 
     /// SPEC-V0-1-1-UX-FIX (C-3): TabContainer 가 없으면 생성. workspace 활성화 시점에 호출.
@@ -4226,5 +4319,149 @@ mod tests {
             view.last_open_code_viewer.is_none(),
             "last_open_code_viewer must stay None when workspace is unknown"
         );
+    }
+
+    // ── T7: RootView handle_workspace_menu_action (REQ-D2-MS5-5 wire) ───────
+
+    fn make_store_with_ws(
+        name: &str,
+        id_suffix: &str,
+    ) -> (moai_studio_workspace::WorkspacesStore, String) {
+        let tmp = std::env::temp_dir().join(format!("moai-rootview-t7-{}.json", id_suffix));
+        std::fs::remove_file(&tmp).ok();
+        let project_dir = std::env::temp_dir().join(format!("moai-rootview-t7-proj-{}", id_suffix));
+        std::fs::create_dir_all(&project_dir).unwrap();
+
+        let mut store = moai_studio_workspace::WorkspacesStore::load(&tmp).unwrap();
+        let mut ws = moai_studio_workspace::Workspace::from_path(&project_dir).unwrap();
+        ws.name = name.to_string();
+        let id = ws.id.clone();
+        store.add(ws).unwrap();
+        (store, id)
+    }
+
+    /// REQ-D2-MS5-5 wire: Rename action opens rename_modal with correct target.
+    #[test]
+    fn test_root_view_handle_workspace_menu_action_rename_opens_modal() {
+        use gpui::TestAppContext;
+
+        let (store, ws_id) = make_store_with_ws("MyWorkspace", "rename");
+        let workspaces = store.list().to_vec();
+
+        let mut cx = TestAppContext::single();
+        let root = cx.new(|_cx| {
+            let mut view = RootView::new(workspaces, dummy_path());
+            // Inject the pre-loaded store so tests don't hit real disk paths.
+            view.store = store;
+            view
+        });
+
+        cx.update(|app| {
+            root.update(app, |view: &mut RootView, _cx| {
+                view.handle_workspace_menu_action_logic(
+                    workspace_menu::WorkspaceMenuAction::Rename,
+                    &ws_id,
+                );
+                assert!(
+                    view.rename_modal.is_some(),
+                    "rename_modal must be Some after Rename action"
+                );
+                let modal = view.rename_modal.as_ref().unwrap();
+                assert!(modal.is_open(), "RenameModal must be open");
+                assert_eq!(modal.target_id(), Some(ws_id.as_str()));
+            });
+        });
+
+        // Cleanup temp files created by make_store_with_ws
+        let tmp = std::env::temp_dir().join("moai-rootview-t7-rename.json");
+        std::fs::remove_file(&tmp).ok();
+        let p = std::env::temp_dir().join("moai-rootview-t7-proj-rename");
+        std::fs::remove_dir_all(&p).ok();
+    }
+
+    /// REQ-D2-MS5-5 wire: Delete action opens delete_confirmation with correct target.
+    #[test]
+    fn test_root_view_handle_workspace_menu_action_delete_opens_confirmation() {
+        use gpui::TestAppContext;
+
+        let (store, ws_id) = make_store_with_ws("MyWorkspace", "delete");
+        let workspaces = store.list().to_vec();
+
+        let mut cx = TestAppContext::single();
+        let root = cx.new(|_cx| {
+            let mut view = RootView::new(workspaces, dummy_path());
+            view.store = store;
+            view
+        });
+
+        cx.update(|app| {
+            root.update(app, |view: &mut RootView, _cx| {
+                view.handle_workspace_menu_action_logic(
+                    workspace_menu::WorkspaceMenuAction::Delete,
+                    &ws_id,
+                );
+                assert!(
+                    view.delete_confirmation.is_some(),
+                    "delete_confirmation must be Some after Delete action"
+                );
+                let conf = view.delete_confirmation.as_ref().unwrap();
+                assert!(conf.is_open(), "DeleteConfirmation must be open");
+                assert_eq!(conf.target_id(), Some(ws_id.as_str()));
+            });
+        });
+
+        let tmp = std::env::temp_dir().join("moai-rootview-t7-delete.json");
+        std::fs::remove_file(&tmp).ok();
+        let p = std::env::temp_dir().join("moai-rootview-t7-proj-delete");
+        std::fs::remove_dir_all(&p).ok();
+    }
+
+    /// REQ-D2-MS5-5 wire: MoveUp action reorders the store list.
+    #[test]
+    fn test_root_view_handle_workspace_menu_action_move_up_calls_store() {
+        use gpui::TestAppContext;
+
+        // Two-workspace store: ws_a at index 0, ws_b at index 1.
+        let tmp = std::env::temp_dir().join("moai-rootview-t7-moveup.json");
+        std::fs::remove_file(&tmp).ok();
+        let pa = std::env::temp_dir().join("moai-rootview-t7-proj-moveup-a");
+        let pb = std::env::temp_dir().join("moai-rootview-t7-proj-moveup-b");
+        std::fs::create_dir_all(&pa).unwrap();
+        std::fs::create_dir_all(&pb).unwrap();
+
+        let mut store = moai_studio_workspace::WorkspacesStore::load(&tmp).unwrap();
+        let ws_a = moai_studio_workspace::Workspace::from_path(&pa).unwrap();
+        let ws_b = moai_studio_workspace::Workspace::from_path(&pb).unwrap();
+        let id_b = ws_b.id.clone();
+        store.add(ws_a).unwrap();
+        store.add(ws_b).unwrap();
+
+        let workspaces = store.list().to_vec();
+
+        let mut cx = TestAppContext::single();
+        let root = cx.new(|_cx| {
+            let mut view = RootView::new(workspaces, dummy_path());
+            view.store = store;
+            view
+        });
+
+        cx.update(|app| {
+            root.update(app, |view: &mut RootView, _cx| {
+                view.handle_workspace_menu_action_logic(
+                    workspace_menu::WorkspaceMenuAction::MoveUp,
+                    &id_b,
+                );
+                // ws_b should now be at index 0
+                assert_eq!(
+                    view.store.list()[0].id,
+                    id_b,
+                    "ws_b should be at index 0 after MoveUp"
+                );
+            });
+        });
+
+        std::fs::remove_file(&tmp).ok();
+        std::fs::remove_dir_all(&pa).ok();
+        std::fs::remove_dir_all(&pb).ok();
     }
 }
