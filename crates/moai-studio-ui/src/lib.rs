@@ -53,6 +53,8 @@ pub mod git;
 pub mod web;
 // SPEC-V3-017 MS-2: TRUST 5 Quality Dashboard (RadarChartView + QualityGateView)
 pub mod quality;
+// SPEC-V0-2-0-GLOBAL-SEARCH-001 MS-2: Global search panel (SearchPanel GPUI Entity).
+pub mod search;
 
 use design::tokens::{self as tok, traffic};
 use gpui::{
@@ -235,6 +237,16 @@ pub struct RootView {
     /// LspWidget via mutation API in `crate::status_bar`. Real broadcasting
     /// from git2 / LSP / agent runtime is follow-up (REQ-SB-MS7-3).
     pub status_bar: status_bar::StatusBarState,
+    // ── SPEC-V0-2-0-GLOBAL-SEARCH-001 MS-2: SearchPanel sidebar slot ──
+    // @MX:ANCHOR: [AUTO] root-view-search-panel-slot
+    // @MX:REASON: [AUTO] SPEC-V0-2-0-GLOBAL-SEARCH-001 MS-2. search_panel is the
+    //   sidebar toggleable section entry point. fan_in >= 3:
+    //   RootView::new (init=None), handle_search_key_event (toggle), Render::render (mount).
+    /// SPEC-V0-2-0-GLOBAL-SEARCH-001 MS-2: SearchPanel Entity.
+    ///
+    /// `None` = panel not yet initialised (created lazily on first ⌘⇧F).
+    /// `Some` = panel exists and its `is_visible` controls sidebar rendering.
+    pub search_panel: Option<search::SearchPanel>,
     // ── SPEC-V3-007 MS-4 (RG-WB-4): WebView toast pipeline ──
     /// URL auto-detection debouncer fed by TerminalStdoutEvent (REQ-WB-031).
     ///
@@ -296,7 +308,8 @@ impl RootView {
             find_bar_open: false,
             banner_stack: None,
             spec_panel: None,
-            toolbar: None, // F-3: toolbar created in run_app after App context available
+            search_panel: None, // SPEC-V0-2-0-GLOBAL-SEARCH-001 MS-2: lazy init on first ⌘⇧F
+            toolbar: None,      // F-3: toolbar created in run_app after App context available
             project_wizard: None, // G-2: wizard created in run_app after App context available
             pending_slash_injection: None, // MS-4: slash injection buffer (drained by render loop)
             // SPEC-V3-006 MS-7 (audit F-4): default state preserves pre-MS-7 static rendering.
@@ -1214,6 +1227,27 @@ impl RootView {
         cx.notify();
     }
 
+    /// SPEC-V0-2-0-GLOBAL-SEARCH-001 MS-2 (REQ-GS-031): Toggle the global search panel.
+    ///
+    /// Lazy-initialises `search_panel` on the first call (None → Some with
+    /// `is_visible = true`). Subsequent calls delegate to `SearchPanel::toggle`.
+    /// Calling `focus_input` records the intent so MS-3 can resolve real GPUI
+    /// focus once an `Entity<SearchPanel>` exists.
+    pub fn handle_toggle_search_panel(&mut self, cx: &mut Context<Self>) {
+        if self.search_panel.is_none() {
+            let mut panel = search::SearchPanel::new();
+            panel.toggle();
+            panel.focus_input();
+            self.search_panel = Some(panel);
+        } else if let Some(panel) = self.search_panel.as_mut() {
+            panel.toggle();
+            if panel.is_visible() {
+                panel.focus_input();
+            }
+        }
+        cx.notify();
+    }
+
     /// SPEC-V3-009 MS-4a (AC-SU-13~16): handle a `TerminalClickEvent::OpenSpec`
     /// emission by mounting (if dismissed) the SPEC panel and selecting the
     /// requested SPEC. Respects the single-overlay invariant — when the
@@ -1496,6 +1530,13 @@ impl Render for RootView {
             .on_action(cx.listener(|this, _: &OpenSpecPanel, _window, cx| {
                 this.handle_open_spec_panel(cx);
             }))
+            // SPEC-V0-2-0-GLOBAL-SEARCH-001 MS-2 (REQ-GS-031): ⌘⇧F / Ctrl+Shift+F →
+            // toggle SearchPanel visibility; lazy-init on first invocation.
+            .on_action(
+                cx.listener(|this, _: &search::ToggleSearchPanel, _window, cx| {
+                    this.handle_toggle_search_panel(cx);
+                }),
+            )
             .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _window, cx| {
                 // settings 키 먼저 처리 — 소비되면 나머지 스킵.
                 if this.handle_settings_key_event(ev) {
@@ -2209,6 +2250,9 @@ pub fn run_app(workspaces: Vec<Workspace>, storage_path: PathBuf) {
             gpui::KeyBinding::new("cmd-[", FocusPrevPane, None),
             gpui::KeyBinding::new("cmd-k", OpenCommandPalette, None),
             gpui::KeyBinding::new("cmd-shift-p", OpenSpecPanel, None),
+            // SPEC-V0-2-0-GLOBAL-SEARCH-001 MS-2: Global Search panel toggle (REQ-GS-031).
+            gpui::KeyBinding::new("cmd-shift-f", search::ToggleSearchPanel, None),
+            gpui::KeyBinding::new("ctrl-shift-f", search::ToggleSearchPanel, None),
             // SPEC-V3-007 MS-2: WebView DevTools toggle (Cmd+Opt+I / Ctrl+Shift+I)
             #[cfg(feature = "web")]
             gpui::KeyBinding::new("cmd-alt-i", ToggleDevTools, None),
