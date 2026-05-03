@@ -57,6 +57,8 @@ pub mod quality;
 pub mod search;
 // SPEC-V0-2-0-MULTI-SHELL-001 MS-1: Shell picker logic (ShellPicker struct).
 pub mod shell_picker;
+// SPEC-V0-2-0-ONBOARDING-ENV-001 MS-1: Onboarding env detection (read-only toolchain probe).
+pub mod onboarding;
 
 use design::tokens::{self as tok, traffic};
 use gpui::{
