@@ -9,6 +9,7 @@
 //!   click-handler wiring. fan_in >= 3 expected: TerminalSurface::render,
 //!   integration tests, and OSC 8 merge path.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
@@ -268,11 +269,19 @@ fn is_version_number(s: &str) -> bool {
 // ============================================================
 
 /// Action to dispatch when a link is clicked (B-1 feature).
+///
+/// SPEC-V0-2-0-OSC8-LIFECYCLE-001 MS-1: extended with `CopyUrl` variant for
+/// the right-click / modifier-click "copy URL" path. The first three variants
+/// are preserved at their original discriminants for backward compatibility
+/// with existing match arms in `crates/moai-studio-ui/src/terminal/mod.rs`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClickAction {
     OpenCodeViewer(OpenCodeViewer),
     OpenUrl(OpenUrl),
     OpenSpec(OpenSpec),
+    /// Copy the URL to the clipboard rather than opening it.
+    /// SPEC-V0-2-0-OSC8-LIFECYCLE-001 REQ-OL-005.
+    CopyUrl(OpenUrl),
 }
 
 /// Resolves a byte offset within `text` to a clickable link action (B-1).
@@ -317,6 +326,89 @@ pub fn col_to_byte_offset(text: &str, col: usize) -> usize {
         .nth(col)
         .map(|(i, _)| i)
         .unwrap_or(text.len())
+}
+
+// ============================================================
+// SPEC-V0-2-0-OSC8-LIFECYCLE-001 MS-1 — VisitedLinkRegistry + copy resolver
+// ============================================================
+
+/// In-memory set of URLs that the user has clicked-through.
+///
+/// @MX:NOTE: [AUTO] visited-link-registry
+/// @MX:SPEC: SPEC-V0-2-0-OSC8-LIFECYCLE-001 REQ-OL-001
+/// `mark_visited` is idempotent — a URL can be tracked at most once. The
+/// renderer (separate PR) consults `is_visited` to apply a "visited" colour
+/// override on URL / OSC 8 spans.
+#[derive(Debug, Clone, Default)]
+pub struct VisitedLinkRegistry {
+    urls: HashSet<String>,
+}
+
+impl VisitedLinkRegistry {
+    /// Construct an empty registry.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Mark `url` as visited. Idempotent.
+    /// REQ-OL-002.
+    pub fn mark_visited(&mut self, url: impl Into<String>) {
+        self.urls.insert(url.into());
+    }
+
+    /// True when `url` has been marked visited.
+    /// REQ-OL-003.
+    pub fn is_visited(&self, url: &str) -> bool {
+        self.urls.contains(url)
+    }
+
+    /// Drop every entry — restore the registry to its default state.
+    /// REQ-OL-004.
+    pub fn clear(&mut self) {
+        self.urls.clear();
+    }
+
+    /// Number of unique URLs tracked.
+    pub fn count(&self) -> usize {
+        self.urls.len()
+    }
+
+    /// True when no URL has been tracked.
+    pub fn is_empty(&self) -> bool {
+        self.urls.is_empty()
+    }
+}
+
+/// Resolve a click intended for the **copy URL** path.
+///
+/// Returns `Some(ClickAction::CopyUrl(...))` when the click lands on a URL or
+/// OSC 8 hyperlink span. Returns `None` for FilePath / SpecId spans (those
+/// have no clipboard semantics in this SPEC scope) and for clicks outside any
+/// span.
+///
+/// REQ-OL-006.
+pub fn resolve_click_for_copy(text: &str, byte_offset: usize) -> Option<ClickAction> {
+    let spans = detect_links(text);
+    resolve_click_for_copy_from_spans(&spans, byte_offset)
+}
+
+/// Pre-computed-spans variant of `resolve_click_for_copy`.
+/// REQ-OL-007.
+pub fn resolve_click_for_copy_from_spans(
+    spans: &[LinkSpan],
+    byte_offset: usize,
+) -> Option<ClickAction> {
+    for span in spans {
+        if byte_offset >= span.start && byte_offset < span.end {
+            return match &span.kind {
+                LinkKind::Url(url) | LinkKind::Osc8(url) => {
+                    Some(ClickAction::CopyUrl(OpenUrl { url: url.clone() }))
+                }
+                LinkKind::FilePath { .. } | LinkKind::SpecId(_) => None,
+            };
+        }
+    }
+    None
 }
 
 // ============================================================
@@ -676,5 +768,162 @@ mod tests {
         let text = "한글test";
         // '한' is 3 bytes, '글' is 3 bytes. col=2 → byte offset 6
         assert_eq!(col_to_byte_offset(text, 2), 6);
+    }
+
+    // ── SPEC-V0-2-0-OSC8-LIFECYCLE-001 MS-1 — VisitedLinkRegistry + CopyUrl ──
+
+    /// AC-OL-1 (REQ-OL-001): default registry is empty.
+    #[test]
+    fn visited_registry_default_is_empty() {
+        let reg = VisitedLinkRegistry::default();
+        assert_eq!(reg.count(), 0);
+        assert!(reg.is_empty());
+        assert!(!reg.is_visited("https://example.com"));
+    }
+
+    /// AC-OL-2 (REQ-OL-002): mark_visited is idempotent.
+    #[test]
+    fn visited_registry_mark_is_idempotent() {
+        let mut reg = VisitedLinkRegistry::new();
+        reg.mark_visited("https://a.test/");
+        reg.mark_visited("https://a.test/");
+        reg.mark_visited("https://a.test/");
+        assert_eq!(reg.count(), 1);
+        assert!(reg.is_visited("https://a.test/"));
+    }
+
+    /// AC-OL-3 (REQ-OL-003): is_visited true for marked, false otherwise.
+    #[test]
+    fn visited_registry_is_visited_distinguishes_entries() {
+        let mut reg = VisitedLinkRegistry::new();
+        reg.mark_visited("https://a.test/");
+        reg.mark_visited("https://b.test/");
+        assert!(reg.is_visited("https://a.test/"));
+        assert!(reg.is_visited("https://b.test/"));
+        assert!(!reg.is_visited("https://c.test/"));
+        assert_eq!(reg.count(), 2);
+    }
+
+    /// AC-OL-4 (REQ-OL-004): clear() empties the registry.
+    #[test]
+    fn visited_registry_clear_empties_set() {
+        let mut reg = VisitedLinkRegistry::new();
+        reg.mark_visited("https://a.test/");
+        reg.mark_visited("https://b.test/");
+        reg.mark_visited("https://c.test/");
+        assert_eq!(reg.count(), 3);
+        reg.clear();
+        assert_eq!(reg.count(), 0);
+        assert!(reg.is_empty());
+        assert!(!reg.is_visited("https://a.test/"));
+    }
+
+    /// AC-OL-5 (REQ-OL-005): ClickAction::CopyUrl variant matches exhaustively.
+    #[test]
+    fn click_action_copy_url_variant_matches_exhaustively() {
+        let actions = vec![
+            ClickAction::OpenCodeViewer(OpenCodeViewer {
+                path: PathBuf::from("a.rs"),
+                line: None,
+                col: None,
+            }),
+            ClickAction::OpenUrl(OpenUrl {
+                url: "https://x".to_string(),
+            }),
+            ClickAction::OpenSpec(OpenSpec {
+                spec_id: "SPEC-X-1".to_string(),
+            }),
+            ClickAction::CopyUrl(OpenUrl {
+                url: "https://y".to_string(),
+            }),
+        ];
+        let mut seen_copy = false;
+        for action in &actions {
+            match action {
+                ClickAction::OpenCodeViewer(_) => {}
+                ClickAction::OpenUrl(_) => {}
+                ClickAction::OpenSpec(_) => {}
+                ClickAction::CopyUrl(OpenUrl { url }) => {
+                    assert_eq!(url, "https://y");
+                    seen_copy = true;
+                }
+            }
+        }
+        assert!(seen_copy, "CopyUrl arm must be reachable");
+    }
+
+    /// AC-OL-6 (REQ-OL-006): URL span resolves to CopyUrl on the copy path.
+    #[test]
+    fn resolve_click_for_copy_url_returns_copy_url() {
+        let text = "see https://example.com/foo for more";
+        let byte_offset = text.find("example").unwrap();
+        let action = resolve_click_for_copy(text, byte_offset).expect("must resolve");
+        match action {
+            ClickAction::CopyUrl(OpenUrl { url }) => {
+                assert_eq!(url, "https://example.com/foo");
+            }
+            other => panic!("expected CopyUrl, got {other:?}"),
+        }
+    }
+
+    /// REQ-OL-006: OSC 8 span resolves to CopyUrl on the copy path.
+    #[test]
+    fn resolve_click_for_copy_osc8_returns_copy_url() {
+        let text = "click here";
+        let osc8 = vec![LinkSpan {
+            kind: LinkKind::Osc8("https://osc.test/".to_string()),
+            start: 0,
+            end: text.len(),
+        }];
+        let action = resolve_click_for_copy_from_spans(&osc8, 5).expect("must resolve");
+        match action {
+            ClickAction::CopyUrl(OpenUrl { url }) => {
+                assert_eq!(url, "https://osc.test/");
+            }
+            other => panic!("expected CopyUrl, got {other:?}"),
+        }
+    }
+
+    /// AC-OL-7 (REQ-OL-006): FilePath span returns None on the copy path.
+    #[test]
+    fn resolve_click_for_copy_filepath_returns_none() {
+        let text = "edit src/main.rs:10 now";
+        let byte_offset = text.find("src").unwrap();
+        // Sanity: regular resolve_click returns Some(OpenCodeViewer)
+        assert!(matches!(
+            resolve_click(text, byte_offset),
+            Some(ClickAction::OpenCodeViewer(_))
+        ));
+        // But the copy path returns None.
+        assert!(resolve_click_for_copy(text, byte_offset).is_none());
+    }
+
+    /// REQ-OL-006: SpecId span returns None on the copy path.
+    #[test]
+    fn resolve_click_for_copy_spec_id_returns_none() {
+        let text = "see SPEC-V3-001 today";
+        let byte_offset = text.find("V3").unwrap();
+        assert!(matches!(
+            resolve_click(text, byte_offset),
+            Some(ClickAction::OpenSpec(_))
+        ));
+        assert!(resolve_click_for_copy(text, byte_offset).is_none());
+    }
+
+    /// REQ-OL-006: clicking outside any span returns None.
+    #[test]
+    fn resolve_click_for_copy_no_span_returns_none() {
+        let text = "plain text with no links";
+        assert!(resolve_click_for_copy(text, 5).is_none());
+    }
+
+    /// REQ-OL-007: pre-computed spans variant matches the auto-detected variant.
+    #[test]
+    fn resolve_click_for_copy_from_spans_matches_auto_variant() {
+        let text = "open https://x.test/ now";
+        let auto = resolve_click_for_copy(text, text.find("x.test").unwrap());
+        let spans = detect_links(text);
+        let manual = resolve_click_for_copy_from_spans(&spans, text.find("x.test").unwrap());
+        assert_eq!(auto, manual);
     }
 }
