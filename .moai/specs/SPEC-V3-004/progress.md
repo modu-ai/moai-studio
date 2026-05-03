@@ -149,3 +149,71 @@ root_view.update(cx, |view, cx| {
 ```
 
 `handle_workspace_menu_action` 가 outcome 에 따라 rename_modal/delete_confirmation 자동 설정 + Reordered 시 cx.notify() 호출. 별 PR 에서 GPUI render side mount 만 추가하면 e2e 완성.
+
+---
+
+## MS-6 (2026-05-04 sess 12) — D-2 Workspace switcher GPUI overlay mount (audit D-2 fully closed)
+
+Branch: feature/SPEC-V3-004-ms6-overlay-mount
+
+### Implementation
+
+- `crates/moai-studio-ui/src/lib.rs`:
+  - `RootView` 에 `workspace_menu: workspace_menu::WorkspaceMenu` 필드 신규 (REQ-D2-MS6-1, R3 새 필드만).
+  - `RootView::new` 에 `workspace_menu: WorkspaceMenu::default()` 초기화 추가.
+  - 새 helper 메서드 6개 (모두 `pub` + 1개 private `sync_workspaces_from_store`):
+    - `open_workspace_menu_at(ws_id, x, y)` (REQ-D2-MS6-2 / AC-D2-12)
+    - `click_workspace_menu_item(action)` (REQ-D2-MS6-3 / AC-D2-13) — visible_target → handle_workspace_menu_action_logic → close
+    - `commit_rename_modal() -> Option<(String, String)>` (REQ-D2-MS6-4 / AC-D2-14 rename half) — store.rename + sync_workspaces_from_store + clear
+    - `cancel_rename_modal()`
+    - `confirm_delete_modal() -> Option<String>` (REQ-D2-MS6-4 / AC-D2-14 delete half) — store.remove + sync + active_id 재할당 + clear
+    - `cancel_delete_modal()`
+  - `sync_workspaces_from_store()` private @MX:ANCHOR helper — fan_in≥3 (Reordered branch + click_workspace_menu_item + commit_rename_modal + confirm_delete_modal).
+  - **MS-5 fix-up**: `handle_workspace_menu_action_logic` 의 `Reordered` arm 이 기존에는 cx.notify() 만 트리거하고 self.workspaces vector 를 갱신하지 않아 sidebar 가 stale 표시되던 잠재 결함 → `sync_workspaces_from_store()` 호출 추가.
+  - GPUI render side wire:
+    - `workspace_row` 에 `MouseButton::Right` listener 추가 — `open_workspace_menu_at(ev.position.x, ev.position.y)` + cx.notify(). 좌클릭 (activate) 동작 무변경.
+    - `Render for RootView` chain 끝에 3개 overlay branch 추가 (palette/settings_modal/spec_panel 패턴 mirror):
+      - `workspace_menu.is_open()` → `render_workspace_context_menu_overlay` (absolute positioned 4 항목 menu)
+      - `rename_modal.is_some()` → `render_rename_modal_overlay` (centered scrim + buffer display + Commit/Cancel)
+      - `delete_confirmation.is_some()` → `render_delete_confirmation_overlay` (centered scrim + warning + Confirm/Cancel)
+  - 새 helper 함수 3개 (lib.rs file scope, render_spec_panel_overlay 직후): `render_workspace_context_menu_overlay`, `render_rename_modal_overlay`, `render_delete_confirmation_overlay`.
+
+### Acceptance Criteria
+
+| AC | 내용 | 상태 |
+|----|------|------|
+| AC-D2-11 | RootView::new 가 workspace_menu 를 closed 로 초기화 | ✅ |
+| AC-D2-12 | open_workspace_menu_at 가 target + position 기록 | ✅ |
+| AC-D2-13 | click_workspace_menu_item 이 dispatch + 메뉴 close (single-menu invariant) | ✅ |
+| AC-D2-14 | commit_rename_modal + confirm_delete_modal 이 store mutation + workspaces sync | ✅ |
+
+### Test count
+
+- 신규: 13 (T8 블록)
+  - test_workspace_menu_default_closed_on_root_view_new (AC-D2-11)
+  - test_open_workspace_menu_at_records_target_and_position (AC-D2-12)
+  - test_click_workspace_menu_rename_opens_rename_modal_and_closes_menu (AC-D2-13)
+  - test_click_workspace_menu_delete_opens_delete_confirmation_and_closes_menu (AC-D2-13)
+  - test_click_workspace_menu_move_up_calls_store_and_syncs_workspaces (AC-D2-13 + Reordered fix)
+  - test_commit_rename_modal_renames_in_store_and_syncs_workspaces (AC-D2-14 rename)
+  - test_confirm_delete_modal_removes_from_store_and_syncs_workspaces (AC-D2-14 delete)
+  - test_confirm_delete_modal_reassigns_active_when_active_deleted (active_id invariant)
+  - test_cancel_rename_modal_clears_state
+  - test_cancel_delete_modal_clears_state
+  - test_click_workspace_menu_item_noop_when_closed
+  - test_commit_rename_modal_returns_none_when_closed
+  - test_confirm_delete_modal_returns_none_when_closed
+- moai-studio-ui lib tests: 1218 → 1231 (+13)
+- clippy 0 warning, fmt clean, 워크스페이스 회귀 0
+
+### Done
+
+- D-2 audit 항목: PARTIAL → DONE. 우클릭 → ContextMenu → Rename/Delete modal → store mutation → sidebar 재렌더 풀 e2e 완성 (logic-level 검증 + GPUI render mount).
+- MS-5 carry "RootView 우클릭 wire (별 milestone)" 해소.
+- MS-5 latent bug (Reordered no sync) 부수 해결.
+
+### Carry (다음 SPEC 또는 별 PR)
+
+- ContextMenu keyboard navigation (Arrow / Esc / Enter) — 별 PR.
+- RenameModal text input 실 wire (per-keystroke set_buffer) — 별 PR (text input infrastructure 필요).
+- D-5 Color tags / D-6 Drag-and-drop add — v0.2.0 별 SPEC 그대로 carry.

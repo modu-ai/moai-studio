@@ -297,6 +297,12 @@ pub struct RootView {
     ///
     /// Populated by `handle_switch_shell`; used by the GUI overlay (v0.2.1+).
     pub shell_picker: Option<shell_picker::ShellPicker>,
+    // ── SPEC-V3-004 MS-6 (REQ-D2-MS6-1): workspace right-click context menu ──
+    // @MX:NOTE: [AUTO] REQ-D2-MS6-1 — workspace_menu holds the sidebar right-click
+    //   context menu state. Default = closed; populated by open_workspace_menu_at,
+    //   drained by click_workspace_menu_item.
+    /// Sidebar workspace context menu state. `Default::default()` = closed.
+    pub workspace_menu: workspace_menu::WorkspaceMenu,
 }
 
 /// Pending toast entry surfaced for a detected dev-server URL.
@@ -362,6 +368,8 @@ impl RootView {
             store,
             // SPEC-V0-2-0-MULTI-SHELL-001 MS-1: lazy init on first Command Palette dispatch.
             shell_picker: None,
+            // SPEC-V3-004 MS-6 (REQ-D2-MS6-1): workspace context menu, default closed.
+            workspace_menu: workspace_menu::WorkspaceMenu::default(),
         }
     }
 
@@ -422,8 +430,10 @@ impl RootView {
                     .open(ws_id);
             }
             WorkspaceMenuOutcome::Reordered => {
-                // Caller (GPUI handler) is responsible for cx.notify().
-                // No overlay state change needed.
+                // SPEC-V3-004 MS-6 (REQ-D2-MS6-2 fix-up for MS-5): re-sync local
+                // workspaces vector from the store so the rendered sidebar reflects
+                // the new order. Caller (GPUI handler) still owns cx.notify().
+                self.sync_workspaces_from_store();
             }
             WorkspaceMenuOutcome::Unknown => {
                 tracing::warn!(
@@ -453,6 +463,105 @@ impl RootView {
         if is_reorder {
             cx.notify();
         }
+    }
+
+    // ── SPEC-V3-004 MS-6 helpers (REQ-D2-MS6-1 ~ REQ-D2-MS6-4) ──
+
+    // @MX:ANCHOR: [AUTO] sync-workspaces-from-store
+    // @MX:REASON: [AUTO] REQ-D2-MS6-2~4. Single sync point that mirrors the
+    //   canonical WorkspacesStore state into the rendered self.workspaces vector
+    //   after rename / reorder / delete mutations. fan_in >= 3:
+    //   handle_workspace_menu_action_logic Reordered branch, click_workspace_menu_item,
+    //   commit_rename_modal, confirm_delete_modal.
+    /// Re-populate `self.workspaces` from the canonical `self.store`.
+    fn sync_workspaces_from_store(&mut self) {
+        self.workspaces = self.store.list().to_vec();
+    }
+
+    // @MX:NOTE: [AUTO] REQ-D2-MS6-2 — open_workspace_menu_at is the single entry
+    //   point invoked from the workspace_row right-click listener.
+    /// Open the workspace context menu for `ws_id` at the given screen position.
+    /// AC-D2-12.
+    pub fn open_workspace_menu_at(&mut self, ws_id: &str, x: f32, y: f32) {
+        self.workspace_menu.open_for(ws_id, x, y);
+    }
+
+    // @MX:NOTE: [AUTO] REQ-D2-MS6-3 — click_workspace_menu_item dispatches the
+    //   chosen action against the currently visible workspace target, then
+    //   atomically closes the menu (single-menu invariant from REQ-D2-MS4-2).
+    /// Dispatch the workspace context-menu's selected action for whichever
+    /// workspace the menu is currently open for. No-op when the menu is closed.
+    /// AC-D2-13.
+    pub fn click_workspace_menu_item(&mut self, action: workspace_menu::WorkspaceMenuAction) {
+        let Some(ws_id) = self.workspace_menu.visible_target().map(str::to_string) else {
+            return;
+        };
+        self.handle_workspace_menu_action_logic(action, &ws_id);
+        self.workspace_menu.close();
+    }
+
+    // @MX:NOTE: [AUTO] REQ-D2-MS6-4 — commit_rename_modal persists via store and
+    //   mirrors the change into self.workspaces via sync_workspaces_from_store.
+    /// Commit the open rename modal: persist the new name via `store.rename`,
+    /// mirror into `self.workspaces`, and close the modal.
+    ///
+    /// Returns `Some((ws_id, new_name))` on success. Returns `None` when the
+    /// modal is closed, the trimmed buffer is blank (per `RenameModal::commit`),
+    /// or the store rejects the rename.
+    /// AC-D2-14 (rename half).
+    pub fn commit_rename_modal(&mut self) -> Option<(String, String)> {
+        let modal = self.rename_modal.as_mut()?;
+        let (ws_id, new_name) = modal.commit()?;
+        if let Err(e) = self.store.rename(&ws_id, &new_name) {
+            tracing::warn!(
+                error = ?e,
+                ws_id,
+                "commit_rename_modal: store.rename failed"
+            );
+            return None;
+        }
+        self.rename_modal = None;
+        self.sync_workspaces_from_store();
+        Some((ws_id, new_name))
+    }
+
+    /// Cancel the open rename modal without persisting.
+    pub fn cancel_rename_modal(&mut self) {
+        self.rename_modal = None;
+    }
+
+    // @MX:NOTE: [AUTO] REQ-D2-MS6-4 — confirm_delete_modal removes via store,
+    //   mirrors into self.workspaces, and reassigns active_id when the deleted
+    //   workspace was active to avoid a dangling reference.
+    /// Confirm the open delete modal: remove the workspace via `store.remove`,
+    /// mirror into `self.workspaces`, reassign `active_id` if it pointed at the
+    /// deleted workspace, and close the modal.
+    ///
+    /// Returns `Some(ws_id)` on success. Returns `None` when the modal is
+    /// closed or the store rejects the removal.
+    /// AC-D2-14 (delete half).
+    pub fn confirm_delete_modal(&mut self) -> Option<String> {
+        let conf = self.delete_confirmation.as_mut()?;
+        let ws_id = conf.confirm()?;
+        if let Err(e) = self.store.remove(&ws_id) {
+            tracing::warn!(
+                error = ?e,
+                ws_id,
+                "confirm_delete_modal: store.remove failed"
+            );
+            return None;
+        }
+        self.delete_confirmation = None;
+        self.sync_workspaces_from_store();
+        if self.active_id.as_deref() == Some(ws_id.as_str()) {
+            self.active_id = self.workspaces.first().map(|w| w.id.clone());
+        }
+        Some(ws_id)
+    }
+
+    /// Cancel the open delete modal without removing the workspace.
+    pub fn cancel_delete_modal(&mut self) {
+        self.delete_confirmation = None;
     }
 
     /// SPEC-V0-1-1-UX-FIX (C-3): TabContainer 가 없으면 생성. workspace 활성화 시점에 호출.
@@ -1696,13 +1805,26 @@ impl Render for RootView {
             .iter()
             .map(|ws| {
                 let id = ws.id.clone();
+                let id_for_right = ws.id.clone();
                 let is_active = self.active_id.as_deref() == Some(ws.id.as_str());
-                workspace_row(ws, is_active).on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |this, _ev, _window, cx| {
-                        this.handle_activate_workspace(id.clone(), cx)
-                    }),
-                )
+                workspace_row(ws, is_active)
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |this, _ev, _window, cx| {
+                            this.handle_activate_workspace(id.clone(), cx)
+                        }),
+                    )
+                    // SPEC-V3-004 MS-6 (REQ-D2-MS6-2): right-click opens the
+                    // workspace context menu at the click position.
+                    .on_mouse_down(
+                        MouseButton::Right,
+                        cx.listener(move |this, ev: &gpui::MouseDownEvent, _window, cx| {
+                            let x = f32::from(ev.position.x);
+                            let y = f32::from(ev.position.y);
+                            this.open_workspace_menu_at(&id_for_right, x, y);
+                            cx.notify();
+                        }),
+                    )
             })
             .collect();
         // SPEC-V3-004 T2: tab_container Entity 를 main_body 에 전달.
@@ -1875,6 +1997,27 @@ impl Render for RootView {
             // The overlay is a no-op stack when `feature = "web"` is disabled or
             // `pending_toasts` is empty — render_web_toasts returns None in either case.
             .children(self.render_web_toasts(cx))
+            // SPEC-V3-004 MS-6 (REQ-D2-MS6-3): workspace context menu overlay.
+            // Mounted at visible_position when WorkspaceMenu::is_open() == true.
+            .children(
+                self.workspace_menu
+                    .is_open()
+                    .then(|| render_workspace_context_menu_overlay(&self.workspace_menu, cx)),
+            )
+            // SPEC-V3-004 MS-6 (REQ-D2-MS6-4): rename modal overlay.
+            // Mounted when rename_modal == Some.
+            .children(
+                self.rename_modal
+                    .as_ref()
+                    .map(|m| render_rename_modal_overlay(m, cx)),
+            )
+            // SPEC-V3-004 MS-6 (REQ-D2-MS6-4): delete confirmation overlay.
+            // Mounted when delete_confirmation == Some.
+            .children(
+                self.delete_confirmation
+                    .as_ref()
+                    .map(|c| render_delete_confirmation_overlay(c, cx)),
+            )
     }
 }
 
@@ -2478,6 +2621,250 @@ fn render_spec_panel_overlay() -> impl IntoElement {
                             .text_color(rgb(tok::FG_SECONDARY))
                             .child("SpecListView"),
                     ),
+                ),
+        )
+}
+
+// ============================================================
+// SPEC-V3-004 MS-6: Workspace context menu + rename modal + delete confirmation
+// overlays. These mount on top of the sidebar / main pane via `Render for RootView`
+// when the corresponding state slot is populated. Visual fidelity is intentionally
+// minimal — the contract is that buttons dispatch to RootView helpers and state
+// transitions are observable via unit tests on those helpers.
+// ============================================================
+
+/// Right-click workspace context menu overlay (REQ-D2-MS6-3).
+///
+/// Renders 4 action rows (Rename / Delete / Move Up / Move Down) absolutely
+/// positioned at `WorkspaceMenu::visible_position()`. Each row dispatches to
+/// `RootView::click_workspace_menu_item` which closes the menu and routes
+/// through the MS-5 dispatch logic.
+fn render_workspace_context_menu_overlay(
+    menu: &workspace_menu::WorkspaceMenu,
+    cx: &mut Context<RootView>,
+) -> impl IntoElement {
+    let pos = menu
+        .visible_position()
+        .unwrap_or(workspace_menu::MenuPosition { x: 0.0, y: 0.0 });
+    let mut container = div()
+        .id("workspace-context-menu")
+        .absolute()
+        .left(px(pos.x))
+        .top(px(pos.y))
+        .w(px(160.0))
+        .bg(rgb(tok::BG_ELEVATED))
+        .border_1()
+        .border_color(rgb(tok::BORDER_SUBTLE))
+        .rounded_md()
+        .flex()
+        .flex_col()
+        .py_1();
+    for action in workspace_menu::WorkspaceMenu::items() {
+        let row = div()
+            .id(gpui::SharedString::from(format!(
+                "workspace-context-menu-item-{}",
+                action.label()
+            )))
+            .px_3()
+            .py_1()
+            .text_sm()
+            .text_color(rgb(if action.is_destructive() {
+                tok::ACCENT
+            } else {
+                tok::FG_PRIMARY
+            }))
+            .hover(|s| s.bg(rgb(tok::BG_SURFACE)))
+            .cursor_pointer()
+            .child(action.label())
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, _ev, _window, cx| {
+                    this.click_workspace_menu_item(action);
+                    cx.notify();
+                }),
+            );
+        container = container.child(row);
+    }
+    container
+}
+
+/// Rename workspace modal overlay (REQ-D2-MS6-4 rename half).
+///
+/// Centered scrim + small box that displays the current buffer text and offers
+/// Commit / Cancel buttons. The actual text-input wiring (per-keystroke
+/// `set_buffer`) is out of MS-6 scope — the buffer here is read-only feedback.
+fn render_rename_modal_overlay(
+    modal: &workspace_menu::RenameModal,
+    cx: &mut Context<RootView>,
+) -> impl IntoElement {
+    let buffer_display = if modal.buffer().is_empty() {
+        "(empty)".to_string()
+    } else {
+        modal.buffer().to_string()
+    };
+    div()
+        .absolute()
+        .inset_0()
+        .bg(gpui::rgba(0x08_0c_0b_8c)) // scrim dark — palette/settings parity
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .child(
+            div()
+                .w(px(360.0))
+                .bg(rgb(crate::design::tokens::theme::dark::background::PANEL))
+                .rounded_lg()
+                .p_4()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(rgb(tok::FG_PRIMARY))
+                        .child("Rename Workspace"),
+                )
+                .child(
+                    div()
+                        .px_2()
+                        .py_1()
+                        .bg(rgb(tok::BG_APP))
+                        .rounded_md()
+                        .text_sm()
+                        .text_color(rgb(tok::FG_SECONDARY))
+                        .child(buffer_display),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .gap_2()
+                        .justify_end()
+                        .child(
+                            div()
+                                .id("rename-modal-cancel")
+                                .px_3()
+                                .py_1()
+                                .rounded_md()
+                                .bg(rgb(tok::BG_SURFACE))
+                                .text_sm()
+                                .text_color(rgb(tok::FG_SECONDARY))
+                                .cursor_pointer()
+                                .child("Cancel")
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(|this, _ev, _window, cx| {
+                                        this.cancel_rename_modal();
+                                        cx.notify();
+                                    }),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .id("rename-modal-commit")
+                                .px_3()
+                                .py_1()
+                                .rounded_md()
+                                .bg(rgb(tok::ACCENT))
+                                .text_sm()
+                                .text_color(rgb(tok::FG_PRIMARY))
+                                .cursor_pointer()
+                                .child("Commit")
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(|this, _ev, _window, cx| {
+                                        let _ = this.commit_rename_modal();
+                                        cx.notify();
+                                    }),
+                                ),
+                        ),
+                ),
+        )
+}
+
+/// Delete workspace confirmation overlay (REQ-D2-MS6-4 delete half).
+///
+/// Centered scrim + small box with a warning message and Confirm / Cancel
+/// buttons. Confirm dispatches to `confirm_delete_modal`, Cancel to
+/// `cancel_delete_modal`.
+fn render_delete_confirmation_overlay(
+    _conf: &workspace_menu::DeleteConfirmation,
+    cx: &mut Context<RootView>,
+) -> impl IntoElement {
+    div()
+        .absolute()
+        .inset_0()
+        .bg(gpui::rgba(0x08_0c_0b_8c)) // scrim dark
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .child(
+            div()
+                .w(px(360.0))
+                .bg(rgb(crate::design::tokens::theme::dark::background::PANEL))
+                .rounded_lg()
+                .p_4()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(rgb(tok::FG_PRIMARY))
+                        .child("Delete Workspace?"),
+                )
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(tok::FG_MUTED))
+                        .child("This action cannot be undone."),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .gap_2()
+                        .justify_end()
+                        .child(
+                            div()
+                                .id("delete-modal-cancel")
+                                .px_3()
+                                .py_1()
+                                .rounded_md()
+                                .bg(rgb(tok::BG_SURFACE))
+                                .text_sm()
+                                .text_color(rgb(tok::FG_SECONDARY))
+                                .cursor_pointer()
+                                .child("Cancel")
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(|this, _ev, _window, cx| {
+                                        this.cancel_delete_modal();
+                                        cx.notify();
+                                    }),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .id("delete-modal-confirm")
+                                .px_3()
+                                .py_1()
+                                .rounded_md()
+                                .bg(rgb(tok::ACCENT))
+                                .text_sm()
+                                .text_color(rgb(tok::FG_PRIMARY))
+                                .cursor_pointer()
+                                .child("Confirm")
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(|this, _ev, _window, cx| {
+                                        let _ = this.confirm_delete_modal();
+                                        cx.notify();
+                                    }),
+                                ),
+                        ),
                 ),
         )
 }
@@ -4567,5 +4954,278 @@ mod tests {
             view.shell_picker.is_some(),
             "shell_picker must be Some after dispatch_command('shell.switch')"
         );
+    }
+
+    // ── T8: SPEC-V3-004 MS-6 — workspace context menu GPUI overlay mount ──
+
+    /// Helper that builds a `RootView` already wired to a temp `WorkspacesStore`
+    /// containing the supplied workspace names. Returns the view and the list
+    /// of generated ids in insertion order. Cleanup of temp files is the
+    /// caller's responsibility (call `cleanup_t8_temp(suffix)` at end).
+    fn make_root_view_with_workspaces(names: &[&str], suffix: &str) -> (RootView, Vec<String>) {
+        let tmp = std::env::temp_dir().join(format!("moai-rootview-t8-{}.json", suffix));
+        std::fs::remove_file(&tmp).ok();
+        let mut store = moai_studio_workspace::WorkspacesStore::load(&tmp).unwrap();
+        let mut ids = Vec::new();
+        for (i, name) in names.iter().enumerate() {
+            let project_dir =
+                std::env::temp_dir().join(format!("moai-rootview-t8-proj-{}-{}", suffix, i));
+            std::fs::create_dir_all(&project_dir).unwrap();
+            let mut ws = moai_studio_workspace::Workspace::from_path(&project_dir).unwrap();
+            ws.name = name.to_string();
+            ids.push(ws.id.clone());
+            store.add(ws).unwrap();
+        }
+        let workspaces = store.list().to_vec();
+        let mut view = RootView::new(workspaces, tmp.clone());
+        view.store = store;
+        (view, ids)
+    }
+
+    fn cleanup_t8_temp(suffix: &str, count: usize) {
+        let tmp = std::env::temp_dir().join(format!("moai-rootview-t8-{}.json", suffix));
+        std::fs::remove_file(&tmp).ok();
+        for i in 0..count {
+            let p = std::env::temp_dir().join(format!("moai-rootview-t8-proj-{}-{}", suffix, i));
+            std::fs::remove_dir_all(&p).ok();
+        }
+    }
+
+    /// AC-D2-11 (REQ-D2-MS6-1): RootView::new initializes workspace_menu closed.
+    #[test]
+    fn test_workspace_menu_default_closed_on_root_view_new() {
+        let view = RootView::new(vec![], dummy_path());
+        assert!(
+            !view.workspace_menu.is_open(),
+            "workspace_menu must be closed by default on RootView::new"
+        );
+        assert_eq!(view.workspace_menu.visible_target(), None);
+        assert_eq!(view.workspace_menu.visible_position(), None);
+    }
+
+    /// AC-D2-12 (REQ-D2-MS6-2): open_workspace_menu_at records target + position.
+    #[test]
+    fn test_open_workspace_menu_at_records_target_and_position() {
+        let mut view = RootView::new(vec![], dummy_path());
+        view.open_workspace_menu_at("ws-1", 100.0, 200.0);
+        assert!(view.workspace_menu.is_open());
+        assert!(view.workspace_menu.is_visible_for("ws-1"));
+        assert!(!view.workspace_menu.is_visible_for("ws-2"));
+        assert_eq!(
+            view.workspace_menu.visible_position(),
+            Some(workspace_menu::MenuPosition { x: 100.0, y: 200.0 })
+        );
+    }
+
+    /// AC-D2-13 (REQ-D2-MS6-3): clicking Rename opens rename_modal AND closes the menu.
+    #[test]
+    fn test_click_workspace_menu_rename_opens_rename_modal_and_closes_menu() {
+        let (mut view, ids) = make_root_view_with_workspaces(&["OldName"], "rename");
+        let ws_id = ids[0].clone();
+        view.open_workspace_menu_at(&ws_id, 10.0, 20.0);
+        view.click_workspace_menu_item(workspace_menu::WorkspaceMenuAction::Rename);
+
+        assert!(view.rename_modal.is_some(), "rename_modal must be opened");
+        let modal = view.rename_modal.as_ref().unwrap();
+        assert_eq!(modal.target_id(), Some(ws_id.as_str()));
+        assert_eq!(modal.buffer(), "OldName");
+        assert!(
+            !view.workspace_menu.is_open(),
+            "workspace_menu must close after click (single-menu invariant)"
+        );
+        cleanup_t8_temp("rename", 1);
+    }
+
+    /// AC-D2-13 mirror: clicking Delete opens delete_confirmation AND closes the menu.
+    #[test]
+    fn test_click_workspace_menu_delete_opens_delete_confirmation_and_closes_menu() {
+        let (mut view, ids) = make_root_view_with_workspaces(&["W1"], "delete");
+        let ws_id = ids[0].clone();
+        view.open_workspace_menu_at(&ws_id, 10.0, 20.0);
+        view.click_workspace_menu_item(workspace_menu::WorkspaceMenuAction::Delete);
+
+        assert!(
+            view.delete_confirmation.is_some(),
+            "delete_confirmation must be opened"
+        );
+        let conf = view.delete_confirmation.as_ref().unwrap();
+        assert_eq!(conf.target_id(), Some(ws_id.as_str()));
+        assert!(
+            !view.workspace_menu.is_open(),
+            "workspace_menu must close after click"
+        );
+        cleanup_t8_temp("delete", 1);
+    }
+
+    /// AC-D2-13 + Reordered sync fix: MoveUp must mutate store AND mirror into self.workspaces.
+    #[test]
+    fn test_click_workspace_menu_move_up_calls_store_and_syncs_workspaces() {
+        let (mut view, ids) = make_root_view_with_workspaces(&["A", "B"], "moveup");
+        let id_b = ids[1].clone();
+        // Sanity: B starts at index 1 in both store and workspaces vector.
+        assert_eq!(view.workspaces[1].id, id_b);
+        assert_eq!(view.store.list()[1].id, id_b);
+
+        view.open_workspace_menu_at(&id_b, 10.0, 20.0);
+        view.click_workspace_menu_item(workspace_menu::WorkspaceMenuAction::MoveUp);
+
+        // After MoveUp: B is at index 0 in BOTH store and (synced) workspaces vector.
+        assert_eq!(view.store.list()[0].id, id_b, "store reordered");
+        assert_eq!(
+            view.workspaces[0].id, id_b,
+            "self.workspaces must be re-synced from store (MS-6 Reordered fix)"
+        );
+        assert!(!view.workspace_menu.is_open());
+        cleanup_t8_temp("moveup", 2);
+    }
+
+    /// AC-D2-14 (rename half): commit_rename_modal renames in store + syncs workspaces.
+    #[test]
+    fn test_commit_rename_modal_renames_in_store_and_syncs_workspaces() {
+        let (mut view, ids) = make_root_view_with_workspaces(&["Old"], "commit-rename");
+        let ws_id = ids[0].clone();
+        view.rename_modal = Some({
+            let mut m = workspace_menu::RenameModal::default();
+            m.open(ws_id.clone(), "Old");
+            m.set_buffer("New");
+            m
+        });
+
+        let result = view.commit_rename_modal();
+        assert_eq!(
+            result,
+            Some((ws_id.clone(), "New".to_string())),
+            "commit must return Some((ws_id, new_name))"
+        );
+        assert!(view.rename_modal.is_none(), "rename_modal must be cleared");
+        assert_eq!(
+            view.store.list()[0].name,
+            "New",
+            "store must hold the new name"
+        );
+        assert_eq!(
+            view.workspaces[0].name, "New",
+            "self.workspaces must be re-synced from store"
+        );
+        cleanup_t8_temp("commit-rename", 1);
+    }
+
+    /// AC-D2-14 (delete half): confirm_delete_modal removes from store + syncs workspaces.
+    #[test]
+    fn test_confirm_delete_modal_removes_from_store_and_syncs_workspaces() {
+        let (mut view, ids) = make_root_view_with_workspaces(&["A", "B"], "confirm-delete");
+        let id_a = ids[0].clone();
+        let id_b = ids[1].clone();
+        view.active_id = Some(id_a.clone());
+        view.delete_confirmation = Some({
+            let mut c = workspace_menu::DeleteConfirmation::default();
+            c.open(id_b.clone());
+            c
+        });
+
+        let result = view.confirm_delete_modal();
+        assert_eq!(
+            result,
+            Some(id_b.clone()),
+            "confirm must return Some(ws_id)"
+        );
+        assert!(
+            view.delete_confirmation.is_none(),
+            "delete_confirmation must be cleared"
+        );
+        assert_eq!(view.workspaces.len(), 1, "B must be removed");
+        assert_eq!(view.workspaces[0].id, id_a, "only A remains");
+        assert_eq!(view.store.list().len(), 1);
+        assert_eq!(
+            view.active_id.as_deref(),
+            Some(id_a.as_str()),
+            "active_id stays on A (was already A)"
+        );
+        cleanup_t8_temp("confirm-delete", 2);
+    }
+
+    /// Additional invariant: deleting the active workspace reassigns active_id.
+    #[test]
+    fn test_confirm_delete_modal_reassigns_active_when_active_deleted() {
+        let (mut view, ids) = make_root_view_with_workspaces(&["A", "B"], "delete-active");
+        let id_a = ids[0].clone();
+        let id_b = ids[1].clone();
+        view.active_id = Some(id_a.clone());
+        view.delete_confirmation = Some({
+            let mut c = workspace_menu::DeleteConfirmation::default();
+            c.open(id_a.clone());
+            c
+        });
+
+        let result = view.confirm_delete_modal();
+        assert_eq!(result, Some(id_a.clone()));
+        assert_eq!(view.workspaces.len(), 1);
+        assert_eq!(view.workspaces[0].id, id_b);
+        assert_eq!(
+            view.active_id.as_deref(),
+            Some(id_b.as_str()),
+            "active_id must be reassigned to the first remaining workspace"
+        );
+        cleanup_t8_temp("delete-active", 2);
+    }
+
+    /// cancel_rename_modal clears the modal slot without persisting.
+    #[test]
+    fn test_cancel_rename_modal_clears_state() {
+        let (mut view, ids) = make_root_view_with_workspaces(&["Old"], "cancel-rename");
+        let ws_id = ids[0].clone();
+        view.rename_modal = Some({
+            let mut m = workspace_menu::RenameModal::default();
+            m.open(ws_id.clone(), "Old");
+            m.set_buffer("ShouldNotPersist");
+            m
+        });
+        view.cancel_rename_modal();
+        assert!(view.rename_modal.is_none());
+        // Store name unchanged.
+        assert_eq!(view.store.list()[0].name, "Old");
+        cleanup_t8_temp("cancel-rename", 1);
+    }
+
+    /// cancel_delete_modal clears the modal slot without removing.
+    #[test]
+    fn test_cancel_delete_modal_clears_state() {
+        let (mut view, ids) = make_root_view_with_workspaces(&["A"], "cancel-delete");
+        let id_a = ids[0].clone();
+        view.delete_confirmation = Some({
+            let mut c = workspace_menu::DeleteConfirmation::default();
+            c.open(id_a.clone());
+            c
+        });
+        view.cancel_delete_modal();
+        assert!(view.delete_confirmation.is_none());
+        assert_eq!(view.workspaces.len(), 1);
+        assert_eq!(view.store.list().len(), 1);
+        cleanup_t8_temp("cancel-delete", 1);
+    }
+
+    /// click_workspace_menu_item is a no-op when the menu is closed.
+    #[test]
+    fn test_click_workspace_menu_item_noop_when_closed() {
+        let mut view = RootView::new(vec![], dummy_path());
+        assert!(!view.workspace_menu.is_open());
+        view.click_workspace_menu_item(workspace_menu::WorkspaceMenuAction::Rename);
+        // No state changes — no panic, no modal opened.
+        assert!(view.rename_modal.is_none());
+        assert!(view.delete_confirmation.is_none());
+    }
+
+    /// commit_rename_modal returns None when no modal is open.
+    #[test]
+    fn test_commit_rename_modal_returns_none_when_closed() {
+        let mut view = RootView::new(vec![], dummy_path());
+        assert_eq!(view.commit_rename_modal(), None);
+    }
+
+    /// confirm_delete_modal returns None when no modal is open.
+    #[test]
+    fn test_confirm_delete_modal_returns_none_when_closed() {
+        let mut view = RootView::new(vec![], dummy_path());
+        assert_eq!(view.confirm_delete_modal(), None);
     }
 }

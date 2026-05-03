@@ -8,7 +8,7 @@ author: MoAI (manager-spec)
 priority: High
 issue_number: 0
 depends_on: [SPEC-V3-001, SPEC-V3-002, SPEC-V3-003]
-milestones: [MS-1, MS-2, MS-3]
+milestones: [MS-1, MS-2, MS-3, MS-4, MS-5, MS-6]
 language: ko
 labels: [phase-3, ui, gpui, render, escape-hatch]
 revision: v1.0.0 (initial draft, SPEC-V3-003 carry-over AC-P-4/AC-P-5 승계)
@@ -340,6 +340,30 @@ GPUI Stateful<Div>::on_mouse_down(MouseButton::Left)
 - **AC**: AC-D2-6 ~ AC-D2-10 (§10 표 — MS-5 추가 분).
 - **시연 가능 상태**: `dispatch_workspace_menu_action` 호출 시 store 가 실 mutation (rename / move) 또는 modal outcome 반환. 단위 테스트 + integration 으로 검증. RootView 우클릭 wire 는 별 PR 진행 시 `handle_workspace_menu_action` 호출만으로 e2e 완성.
 
+### MS-6: D-2 Workspace switcher GPUI overlay mount (audit D-2 fully closed, v0.2.0 cycle)
+
+후속 milestone (MS-5 logic-level dispatch 의 GPUI render side 완성, 2026-05-04 sess 12 추가). MS-5 가 logic-level 까지 끝낸 뒤 carry 였던 (a) `workspace_row` 우클릭 → `WorkspaceMenu::open_for`, (b) ContextMenu overlay render, (c) RenameModal overlay render (text input + commit/cancel), (d) DeleteConfirmation overlay render (confirm/cancel) 4 축을 GPUI element tree 에 mount 한다. MS-5 의 `handle_workspace_menu_action(cx)` 가 이미 존재하므로 본 MS 는 render side wire 만 추가.
+
+- **범위**:
+  - `crates/moai-studio-ui/src/lib.rs`:
+    - `RootView` 에 `workspace_menu: workspace_menu::WorkspaceMenu` 필드 신규 (R3 새 필드만 추가, 기존 필드 무변경).
+    - `workspace_row` 우클릭 listener (`MouseButton::Right`) 추가 — `WorkspaceMenu::open_for(ws_id, x, y)` 호출 + `cx.notify()`.
+    - `Render for RootView` 에 ContextMenu / RenameModal / DeleteConfirmation overlay branch 추가 (existing palette / settings_modal overlay 슬롯 패턴 재사용).
+    - ContextMenu overlay: `WorkspaceMenu::is_open()` true 일 때 4 항목 menu (Rename / Delete / Move Up / Move Down) 를 visible_position 에 absolute mount, 항목 클릭 시 `handle_workspace_menu_action(action, ws_id, cx)` 호출 후 `WorkspaceMenu::close()`.
+    - RenameModal overlay: `rename_modal.is_some()` true 일 때 modal box (text input + Commit / Cancel 버튼). Commit 시 `RenameModal::commit()` → `Some((ws_id, new_name))` 받아 `store.rename(&ws_id, &new_name)` 호출 + `rename_modal = None` + `cx.notify()`. Cancel 시 `rename_modal = None`.
+    - DeleteConfirmation overlay: `delete_confirmation.is_some()` true 일 때 modal box (경고 텍스트 + Confirm / Cancel 버튼). Confirm 시 `DeleteConfirmation::confirm()` → `Some(ws_id)` 받아 `store.remove(&ws_id)` + `workspaces.retain(|w| w.id != ws_id)` + `delete_confirmation = None` + `cx.notify()`. Cancel 시 `delete_confirmation = None`.
+- **포함 요구사항** (frozen-zone):
+  - **REQ-D2-MS6-1**: `RootView` 가 `workspace_menu: WorkspaceMenu` 필드를 보유한다. `Default::default()` 로 초기화 (closed state).
+  - **REQ-D2-MS6-2**: `workspace_row` 의 우클릭 (`MouseButton::Right`) 이벤트가 `WorkspaceMenu::open_for(ws_id, x, y)` 를 호출하고 `cx.notify()` 를 트리거한다. 좌클릭 동작 (activate workspace) regression 0.
+  - **REQ-D2-MS6-3**: `Render for RootView` 가 `WorkspaceMenu::is_open()` 시 4 항목 ContextMenu overlay 를 visible_position 에 mount 한다. 항목 클릭은 `handle_workspace_menu_action(action, ws_id, cx)` → `WorkspaceMenu::close()` 호출. 단일 menu invariant (REQ-D2-MS4-2) 유지.
+  - **REQ-D2-MS6-4**: `Render for RootView` 가 `rename_modal.is_some()` 시 RenameModal overlay 를 mount 하고 commit 시 `store.rename` 호출 + `workspaces` 의 해당 entry name 갱신 + `cx.notify()`. `delete_confirmation.is_some()` 시 DeleteConfirmation overlay 를 mount 하고 confirm 시 `store.remove` 호출 + `workspaces.retain` + `cx.notify()`.
+- **제외 (Deferred carry)**:
+  - keyboard navigation in ContextMenu (Arrow / Esc / Enter) — 별 PR.
+  - Drag-to-reorder workspace — D-6 carry (별 SPEC).
+  - Workspace color tag editing — D-5 carry (별 SPEC).
+- **AC**: AC-D2-11 ~ AC-D2-14 (§10 표 — MS-6 추가 분).
+- **시연 가능 상태**: `cargo run -p moai-studio-app` 시 사용자가 sidebar workspace_row 를 우클릭하면 4 항목 메뉴 표시, Rename 클릭 시 텍스트 입력 modal 등장, Commit 시 sidebar 의 workspace 이름이 즉시 갱신. Delete 클릭 시 confirmation modal 등장, Confirm 시 workspace 가 sidebar 에서 제거. 좌클릭 (workspace activate) regression 0. D-2 audit 항목 PARTIAL → DONE.
+
 ---
 
 ## 9. 파일 레이아웃 (canonical)
@@ -388,6 +412,10 @@ GPUI Stateful<Div>::on_mouse_down(MouseButton::Left)
 | AC-D2-3 | REQ-D2-MS4-2 | MS-4 | `open_for("ws-1", 100.0, 200.0)` 호출 후 | `is_visible_for("ws-1")` + `is_visible_for("ws-2")` + `visible_target()` | "ws-1" → true, "ws-2" → false, target = Some("ws-1"), position = (100, 200) | unit test |
 | AC-D2-4 | REQ-D2-MS4-2 (single-menu invariant) | MS-4 | menu 가 "ws-1" 으로 열려 있는 상태 | `open_for("ws-2", ...)` 호출 | menu target 이 "ws-2" 로 교체. "ws-1" → false, "ws-2" → true (single-menu invariant 유지) | unit test |
 | AC-D2-5 | REQ-D2-MS4-2 | MS-4 | menu 가 어떤 workspace 로 열려 있는 상태 | `close()` 호출 | menu invisible, `visible_target()` = None, `is_visible_for(*)` = false | unit test |
+| AC-D2-11 | REQ-D2-MS6-1 | MS-6 | `RootView::new(...)` 직후 인스턴스 | `workspace_menu` 필드 접근 | `WorkspaceMenu::default()` 와 동일 (closed, no target, no position) | unit test |
+| AC-D2-12 | REQ-D2-MS6-2 | MS-6 | sidebar 에 workspace 1 개 표시, 사용자가 row 를 우클릭 | RootView 가 mouse-down(Right) 이벤트 처리 | `workspace_menu.is_visible_for(ws.id)` true, `visible_position()` = Some(MenuPosition), 좌클릭 처리 (`handle_activate_workspace`) regression 0 | logic test (RootView::open_workspace_menu_at helper) + 수동 smoke |
+| AC-D2-13 | REQ-D2-MS6-3 | MS-6 | `workspace_menu` 가 "ws-1" 으로 open 상태 | 사용자가 ContextMenu 의 Rename 항목 클릭 | `rename_modal` Some (target_id="ws-1", buffer=current_name), `workspace_menu` closed (REQ-D2-MS4-2 invariant) | logic test (RootView::click_workspace_menu_item helper) |
+| AC-D2-14 | REQ-D2-MS6-4 | MS-6 | `rename_modal` open (target="ws-1", buffer="NewName"), `delete_confirmation` open (target="ws-2"), store 에 두 workspace 등록 | Rename Commit + Delete Confirm 호출 | (a) "ws-1" name = "NewName" (store + workspaces vector 양쪽), (b) "ws-2" 가 store + workspaces vector 양쪽에서 제거, (c) rename_modal = None, delete_confirmation = None | logic test (RootView::commit_rename_modal + confirm_delete_modal helpers) |
 
 ---
 
