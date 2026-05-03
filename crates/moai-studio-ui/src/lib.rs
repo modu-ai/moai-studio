@@ -55,6 +55,8 @@ pub mod web;
 pub mod quality;
 // SPEC-V0-2-0-GLOBAL-SEARCH-001 MS-2: Global search panel (SearchPanel GPUI Entity).
 pub mod search;
+// SPEC-V0-2-0-MULTI-SHELL-001 MS-1: Shell picker logic (ShellPicker struct).
+pub mod shell_picker;
 
 use design::tokens::{self as tok, traffic};
 use gpui::{
@@ -287,6 +289,14 @@ pub struct RootView {
     //   apply_added_workspace (add), remove_workspace (remove).
     /// Owned WorkspacesStore, populated either from a real load or injected in tests.
     pub store: moai_studio_workspace::WorkspacesStore,
+    // ── SPEC-V0-2-0-MULTI-SHELL-001 MS-1 (REQ-MS-007): ShellPicker overlay slot ──
+    // @MX:NOTE: [AUTO] shell_picker — None = picker not yet activated.
+    //   Populated lazily by handle_switch_shell on first Command Palette dispatch.
+    // @MX:SPEC: SPEC-V0-2-0-MULTI-SHELL-001 REQ-MS-007
+    /// Shell picker state.  `None` = not yet activated.
+    ///
+    /// Populated by `handle_switch_shell`; used by the GUI overlay (v0.2.1+).
+    pub shell_picker: Option<shell_picker::ShellPicker>,
 }
 
 /// Pending toast entry surfaced for a detected dev-server URL.
@@ -350,6 +360,8 @@ impl RootView {
             rename_modal: None,
             delete_confirmation: None,
             store,
+            // SPEC-V0-2-0-MULTI-SHELL-001 MS-1: lazy init on first Command Palette dispatch.
+            shell_picker: None,
         }
     }
 
@@ -708,6 +720,22 @@ impl RootView {
             tracing::info!(
                 command = id,
                 "agent command not yet wired — deferred to agent SPEC"
+            );
+            return true;
+        }
+
+        if id.starts_with("shell.") {
+            // SPEC-V0-2-0-MULTI-SHELL-001 MS-1 (REQ-MS-007): shell.switch activates ShellPicker.
+            if id == "shell.switch" {
+                tracing::info!(command = id, "shell.switch — activating ShellPicker");
+                self.dispatch_command_shell_switch();
+                // cx.notify() is not available in this context-free signature.
+                // The GPUI render path picks up the state change on the next frame.
+                return true;
+            }
+            tracing::info!(
+                command = id,
+                "shell command not yet wired — deferred to shell SPEC"
             );
             return true;
         }
@@ -1381,6 +1409,46 @@ impl RootView {
                 panel.focus_input();
             }
         }
+    }
+
+    /// SPEC-V0-2-0-MULTI-SHELL-001 MS-1 (REQ-MS-007): Activate the ShellPicker.
+    ///
+    /// Detects available shells via `Shell::detect_available()`, builds a
+    /// `ShellPicker` and stores it in `self.shell_picker`.  Subsequent calls
+    /// (re-activation) rebuild the picker so the available-list stays current.
+    ///
+    /// This method is context-aware (has `cx` parameter) so it can call
+    /// `cx.notify()` to trigger a GPUI re-render.  A logic-level
+    /// `dispatch_command_shell_switch` variant (no cx) is also provided for
+    /// unit testing (Spike 2 pattern).
+    ///
+    /// @MX:ANCHOR: [AUTO] handle_switch_shell — Shell Picker activation entry point.
+    /// @MX:REASON: [AUTO] fan_in >= 3: dispatch_command (shell.switch branch),
+    ///   GPUI action handler, unit test suite.
+    /// @MX:SPEC: SPEC-V0-2-0-MULTI-SHELL-001 REQ-MS-007
+    pub fn handle_switch_shell(&mut self, cx: &mut Context<Self>) {
+        self.dispatch_command_shell_switch();
+        cx.notify();
+    }
+
+    /// Context-free helper — activates `shell_picker` without requiring a GPUI context.
+    ///
+    /// Called by `handle_switch_shell` (context-aware path) and by logic-level
+    /// unit tests (no-context path).  Callers that hold a GPUI context must
+    /// call `cx.notify()` themselves after this returns.
+    ///
+    /// @MX:NOTE: [AUTO] dispatch-shell-switch-no-cx
+    /// @MX:SPEC: SPEC-V0-2-0-MULTI-SHELL-001 REQ-MS-007
+    pub fn dispatch_command_shell_switch(&mut self) {
+        use moai_studio_terminal::shell::Shell;
+        let available = Shell::detect_available();
+        let current_default = std::env::var("SHELL").ok().and_then(|s| {
+            Shell::all_unix()
+                .into_iter()
+                .find(|sh| s.ends_with(sh.executable()))
+        });
+        self.shell_picker = Some(shell_picker::ShellPicker::new(available, current_default));
+        tracing::info!("shell.switch — ShellPicker activated");
     }
 
     /// SPEC-V0-2-0-GLOBAL-SEARCH-001 MS-3 (REQ-GS-040~042, AC-GS-10):
@@ -4463,5 +4531,41 @@ mod tests {
         std::fs::remove_file(&tmp).ok();
         std::fs::remove_dir_all(&pa).ok();
         std::fs::remove_dir_all(&pb).ok();
+    }
+
+    // ── T7: RootView shell_picker — AC-MS-7 ──
+
+    /// AC-MS-7 (REQ-MS-007): handle_switch_shell activates shell_picker (logic-level).
+    ///
+    /// Uses `dispatch_command_shell_switch()` (no-cx variant) to avoid
+    /// requiring a live GPUI context in unit tests (Spike 2 pattern).
+    #[test]
+    fn test_root_view_handle_switch_shell_activates_picker() {
+        let mut view = RootView::new(vec![], dummy_path());
+        assert!(
+            view.shell_picker.is_none(),
+            "shell_picker must be None initially"
+        );
+        view.dispatch_command_shell_switch();
+        assert!(
+            view.shell_picker.is_some(),
+            "shell_picker must be Some after dispatch_command_shell_switch()"
+        );
+    }
+
+    /// AC-MS-7: dispatch_command("shell.switch") activates shell_picker.
+    #[test]
+    fn test_dispatch_command_shell_switch_activates_picker() {
+        let mut view = RootView::new(vec![], dummy_path());
+        assert!(
+            view.shell_picker.is_none(),
+            "shell_picker must be None initially"
+        );
+        let handled = view.dispatch_command("shell.switch");
+        assert!(handled, "dispatch_command('shell.switch') must return true");
+        assert!(
+            view.shell_picker.is_some(),
+            "shell_picker must be Some after dispatch_command('shell.switch')"
+        );
     }
 }

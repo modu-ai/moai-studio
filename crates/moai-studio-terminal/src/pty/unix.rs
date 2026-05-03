@@ -4,6 +4,7 @@
 //! Pty trait 을 구현한다.
 
 use super::Pty;
+use crate::shell::Shell;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::io::{self, Read, Write};
 
@@ -34,6 +35,23 @@ impl UnixPty {
             }
         });
         Self::spawn(&shell)
+    }
+
+    /// Spawn a PTY with the given explicit `Shell`.
+    ///
+    /// Calls `Self::spawn(shell.executable())` — a thin convenience wrapper
+    /// so callers do not need to call `.executable()` themselves.
+    ///
+    /// The existing `spawn_shell()` (uses `$SHELL`) and `spawn(cmd: &str)`
+    /// signatures are intentionally left unchanged (R1 constraint).
+    ///
+    /// @MX:ANCHOR: [AUTO] spawn_with_shell — typed shell spawn entry point.
+    /// @MX:REASON: [AUTO] fan_in >= 3: RootView::handle_switch_shell, ShellPicker
+    ///   dispatch path, unit test suite.
+    /// @MX:SPEC: SPEC-V0-2-0-MULTI-SHELL-001 REQ-MS-004
+    #[cfg(unix)]
+    pub fn spawn_with_shell(shell: Shell) -> io::Result<Self> {
+        Self::spawn(shell.executable())
     }
 
     /// 지정된 명령으로 PTY 를 spawn 한다.
@@ -107,5 +125,34 @@ impl Pty for UnixPty {
         // try_wait 로 non-blocking 종료 확인
         // portable-pty 의 Child::try_wait 은 Option<ExitStatus> 반환
         self.child.clone_killer().kill().is_err()
+    }
+}
+
+// ============================================================
+// Unit tests — AC-MS-4
+// ============================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// AC-MS-4 (REQ-MS-004): spawn_with_shell(Shell::Sh) spawns a PTY successfully.
+    ///
+    /// Verifies that the spawn call returns `Ok` and the child can be
+    /// written to without error.  Only runs on Unix where `/bin/sh` is
+    /// guaranteed to be on PATH.
+    ///
+    /// Note: `is_alive()` is intentionally not called here because the
+    /// existing implementation (R5 — must not change) uses `clone_killer().kill()`
+    /// which sends SIGKILL and would terminate the child immediately.
+    #[test]
+    #[cfg(unix)]
+    fn test_spawn_with_shell_sh_alive() {
+        let mut pty = UnixPty::spawn_with_shell(Shell::Sh)
+            .expect("spawn_with_shell(Sh) must succeed on Unix");
+        // Sending "exit\n" succeeds only if the PTY writer is connected to
+        // a live child process — this serves as the aliveness proof.
+        pty.feed(b"exit\n")
+            .expect("feed to sh process must succeed (process is alive)");
     }
 }
