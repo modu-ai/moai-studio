@@ -303,6 +303,13 @@ pub struct RootView {
     //   drained by click_workspace_menu_item.
     /// Sidebar workspace context menu state. `Default::default()` = closed.
     pub workspace_menu: workspace_menu::WorkspaceMenu,
+    // ── SPEC-V0-2-0-MISSION-CTRL-001 MS-2 (REQ-MC-024): Mission Control overlay slot ──
+    // @MX:NOTE: [AUTO] mission-control — None = view not yet activated.
+    //   Lazily created by `ensure_mission_control` on first activation. RootView
+    //   pushes per-render snapshots into the entity via `update_mission_control_snapshot`.
+    // @MX:SPEC: SPEC-V0-2-0-MISSION-CTRL-001 REQ-MC-024
+    /// Mission Control 4-cell grid view slot. `None` = not yet activated.
+    pub mission_control: Option<Entity<agent::mission_control_view::MissionControlView>>,
 }
 
 /// Pending toast entry surfaced for a detected dev-server URL.
@@ -370,6 +377,8 @@ impl RootView {
             shell_picker: None,
             // SPEC-V3-004 MS-6 (REQ-D2-MS6-1): workspace context menu, default closed.
             workspace_menu: workspace_menu::WorkspaceMenu::default(),
+            // SPEC-V0-2-0-MISSION-CTRL-001 MS-2 (REQ-MC-024): lazy-init on first activation.
+            mission_control: None,
         }
     }
 
@@ -562,6 +571,41 @@ impl RootView {
     /// Cancel the open delete modal without removing the workspace.
     pub fn cancel_delete_modal(&mut self) {
         self.delete_confirmation = None;
+    }
+
+    // ── SPEC-V0-2-0-MISSION-CTRL-001 MS-2 helpers (REQ-MC-024) ──
+
+    // @MX:NOTE: [AUTO] ensure_mission_control — single mount entry point.
+    //   Creates the MissionControlView entity lazily on first call. Subsequent
+    //   calls are no-ops; the caller updates the existing entity via
+    //   `update_mission_control_snapshot`.
+    /// Lazily mount the Mission Control view. Idempotent.
+    /// AC-MC-13.
+    pub fn ensure_mission_control(&mut self, cx: &mut Context<Self>) {
+        if self.mission_control.is_none() {
+            self.mission_control =
+                Some(cx.new(|_| agent::mission_control_view::MissionControlView::new()));
+        }
+    }
+
+    /// Dismiss the Mission Control view (releases the entity).
+    pub fn dismiss_mission_control(&mut self) {
+        self.mission_control = None;
+    }
+
+    /// Push a fresh snapshot of `top_n_active(N)` cards into the mounted view.
+    /// No-op when the view has not been mounted via `ensure_mission_control`.
+    pub fn update_mission_control_snapshot(
+        &mut self,
+        cards: Vec<moai_studio_agent::AgentCard>,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(ref entity) = self.mission_control {
+            entity.update(cx, |view, cx| {
+                view.set_snapshot(cards);
+                cx.notify();
+            });
+        }
     }
 
     /// SPEC-V0-1-1-UX-FIX (C-3): TabContainer 가 없으면 생성. workspace 활성화 시점에 호출.
@@ -2018,6 +2062,10 @@ impl Render for RootView {
                     .as_ref()
                     .map(|c| render_delete_confirmation_overlay(c, cx)),
             )
+            // SPEC-V0-2-0-MISSION-CTRL-001 MS-2 (REQ-MC-024): Mission Control overlay.
+            // Mounted when mission_control == Some. Activation trigger (command palette
+            // entry / key bind) is a follow-up PR per SPEC §7.
+            .children(self.mission_control.clone())
     }
 }
 
@@ -5227,5 +5275,118 @@ mod tests {
     fn test_confirm_delete_modal_returns_none_when_closed() {
         let mut view = RootView::new(vec![], dummy_path());
         assert_eq!(view.confirm_delete_modal(), None);
+    }
+
+    // ── T9: SPEC-V0-2-0-MISSION-CTRL-001 MS-2 — RootView mission_control field ──
+
+    /// AC-MC-13 (REQ-MC-024): RootView::new initializes mission_control to None (lazy).
+    #[test]
+    fn test_mission_control_is_none_on_root_view_new() {
+        let view = RootView::new(vec![], dummy_path());
+        assert!(
+            view.mission_control.is_none(),
+            "mission_control must be None on RootView::new (lazy init)"
+        );
+    }
+
+    /// REQ-MC-024 (ensure): ensure_mission_control creates the entity on first call.
+    #[test]
+    fn test_ensure_mission_control_creates_entity() {
+        use gpui::TestAppContext;
+
+        let mut cx = TestAppContext::single();
+        let root = cx.new(|_cx| RootView::new(vec![], dummy_path()));
+        cx.update(|app| {
+            root.update(app, |view: &mut RootView, cx| {
+                assert!(view.mission_control.is_none());
+                view.ensure_mission_control(cx);
+                assert!(
+                    view.mission_control.is_some(),
+                    "ensure_mission_control must create the entity"
+                );
+            });
+        });
+    }
+
+    /// REQ-MC-024 (ensure idempotent): second call does not replace the entity.
+    #[test]
+    fn test_ensure_mission_control_is_idempotent() {
+        use gpui::TestAppContext;
+
+        let mut cx = TestAppContext::single();
+        let root = cx.new(|_cx| RootView::new(vec![], dummy_path()));
+        cx.update(|app| {
+            root.update(app, |view: &mut RootView, cx| {
+                view.ensure_mission_control(cx);
+                let first_id = view.mission_control.as_ref().unwrap().entity_id();
+                view.ensure_mission_control(cx);
+                let second_id = view.mission_control.as_ref().unwrap().entity_id();
+                assert_eq!(
+                    first_id, second_id,
+                    "second ensure must NOT replace the existing entity"
+                );
+            });
+        });
+    }
+
+    /// REQ-MC-024 (dismiss): dismiss_mission_control releases the entity.
+    #[test]
+    fn test_dismiss_mission_control_clears_entity() {
+        use gpui::TestAppContext;
+
+        let mut cx = TestAppContext::single();
+        let root = cx.new(|_cx| RootView::new(vec![], dummy_path()));
+        cx.update(|app| {
+            root.update(app, |view: &mut RootView, cx| {
+                view.ensure_mission_control(cx);
+                assert!(view.mission_control.is_some());
+                view.dismiss_mission_control();
+                assert!(view.mission_control.is_none());
+            });
+        });
+    }
+
+    /// REQ-MC-024: update_mission_control_snapshot pushes cards into the entity.
+    #[test]
+    fn test_update_mission_control_snapshot_pushes_cards() {
+        use gpui::TestAppContext;
+        use moai_studio_agent::AgentCard;
+        use moai_studio_agent::events::{AgentRunId, AgentRunStatus};
+
+        let mut cx = TestAppContext::single();
+        let root = cx.new(|_cx| RootView::new(vec![], dummy_path()));
+
+        let card_a = {
+            let mut c = AgentCard::new(AgentRunId("ra".to_string()), "Run A");
+            c.status = AgentRunStatus::Running;
+            c
+        };
+
+        cx.update(|app| {
+            root.update(app, |view: &mut RootView, cx| {
+                view.ensure_mission_control(cx);
+                view.update_mission_control_snapshot(vec![card_a.clone()], cx);
+                let entity = view.mission_control.as_ref().unwrap();
+                let snapshot_len = entity.read(cx).snapshot.len();
+                assert_eq!(snapshot_len, 1, "snapshot must contain the pushed card");
+                assert_eq!(entity.read(cx).snapshot[0].label, "Run A");
+            });
+        });
+    }
+
+    /// REQ-MC-024: update_mission_control_snapshot is no-op when not mounted.
+    #[test]
+    fn test_update_mission_control_snapshot_noop_when_not_mounted() {
+        use gpui::TestAppContext;
+
+        let mut cx = TestAppContext::single();
+        let root = cx.new(|_cx| RootView::new(vec![], dummy_path()));
+        cx.update(|app| {
+            root.update(app, |view: &mut RootView, cx| {
+                // Not mounted → no panic.
+                view.update_mission_control_snapshot(vec![], cx);
+                assert!(view.mission_control.is_none());
+            });
+        });
     }
 }
