@@ -135,13 +135,67 @@ derive. 향후 PartialEq 가 필요해지면 `#[derive(PartialEq)]` 를 V3-010 c
 - clippy 0 warning (manual_div_ceil → div_ceil 정정)
 - fmt clean
 
-### Carry to MS-3 (별 PR — 다음 세션 또는 별 SPEC 분리 검토)
+## MS-3 partial (2026-05-04 sess 12+) — pump helper + Command Palette 진입 트리거 ✅
 
-- SseIngest::pump_into_registry helper (REQ-MC-030)
-- HTTP client 실 hook server subscribe (REQ-MC-031, USER-DECISION-MC-A)
-- Mission Control 진입 트리거 (Command Palette `mission.toggle` entry / 키 바인딩) — MS-2 후속 PR 또는 MS-3 묶음 검토
+본 SPEC MS-3 의 logic-only / no-USER-DECISION 부분만 단일 Lightweight PR 로 종결.
+HTTP client subscribe (REQ-MC-031, USER-DECISION-MC-A) 는 별 PR carry — HOOK-WIRE-001 별 SPEC 분리 후보.
+
+### Implementation
+
+- `crates/moai-studio-agent/src/sse_ingest.rs`:
+  - `pump_into_registry(registry, chunk) -> usize` 신규 (REQ-MC-030 / AC-MC-14)
+  - SSE chunk 파싱 → `payload.session_id` 추출 → `AgentRunRegistry::push_event` 라우팅
+  - session_id 누락/공백/Unknown-kind 이벤트는 silent drop, return count만
+- `crates/moai-studio-agent/src/lib.rs`:
+  - `pub use sse_ingest::pump_into_registry;` re-export
+- `crates/moai-studio-ui/src/lib.rs`:
+  - RootView 에 `pending_mission_toggle: bool` R3 신규 필드 (Command Palette no-cx → cx-aware bridge 패턴, V3-012 MS-4 `pending_slash_injection` 패턴 mirror)
+  - new() 초기화 = false
+  - `dispatch_command_mission_toggle(&mut self)` no-cx variant — 플래그 set
+  - `apply_pending_mission_toggle(&mut self, cx)` cx-aware drain helper — Some↔None 토글 + cx.notify
+  - `dispatch_command` 의 `if id.starts_with("mission.")` 분기 추가 — `mission.toggle` 인식 + dispatch_command_mission_toggle 호출
+  - `Render::render` 진입부에 `self.apply_pending_mission_toggle(cx)` 호출 (다른 모든 work 전)
+
+### Acceptance Criteria
+
+| AC | 내용 | 상태 |
+|----|------|------|
+| AC-MC-14 | pump_into_registry SSE chunk → registry routing | ✅ |
+| REQ-MC-024 trigger | dispatch_command("mission.toggle") + apply_pending_mission_toggle 토글 | ✅ |
+
+### Test count
+
+- 신규 13 (agent crate 6 + ui crate 7):
+  - agent crate (sse_ingest):
+    - pump_into_registry_routes_single_event (AC-MC-14)
+    - pump_into_registry_groups_events_by_session_id
+    - pump_into_registry_drops_events_without_session_id
+    - pump_into_registry_drops_empty_session_id
+    - pump_into_registry_drops_unknown_events_safely
+    - pump_into_registry_propagates_status_transitions (REQ-MC-013 + REQ-MC-030 결합)
+  - ui crate (lib.rs T10):
+    - test_dispatch_command_mission_toggle_sets_pending
+    - test_dispatch_command_mission_toggle_palette_entry_handled
+    - test_dispatch_command_unknown_mission_subcommand_handled_with_log
+    - test_pending_mission_toggle_starts_false
+    - test_apply_pending_mission_toggle_mounts_when_absent
+    - test_apply_pending_mission_toggle_dismisses_when_mounted
+    - test_apply_pending_mission_toggle_noop_when_no_pending
+- moai-studio-agent: 123 → 129 (+6)
+- moai-studio-ui: 1262 → 1269 (+7)
+- 회귀 0 (terminal 36, workspace 26)
+- clippy 0 warning, fmt clean
+
+### Carry to MS-3b (별 PR — 별 SPEC HOOK-WIRE-001 후보)
+
+- HTTP client 실 hook server subscribe (REQ-MC-031)
+- USER-DECISION-MC-A: reqwest (async, tokio) vs ureq (sync, light)
+- Mock data injection helper (demo / dev mode 시 가상 4 agent 시뮬레이션)
+- Cmd+Shift+M 키 바인딩 (Command Palette 진입은 본 PR 에서 완료, GPUI Action 등록은 별 PR)
+- 후속 발견: cell click → AgentDashboardView 전환 wire
 
 ### DoD ✅
 
-- AgentRunRegistry (MS-1) → MissionControlView (MS-2) 데이터 파이프라인 완성. 사용자가 MS-3 의 hook wire 도입 시 즉시 4-cell grid 가시화.
-- 본 PR 완료 시 audit Top 8 #2 E-5 가 logic + render 80% 진행 (남은 20% = MS-3 hook wire + 진입 트리거).
+본 PR 완료 시 사용자가 (1) Command Palette 에 `mission.toggle` 입력 → 화면에 4-cell grid overlay 가시화, (2) 다시 입력하면 dismiss, (3) hook server 가 작동 중이라면 SSE chunk 를 `pump_into_registry` 로 routing 시 즉시 카드 갱신. HTTP fetch wire 만 남았으며 그것은 USER-DECISION 후 별 SPEC 으로 분리.
+
+audit Top 8 #2 E-5 진척: 60% → **90%** (남은 10% = HTTP fetch wire).

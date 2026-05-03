@@ -310,6 +310,13 @@ pub struct RootView {
     // @MX:SPEC: SPEC-V0-2-0-MISSION-CTRL-001 REQ-MC-024
     /// Mission Control 4-cell grid view slot. `None` = not yet activated.
     pub mission_control: Option<Entity<agent::mission_control_view::MissionControlView>>,
+    // ── SPEC-V0-2-0-MISSION-CTRL-001 MS-3 (REQ-MC-024 trigger): pending toggle flag ──
+    // @MX:NOTE: [AUTO] pending_mission_toggle — set by no-cx Command Palette dispatch
+    //   (`mission.toggle`); drained by the cx-aware `apply_pending_mission_toggle`
+    //   helper at the start of `Render::render`. Mirrors the
+    //   `pending_slash_injection` pattern (V3-012 MS-4) for cx-deferred work.
+    /// True when a `mission.toggle` palette command is pending GPUI consumption.
+    pub pending_mission_toggle: bool,
 }
 
 /// Pending toast entry surfaced for a detected dev-server URL.
@@ -379,6 +386,8 @@ impl RootView {
             workspace_menu: workspace_menu::WorkspaceMenu::default(),
             // SPEC-V0-2-0-MISSION-CTRL-001 MS-2 (REQ-MC-024): lazy-init on first activation.
             mission_control: None,
+            // SPEC-V0-2-0-MISSION-CTRL-001 MS-3: no pending toggle on construct.
+            pending_mission_toggle: false,
         }
     }
 
@@ -606,6 +615,38 @@ impl RootView {
                 cx.notify();
             });
         }
+    }
+
+    // @MX:NOTE: [AUTO] dispatch-mission-toggle-no-cx — Command Palette entry point.
+    //   Sets `pending_mission_toggle = true` so the cx-aware render path can
+    //   create or release the MissionControlView entity on its next pass.
+    /// Context-free Command Palette dispatch for `mission.toggle`.
+    /// REQ-MC-024 trigger.
+    pub fn dispatch_command_mission_toggle(&mut self) {
+        self.pending_mission_toggle = true;
+    }
+
+    // @MX:ANCHOR: [AUTO] apply_pending_mission_toggle — cx-aware drain helper.
+    // @MX:REASON: [AUTO] fan_in >= 3: Render::render entry path, GPUI Cmd+Shift+M
+    //   action handler, unit test suite. Toggles the entity slot atomically.
+    /// Drain the `pending_mission_toggle` flag and toggle the entity slot.
+    ///
+    /// When the flag is set:
+    ///   - mission_control is None → mounts a fresh entity via `ensure_mission_control`
+    ///   - mission_control is Some → dismisses via `dismiss_mission_control`
+    ///
+    /// No-op when the flag is false.
+    pub fn apply_pending_mission_toggle(&mut self, cx: &mut Context<Self>) {
+        if !self.pending_mission_toggle {
+            return;
+        }
+        self.pending_mission_toggle = false;
+        if self.mission_control.is_some() {
+            self.dismiss_mission_control();
+        } else {
+            self.ensure_mission_control(cx);
+        }
+        cx.notify();
     }
 
     /// SPEC-V0-1-1-UX-FIX (C-3): TabContainer 가 없으면 생성. workspace 활성화 시점에 호출.
@@ -889,6 +930,24 @@ impl RootView {
             tracing::info!(
                 command = id,
                 "shell command not yet wired — deferred to shell SPEC"
+            );
+            return true;
+        }
+
+        if id.starts_with("mission.") {
+            // SPEC-V0-2-0-MISSION-CTRL-001 MS-3 (REQ-MC-024 trigger):
+            // mission.toggle flips the MissionControlView mount state.
+            if id == "mission.toggle" {
+                tracing::info!(command = id, "mission.toggle — pending toggle queued");
+                self.dispatch_command_mission_toggle();
+                // cx.notify() is not available here. The cx-aware
+                // `apply_pending_mission_toggle` call at the start of
+                // Render::render consumes the flag on the next frame.
+                return true;
+            }
+            tracing::info!(
+                command = id,
+                "mission command not yet wired — deferred to MISSION-CTRL SPEC"
             );
             return true;
         }
@@ -1833,6 +1892,11 @@ impl RootView {
 
 impl Render for RootView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // SPEC-V0-2-0-MISSION-CTRL-001 MS-3: drain any pending mission.toggle
+        // dispatched from the no-cx Command Palette. cx is available here so we
+        // can mount/dismiss the entity and call cx.notify() inside the helper.
+        self.apply_pending_mission_toggle(cx);
+
         let new_ws_btn = new_workspace_button().on_mouse_down(
             MouseButton::Left,
             cx.listener(|this, _ev, _window, cx| this.handle_add_workspace(cx)),
@@ -5386,6 +5450,118 @@ mod tests {
                 // Not mounted → no panic.
                 view.update_mission_control_snapshot(vec![], cx);
                 assert!(view.mission_control.is_none());
+            });
+        });
+    }
+
+    // ── T10: SPEC-V0-2-0-MISSION-CTRL-001 MS-3 — mission.toggle dispatch + apply ──
+
+    /// REQ-MC-024 trigger: dispatch_command_mission_toggle sets the pending flag.
+    #[test]
+    fn test_dispatch_command_mission_toggle_sets_pending() {
+        let mut view = RootView::new(vec![], dummy_path());
+        assert!(!view.pending_mission_toggle);
+        view.dispatch_command_mission_toggle();
+        assert!(view.pending_mission_toggle);
+    }
+
+    /// REQ-MC-024 trigger: dispatch_command("mission.toggle") routes to the helper
+    /// and the pending flag is set. Returns true (handled).
+    #[test]
+    fn test_dispatch_command_mission_toggle_palette_entry_handled() {
+        let mut view = RootView::new(vec![], dummy_path());
+        let handled = view.dispatch_command("mission.toggle");
+        assert!(handled, "mission.toggle must be a recognised command");
+        assert!(view.pending_mission_toggle);
+    }
+
+    /// REQ-MC-024 trigger: unknown mission.* command is logged but still handled
+    /// (does NOT fall through to the unknown-command branch).
+    #[test]
+    fn test_dispatch_command_unknown_mission_subcommand_handled_with_log() {
+        let mut view = RootView::new(vec![], dummy_path());
+        let handled = view.dispatch_command("mission.future_action");
+        assert!(
+            handled,
+            "mission.* prefix must be claimed by the mission arm"
+        );
+        // No state change.
+        assert!(!view.pending_mission_toggle);
+        assert!(view.mission_control.is_none());
+    }
+
+    /// REQ-MC-024 trigger: pending_mission_toggle starts as false on RootView::new.
+    #[test]
+    fn test_pending_mission_toggle_starts_false() {
+        let view = RootView::new(vec![], dummy_path());
+        assert!(!view.pending_mission_toggle);
+    }
+
+    /// REQ-MC-024 apply (mount): pending_mission_toggle + None → mounts entity.
+    #[test]
+    fn test_apply_pending_mission_toggle_mounts_when_absent() {
+        use gpui::TestAppContext;
+
+        let mut cx = TestAppContext::single();
+        let root = cx.new(|_cx| RootView::new(vec![], dummy_path()));
+        cx.update(|app| {
+            root.update(app, |view: &mut RootView, cx| {
+                view.dispatch_command_mission_toggle();
+                assert!(view.pending_mission_toggle);
+                assert!(view.mission_control.is_none());
+
+                view.apply_pending_mission_toggle(cx);
+
+                assert!(
+                    view.mission_control.is_some(),
+                    "apply must mount the entity"
+                );
+                assert!(
+                    !view.pending_mission_toggle,
+                    "apply must drain the pending flag"
+                );
+            });
+        });
+    }
+
+    /// REQ-MC-024 apply (dismiss): pending_mission_toggle + Some → dismisses entity.
+    #[test]
+    fn test_apply_pending_mission_toggle_dismisses_when_mounted() {
+        use gpui::TestAppContext;
+
+        let mut cx = TestAppContext::single();
+        let root = cx.new(|_cx| RootView::new(vec![], dummy_path()));
+        cx.update(|app| {
+            root.update(app, |view: &mut RootView, cx| {
+                // Mount first.
+                view.ensure_mission_control(cx);
+                assert!(view.mission_control.is_some());
+
+                // Then toggle off.
+                view.dispatch_command_mission_toggle();
+                view.apply_pending_mission_toggle(cx);
+
+                assert!(view.mission_control.is_none(), "apply must dismiss");
+                assert!(!view.pending_mission_toggle);
+            });
+        });
+    }
+
+    /// REQ-MC-024 apply: no pending flag → no-op (idempotent).
+    #[test]
+    fn test_apply_pending_mission_toggle_noop_when_no_pending() {
+        use gpui::TestAppContext;
+
+        let mut cx = TestAppContext::single();
+        let root = cx.new(|_cx| RootView::new(vec![], dummy_path()));
+        cx.update(|app| {
+            root.update(app, |view: &mut RootView, cx| {
+                assert!(!view.pending_mission_toggle);
+                assert!(view.mission_control.is_none());
+                view.apply_pending_mission_toggle(cx);
+                // Nothing happened.
+                assert!(view.mission_control.is_none());
+                assert!(!view.pending_mission_toggle);
             });
         });
     }
