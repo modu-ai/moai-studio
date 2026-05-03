@@ -38,3 +38,5 @@ pub use mission_control::{AgentCard, AgentRunRegistry};
 pub use quality::{DefaultHeuristicEngine, ScoringEngine, Trust5Score};
 pub use quality::{GitMetrics, LspMetrics, SecurityMetrics, TestMetrics};
 pub use ring_buffer::{RingBuffer, RingBufferError};
+// SPEC-V0-2-0-MISSION-CTRL-001 MS-3: SSE chunk → AgentRunRegistry pump helper.
+pub use sse_ingest::pump_into_registry;

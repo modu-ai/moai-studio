@@ -101,6 +101,48 @@ impl SseIngestor {
     }
 }
 
+// ============================================================
+// SPEC-V0-2-0-MISSION-CTRL-001 MS-3 (REQ-MC-030, AC-MC-14): pump helper
+// ============================================================
+
+use crate::events::AgentRunId;
+use crate::events::EventKind;
+use crate::mission_control::AgentRunRegistry;
+
+/// Parse `chunk` as SSE events and push each one into `registry`, extracting
+/// the `AgentRunId` from each event's `payload.session_id` field.
+///
+/// Returns the number of events that were successfully routed (i.e. carried a
+/// non-empty `session_id`). Events lacking a session_id are dropped silently —
+/// this is the same fallback the moai-hook-http server uses for legacy hooks.
+///
+/// REQ-MC-030 / AC-MC-14.
+///
+/// @MX:NOTE: [AUTO] pump-into-registry — bridge SSE stream → AgentRunRegistry.
+/// @MX:SPEC: SPEC-V0-2-0-MISSION-CTRL-001 REQ-MC-030
+pub fn pump_into_registry(registry: &mut AgentRunRegistry, chunk: &str) -> usize {
+    let events = parse_sse_chunk(chunk);
+    let mut pumped = 0usize;
+    for ev in &events {
+        let run_id = match &ev.kind {
+            EventKind::Hook(h) => h
+                .payload
+                .get("session_id")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| AgentRunId(s.to_string())),
+            // SSE only carries hook events (USER-DECISION-AD-D2). Other kinds
+            // are out-of-scope for the registry; we drop them silently.
+            EventKind::StreamJson(_) | EventKind::Unknown(_) => None,
+        };
+        if let Some(id) = run_id {
+            registry.push_event(&id, ev);
+            pumped += 1;
+        }
+    }
+    pumped
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -156,5 +198,111 @@ mod tests {
             EventKind::Unknown(_) => {} // 정상 fallback
             other => panic!("Unknown kind 예상, 실제: {:?}", other),
         }
+    }
+
+    // ── SPEC-V0-2-0-MISSION-CTRL-001 MS-3 — pump_into_registry tests ──
+
+    use crate::events::AgentRunId;
+    use crate::mission_control::AgentRunRegistry;
+
+    /// AC-MC-14 (REQ-MC-030): single SSE event with session_id is routed to registry.
+    #[test]
+    fn pump_into_registry_routes_single_event() {
+        let mut reg = AgentRunRegistry::new();
+        let chunk = concat!(
+            "event: PostToolUse\n",
+            "data: {\"hook_event_name\":\"PostToolUse\",\"session_id\":\"run-abc\"}\n",
+            "\n"
+        );
+        let pumped = pump_into_registry(&mut reg, chunk);
+        assert_eq!(pumped, 1);
+        assert_eq!(reg.len(), 1);
+        let card = reg.get(&AgentRunId("run-abc".to_string())).unwrap();
+        assert_eq!(card.event_count, 1);
+    }
+
+    /// REQ-MC-030: multiple SSE events grouped by session_id.
+    #[test]
+    fn pump_into_registry_groups_events_by_session_id() {
+        let mut reg = AgentRunRegistry::new();
+        let chunk = concat!(
+            "event: SessionStart\n",
+            "data: {\"hook_event_name\":\"SessionStart\",\"session_id\":\"r1\"}\n",
+            "\n",
+            "event: PreToolUse\n",
+            "data: {\"hook_event_name\":\"PreToolUse\",\"session_id\":\"r1\"}\n",
+            "\n",
+            "event: SessionStart\n",
+            "data: {\"hook_event_name\":\"SessionStart\",\"session_id\":\"r2\"}\n",
+            "\n"
+        );
+        let pumped = pump_into_registry(&mut reg, chunk);
+        assert_eq!(pumped, 3);
+        assert_eq!(reg.len(), 2, "two distinct sessions must produce two cards");
+        assert_eq!(
+            reg.get(&AgentRunId("r1".to_string())).unwrap().event_count,
+            2
+        );
+        assert_eq!(
+            reg.get(&AgentRunId("r2".to_string())).unwrap().event_count,
+            1
+        );
+    }
+
+    /// REQ-MC-030: events without session_id are dropped (counted as 0).
+    #[test]
+    fn pump_into_registry_drops_events_without_session_id() {
+        let mut reg = AgentRunRegistry::new();
+        let chunk = concat!(
+            "event: PostToolUse\n",
+            "data: {\"hook_event_name\":\"PostToolUse\"}\n",
+            "\n"
+        );
+        let pumped = pump_into_registry(&mut reg, chunk);
+        assert_eq!(pumped, 0);
+        assert!(reg.is_empty());
+    }
+
+    /// REQ-MC-030: empty session_id string is treated as missing.
+    #[test]
+    fn pump_into_registry_drops_empty_session_id() {
+        let mut reg = AgentRunRegistry::new();
+        let chunk = concat!(
+            "event: PostToolUse\n",
+            "data: {\"hook_event_name\":\"PostToolUse\",\"session_id\":\"\"}\n",
+            "\n"
+        );
+        let pumped = pump_into_registry(&mut reg, chunk);
+        assert_eq!(pumped, 0);
+        assert!(reg.is_empty());
+    }
+
+    /// REQ-MC-030: Unknown-kind events (parse failures) are dropped, not panicking.
+    #[test]
+    fn pump_into_registry_drops_unknown_events_safely() {
+        let mut reg = AgentRunRegistry::new();
+        let chunk = "event: Bad\ndata: not valid json\n\n";
+        let pumped = pump_into_registry(&mut reg, chunk);
+        assert_eq!(pumped, 0);
+        assert!(reg.is_empty());
+    }
+
+    /// REQ-MC-030 + REQ-MC-013: SessionStart hook transitions status to Running.
+    #[test]
+    fn pump_into_registry_propagates_status_transitions() {
+        let mut reg = AgentRunRegistry::new();
+        let chunk = concat!(
+            "event: SessionStart\n",
+            "data: {\"hook_event_name\":\"SessionStart\",\"session_id\":\"rs\"}\n",
+            "\n",
+            "event: Stop\n",
+            "data: {\"hook_event_name\":\"Stop\",\"session_id\":\"rs\"}\n",
+            "\n"
+        );
+        let pumped = pump_into_registry(&mut reg, chunk);
+        assert_eq!(pumped, 2);
+        let card = reg.get(&AgentRunId("rs".to_string())).unwrap();
+        // Last event Stop transitions to Completed (REQ-MC-013).
+        assert_eq!(card.status, crate::events::AgentRunStatus::Completed);
     }
 }
