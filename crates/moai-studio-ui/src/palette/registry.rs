@@ -55,6 +55,7 @@ pub const CATEGORIES: &[&str] = &[
     "Theme",
     "Git",
     "Agent",
+    "Terminal",
 ];
 
 // ============================================================
@@ -195,6 +196,9 @@ fn default_entries() -> Vec<CommandEntry> {
             "Agent",
             None,
         ),
+        // ── Terminal ──
+        // SPEC-V0-2-0-MULTI-SHELL-001 REQ-MS-006: shell.switch Command Palette entry.
+        CommandEntry::new("shell.switch", "Switch Shell...", "Terminal", None),
     ]
 }
 
@@ -350,6 +354,41 @@ mod tests {
             entry.category, "Workspace",
             "category must remain 'Workspace' (R5)"
         );
+    }
+
+    // ── T6: shell.switch entry — AC-MS-6 ──
+
+    /// AC-MS-6 (REQ-MS-006): shell.switch entry exists with correct label and category.
+    #[test]
+    fn test_palette_registry_has_shell_switch_entry() {
+        let reg = CommandRegistry::default_registry();
+        let entry = reg
+            .get("shell.switch")
+            .expect("shell.switch must exist in registry (SPEC-V0-2-0-MULTI-SHELL-001 REQ-MS-006)");
+        assert_eq!(
+            entry.label, "Switch Shell...",
+            "shell.switch label must be 'Switch Shell...'"
+        );
+        assert_eq!(
+            entry.category, "Terminal",
+            "shell.switch category must be 'Terminal'"
+        );
+        assert!(
+            entry.keybinding.is_none(),
+            "shell.switch keybinding must be None in v1"
+        );
+    }
+
+    /// AC-MS-6: workspace.search entry is unchanged (R4 invariant).
+    #[test]
+    fn test_palette_registry_workspace_search_unchanged() {
+        let reg = CommandRegistry::default_registry();
+        let entry = reg
+            .get("workspace.search")
+            .expect("workspace.search must still exist after adding shell.switch");
+        assert_eq!(entry.label, "Search in all workspaces");
+        assert_eq!(entry.category, "Workspace");
+        assert_eq!(entry.keybinding, Some("Cmd+Shift+F"));
     }
 
     /// Specific required commands exist.
