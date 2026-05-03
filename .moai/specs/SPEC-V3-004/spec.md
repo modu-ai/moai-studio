@@ -319,6 +319,27 @@ GPUI Stateful<Div>::on_mouse_down(MouseButton::Left)
 - **AC**: AC-D2-1 ~ AC-D2-5 (§10 표).
 - **시연 가능 상태**: 외부 코드가 mutation API 호출 시 menu state 가 정확히 갱신. 단일 menu invariant 유지.
 
+### MS-5: D-2 Workspace switcher real dispatch (audit D-2 follow-up, v0.2.0 cycle)
+
+후속 milestone (MS-4 skeleton 의 실 동작 완성, 2026-05-04 sess 11 추가). MS-4 의 `WorkspaceMenuAction` 4 variant (Rename / Delete / MoveUp / MoveDown) 가 실 store mutation 까지 연결되도록 dispatch logic + RenameModal logic + DeleteConfirmation logic + WorkspacesStore API 확장 추가. RootView 우클릭 wire 는 GPUI render side carry (별 milestone 또는 별 SPEC).
+
+- **범위**:
+  - `crates/moai-studio-workspace/src/lib.rs`: `WorkspacesStore::rename(id, new_name) -> Result`, `move_up(id) -> Result`, `move_down(id) -> Result` 신규 API. 단위 테스트 포함.
+  - `crates/moai-studio-ui/src/workspace_menu.rs`: `RenameModal` struct (target_id + buffer + open/commit/cancel API), `DeleteConfirmation` struct (target_id + confirm/cancel API), `dispatch_workspace_menu_action(action, ws_id, store) -> WorkspaceMenuOutcome` adapter. 단위 테스트 포함.
+  - `crates/moai-studio-ui/src/lib.rs`: `RootView::handle_workspace_menu_action(action, ws_id, cx)` 메서드 — RenameModal/DeleteConfirmation toggle 또는 store mutation 직접 호출. `rename_modal` / `delete_confirmation` 옵셔널 필드 추가 (R3 새 필드만).
+- **포함 요구사항** (frozen-zone):
+  - **REQ-D2-MS5-1**: `WorkspacesStore::rename(id, new_name)` 가 (a) workspace 존재 확인 후 name 갱신 + save 호출, (b) name 가 빈 string trim 시 `WorkspaceError::EmptyName`, (c) workspace id 없을 시 `WorkspaceError::NotFound` 반환.
+  - **REQ-D2-MS5-2**: `WorkspacesStore::move_up(id)` 가 list 에서 id 의 인덱스를 1 감소 (0 인덱스 no-op + Ok). `move_down(id)` 가 1 증가 (last 인덱스 no-op + Ok). 모두 save 호출. id 없을 시 `WorkspaceError::NotFound`.
+  - **REQ-D2-MS5-3**: `RenameModal::open(ws_id, current_name)` → `set_buffer(s)` → `commit() -> Option<(ws_id, new_name)>` (cancel 시 `None`). 빈 trim buffer commit → `None`.
+  - **REQ-D2-MS5-4**: `DeleteConfirmation::open(ws_id)` → `confirm() -> Option<ws_id>` (cancel 시 `None`).
+  - **REQ-D2-MS5-5**: `dispatch_workspace_menu_action(action, ws_id, store)` 가 (a) `Rename` → `WorkspaceMenuOutcome::OpenRenameModal { ws_id, current_name }`, (b) `Delete` → `WorkspaceMenuOutcome::OpenDeleteConfirmation { ws_id }`, (c) `MoveUp` → `store.move_up(ws_id)` 호출 후 `WorkspaceMenuOutcome::Reordered`, (d) `MoveDown` → `store.move_down(ws_id)` 호출 후 `WorkspaceMenuOutcome::Reordered`. unknown ws_id → `WorkspaceMenuOutcome::Unknown`.
+- **제외 (Deferred carry)**:
+  - **RootView 우클릭 wire** (workspace_row right-click → `WorkspaceMenu::open_for(ws_id, x, y)`) — GPUI render side, 별 milestone 또는 별 SPEC.
+  - **Quick switcher (⌘/Ctrl+,)** — 별 SPEC 또는 별 PR.
+  - D-4 / D-5 / D-6 — v0.2.0 의 별 SPEC.
+- **AC**: AC-D2-6 ~ AC-D2-10 (§10 표 — MS-5 추가 분).
+- **시연 가능 상태**: `dispatch_workspace_menu_action` 호출 시 store 가 실 mutation (rename / move) 또는 modal outcome 반환. 단위 테스트 + integration 으로 검증. RootView 우클릭 wire 는 별 PR 진행 시 `handle_workspace_menu_action` 호출만으로 e2e 완성.
+
 ---
 
 ## 9. 파일 레이아웃 (canonical)

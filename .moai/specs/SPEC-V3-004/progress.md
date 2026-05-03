@@ -89,9 +89,63 @@ Branch: feature/SPEC-V3-004-ms4-workspace-switcher-polish
 
 ### Deferred (carry to follow-up PR or v0.2.0)
 
-- 실제 rename modal — gpui Entity + text input + confirm 버튼
-- 실제 delete confirmation modal — destructive 액션 가드
-- 실제 reorder dispatch — `WorkspacesStore::move_position` 추가 + UI 갱신
-- workspace_row 우클릭 핸들러 와이어링 (RootView 통합)
+- 실제 rename modal — gpui Entity + text input + confirm 버튼 (logic-level은 MS-5 RenameModal 완성, GPUI overlay render 만 carry)
+- 실제 delete confirmation modal — destructive 액션 가드 (logic-level은 MS-5 DeleteConfirmation 완성, GPUI overlay render 만 carry)
+- 실제 reorder dispatch — `WorkspacesStore::move_up/move_down` MS-5 완성 ✅
+- workspace_row 우클릭 핸들러 와이어링 (RootView 통합) — MS-5 `handle_workspace_menu_action` 완성, render side wire 만 carry
 - Quick switcher (⌘/Ctrl+,) — audit 후속 carry
-- D-4 Global search / D-5 Color tags / D-6 Drag-and-drop add — audit 명시 v0.2.0 deferred
+- D-4 Global search ✅ DONE (PR #78~#81, SPEC-V0-2-0-GLOBAL-SEARCH-001 GA)
+- D-5 Color tags / D-6 Drag-and-drop add — audit 명시 v0.2.0 deferred
+
+---
+
+## MS-5 (2026-05-04 sess 11) — D-2 Workspace switcher real dispatch (audit D-2 follow-up)
+
+Branch: feature/SPEC-V3-004-ms5-d2-followup
+
+### Implementation
+
+- `crates/moai-studio-workspace/src/lib.rs`:
+  - `WorkspaceError::EmptyName` variant 추가
+  - `WorkspacesStore::rename(id, new_name)` — name 갱신 + save (REQ-D2-MS5-1)
+  - `WorkspacesStore::move_up(id)` — 인덱스 1 감소 (0 인덱스 no-op + Ok) (REQ-D2-MS5-2)
+  - `WorkspacesStore::move_down(id)` — 인덱스 1 증가 (last 인덱스 no-op + Ok) (REQ-D2-MS5-2)
+- `crates/moai-studio-ui/src/workspace_menu.rs`:
+  - `RenameModal` struct (target_id + buffer + open / set_buffer / commit / cancel / is_open / target_id / buffer) (REQ-D2-MS5-3)
+  - `DeleteConfirmation` struct (target_id + open / confirm / cancel / is_open / target_id) (REQ-D2-MS5-4)
+  - `WorkspaceMenuOutcome` enum (OpenRenameModal / OpenDeleteConfirmation / Reordered / Unknown)
+  - `dispatch_workspace_menu_action(action, ws_id, store) -> WorkspaceMenuOutcome` adapter (REQ-D2-MS5-5)
+- `crates/moai-studio-ui/src/lib.rs`:
+  - RootView 에 `rename_modal: Option<RenameModal>` + `delete_confirmation: Option<DeleteConfirmation>` + `store: WorkspacesStore` 필드 추가 (R3 새 필드만)
+  - `handle_workspace_menu_action_logic(action, ws_id) -> WorkspaceMenuOutcome` (logic-level test 가능)
+  - `handle_workspace_menu_action(action, ws_id, cx)` (GPUI context-aware, cx.notify())
+
+### Acceptance Criteria
+
+| AC | 내용 | 상태 |
+|----|------|------|
+| REQ-D2-MS5-1 | WorkspacesStore::rename + EmptyName + NotFound 에러 | ✅ |
+| REQ-D2-MS5-2 | WorkspacesStore::move_up + move_down (경계 no-op + NotFound) | ✅ |
+| REQ-D2-MS5-3 | RenameModal open/set_buffer/commit/cancel | ✅ |
+| REQ-D2-MS5-4 | DeleteConfirmation open/confirm/cancel | ✅ |
+| REQ-D2-MS5-5 | dispatch_workspace_menu_action + RootView wire | ✅ |
+
+### Test count
+
+- 신규: 26 (workspace 9 + workspace_menu 14 + RootView 3)
+- moai-studio-workspace: 17 → 26 (+9)
+- moai-studio-ui workspace_menu: 11 → 25 (+14)
+- ui crate 전체: 1193 → 1210 (+17)
+- clippy 0 warning, fmt clean, 워크스페이스 회귀 0
+
+### Carry (다음 PR — RootView 우클릭 wire)
+
+`WorkspaceMenu::open_for` 로 우클릭 이벤트 받은 뒤 호출:
+
+```rust
+root_view.update(cx, |view, cx| {
+    view.handle_workspace_menu_action(action, &ws_id, cx);
+});
+```
+
+`handle_workspace_menu_action` 가 outcome 에 따라 rename_modal/delete_confirmation 자동 설정 + Reordered 시 cx.notify() 호출. 별 PR 에서 GPUI render side mount 만 추가하면 e2e 완성.

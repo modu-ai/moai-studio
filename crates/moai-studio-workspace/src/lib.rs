@@ -111,6 +111,17 @@ pub struct WorkspacesStore {
 }
 
 impl WorkspacesStore {
+    /// Create an empty store bound to the given path without reading from disk.
+    ///
+    /// Useful for constructing a default store when the real path is not yet
+    /// known, or for test helpers that inject a pre-populated store afterward.
+    pub fn empty(path: impl Into<PathBuf>) -> Self {
+        Self {
+            path: path.into(),
+            file: WorkspacesFile::new(),
+        }
+    }
+
     /// 기본 경로 (`~/.moai/studio/workspaces.json`) 로 로드.
     pub fn load_default() -> Result<Self, WorkspaceError> {
         let path = default_storage_path()?;
@@ -173,6 +184,74 @@ impl WorkspacesStore {
             }
         }
         if changed {
+            self.save()?;
+        }
+        Ok(())
+    }
+
+    // @MX:ANCHOR: [AUTO] workspace-store-rename
+    // @MX:REASON: [AUTO] REQ-D2-MS5-1. rename is the primary mutation entry point for
+    //   workspace identity changes. fan_in >= 3: dispatch_workspace_menu_action (T6),
+    //   RootView::handle_workspace_menu_action (T7), integration tests (T1).
+    /// Rename workspace by `id` to `new_name` and persist.
+    ///
+    /// Returns `Err(EmptyName)` when `new_name` trims to blank.
+    /// Returns `Err(NotFound)` when `id` does not exist in the store.
+    pub fn rename(&mut self, id: &str, new_name: &str) -> Result<(), WorkspaceError> {
+        let trimmed = new_name.trim();
+        if trimmed.is_empty() {
+            return Err(WorkspaceError::EmptyName);
+        }
+        let ws = self
+            .file
+            .workspaces
+            .iter_mut()
+            .find(|w| w.id == id)
+            .ok_or_else(|| WorkspaceError::NotFound(id.to_string()))?;
+        ws.name = trimmed.to_string();
+        self.save()
+    }
+
+    // @MX:ANCHOR: [AUTO] workspace-store-move-up
+    // @MX:REASON: [AUTO] REQ-D2-MS5-2. move_up is the reorder entry point for sidebar list.
+    //   fan_in >= 3: dispatch_workspace_menu_action (T6), RootView::handle_workspace_menu_action (T7),
+    //   integration tests (T2).
+    /// Move workspace one position upward in the ordered list and persist.
+    ///
+    /// No-op when the workspace is already at index 0.
+    /// Returns `Err(NotFound)` when `id` does not exist.
+    pub fn move_up(&mut self, id: &str) -> Result<(), WorkspaceError> {
+        let idx = self
+            .file
+            .workspaces
+            .iter()
+            .position(|w| w.id == id)
+            .ok_or_else(|| WorkspaceError::NotFound(id.to_string()))?;
+        if idx > 0 {
+            self.file.workspaces.swap(idx, idx - 1);
+            self.save()?;
+        }
+        Ok(())
+    }
+
+    // @MX:ANCHOR: [AUTO] workspace-store-move-down
+    // @MX:REASON: [AUTO] REQ-D2-MS5-2. move_down is the reorder entry point for sidebar list.
+    //   fan_in >= 3: dispatch_workspace_menu_action (T6), RootView::handle_workspace_menu_action (T7),
+    //   integration tests (T3).
+    /// Move workspace one position downward in the ordered list and persist.
+    ///
+    /// No-op when the workspace is already at the last index.
+    /// Returns `Err(NotFound)` when `id` does not exist.
+    pub fn move_down(&mut self, id: &str) -> Result<(), WorkspaceError> {
+        let last = self.file.workspaces.len().saturating_sub(1);
+        let idx = self
+            .file
+            .workspaces
+            .iter()
+            .position(|w| w.id == id)
+            .ok_or_else(|| WorkspaceError::NotFound(id.to_string()))?;
+        if idx < last {
+            self.file.workspaces.swap(idx, idx + 1);
             self.save()?;
         }
         Ok(())
@@ -258,6 +337,16 @@ pub enum WorkspaceError {
 
     #[error("홈 디렉토리를 찾을 수 없습니다")]
     NoHome,
+
+    // @MX:NOTE: [AUTO] REQ-D2-MS5-1 — EmptyName guards rename against blank workspace names.
+    /// Workspace name must be non-empty after trimming whitespace (REQ-D2-MS5-1).
+    #[error("워크스페이스 이름이 비어있습니다")]
+    EmptyName,
+
+    // @MX:NOTE: [AUTO] REQ-D2-MS5-1/2 — NotFound returned by rename/move_up/move_down
+    /// No workspace with the given id was found in the store (REQ-D2-MS5-1, REQ-D2-MS5-2).
+    #[error("워크스페이스를 찾을 수 없습니다: {0}")]
+    NotFound(String),
 }
 
 // ============================================================
@@ -275,6 +364,192 @@ pub fn hello() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── T1: WorkspacesStore::rename ──────────────────────────────────────────
+
+    #[test]
+    fn test_rename_existing_workspace_updates_name() {
+        let tmp_file = std::env::temp_dir().join("moai-ws-rename-ok.json");
+        std::fs::remove_file(&tmp_file).ok();
+        let project = tmp_dir("project-rename-ok");
+
+        let mut store = WorkspacesStore::load(&tmp_file).unwrap();
+        let ws = Workspace::from_path(&project).unwrap();
+        let id = ws.id.clone();
+        store.add(ws).unwrap();
+
+        store.rename(&id, "NewName").unwrap();
+
+        let reloaded = WorkspacesStore::load(&tmp_file).unwrap();
+        assert_eq!(reloaded.list()[0].name, "NewName");
+
+        std::fs::remove_file(&tmp_file).ok();
+        std::fs::remove_dir_all(&project).ok();
+    }
+
+    #[test]
+    fn test_rename_unknown_workspace_returns_not_found() {
+        let tmp_file = std::env::temp_dir().join("moai-ws-rename-unknown.json");
+        std::fs::remove_file(&tmp_file).ok();
+
+        let mut store = WorkspacesStore::load(&tmp_file).unwrap();
+        let result = store.rename("nonexistent-id", "SomeName");
+        assert!(matches!(result, Err(WorkspaceError::NotFound(_))));
+
+        std::fs::remove_file(&tmp_file).ok();
+    }
+
+    #[test]
+    fn test_rename_empty_name_returns_empty_name_error() {
+        let tmp_file = std::env::temp_dir().join("moai-ws-rename-empty.json");
+        std::fs::remove_file(&tmp_file).ok();
+        let project = tmp_dir("project-rename-empty");
+
+        let mut store = WorkspacesStore::load(&tmp_file).unwrap();
+        let ws = Workspace::from_path(&project).unwrap();
+        let id = ws.id.clone();
+        store.add(ws).unwrap();
+
+        let result = store.rename(&id, "   ");
+        assert!(matches!(result, Err(WorkspaceError::EmptyName)));
+
+        std::fs::remove_file(&tmp_file).ok();
+        std::fs::remove_dir_all(&project).ok();
+    }
+
+    // ── T2: WorkspacesStore::move_up ────────────────────────────────────────
+
+    #[test]
+    fn test_move_up_middle_workspace() {
+        let tmp_file = std::env::temp_dir().join("moai-ws-moveup-mid.json");
+        std::fs::remove_file(&tmp_file).ok();
+        let p1 = tmp_dir("project-moveup-a");
+        let p2 = tmp_dir("project-moveup-b");
+        let p3 = tmp_dir("project-moveup-c");
+
+        let mut store = WorkspacesStore::load(&tmp_file).unwrap();
+        let ws1 = Workspace::from_path(&p1).unwrap();
+        let ws2 = Workspace::from_path(&p2).unwrap();
+        let ws3 = Workspace::from_path(&p3).unwrap();
+        let id2 = ws2.id.clone();
+        store.add(ws1).unwrap();
+        store.add(ws2).unwrap();
+        store.add(ws3).unwrap();
+
+        store.move_up(&id2).unwrap();
+
+        // ws2 should now be at index 0
+        assert_eq!(store.list()[0].id, id2);
+
+        std::fs::remove_file(&tmp_file).ok();
+        std::fs::remove_dir_all(&p1).ok();
+        std::fs::remove_dir_all(&p2).ok();
+        std::fs::remove_dir_all(&p3).ok();
+    }
+
+    #[test]
+    fn test_move_up_first_workspace_no_op() {
+        let tmp_file = std::env::temp_dir().join("moai-ws-moveup-first.json");
+        std::fs::remove_file(&tmp_file).ok();
+        let p1 = tmp_dir("project-moveup-first-a");
+        let p2 = tmp_dir("project-moveup-first-b");
+
+        let mut store = WorkspacesStore::load(&tmp_file).unwrap();
+        let ws1 = Workspace::from_path(&p1).unwrap();
+        let ws2 = Workspace::from_path(&p2).unwrap();
+        let id1 = ws1.id.clone();
+        store.add(ws1).unwrap();
+        store.add(ws2).unwrap();
+
+        store.move_up(&id1).unwrap();
+
+        // id1 should remain at index 0
+        assert_eq!(store.list()[0].id, id1);
+
+        std::fs::remove_file(&tmp_file).ok();
+        std::fs::remove_dir_all(&p1).ok();
+        std::fs::remove_dir_all(&p2).ok();
+    }
+
+    #[test]
+    fn test_move_up_unknown_returns_not_found() {
+        let tmp_file = std::env::temp_dir().join("moai-ws-moveup-unknown.json");
+        std::fs::remove_file(&tmp_file).ok();
+
+        let mut store = WorkspacesStore::load(&tmp_file).unwrap();
+        let result = store.move_up("no-such-id");
+        assert!(matches!(result, Err(WorkspaceError::NotFound(_))));
+
+        std::fs::remove_file(&tmp_file).ok();
+    }
+
+    // ── T3: WorkspacesStore::move_down ──────────────────────────────────────
+
+    #[test]
+    fn test_move_down_middle_workspace() {
+        let tmp_file = std::env::temp_dir().join("moai-ws-movedown-mid.json");
+        std::fs::remove_file(&tmp_file).ok();
+        let p1 = tmp_dir("project-movedown-a");
+        let p2 = tmp_dir("project-movedown-b");
+        let p3 = tmp_dir("project-movedown-c");
+
+        let mut store = WorkspacesStore::load(&tmp_file).unwrap();
+        let ws1 = Workspace::from_path(&p1).unwrap();
+        let ws2 = Workspace::from_path(&p2).unwrap();
+        let ws3 = Workspace::from_path(&p3).unwrap();
+        let id2 = ws2.id.clone();
+        let id3 = ws3.id.clone();
+        store.add(ws1).unwrap();
+        store.add(ws2).unwrap();
+        store.add(ws3).unwrap();
+
+        store.move_down(&id2).unwrap();
+
+        // ws2 should now be at index 2, ws3 at index 1
+        assert_eq!(store.list()[2].id, id2);
+        assert_eq!(store.list()[1].id, id3);
+
+        std::fs::remove_file(&tmp_file).ok();
+        std::fs::remove_dir_all(&p1).ok();
+        std::fs::remove_dir_all(&p2).ok();
+        std::fs::remove_dir_all(&p3).ok();
+    }
+
+    #[test]
+    fn test_move_down_last_workspace_no_op() {
+        let tmp_file = std::env::temp_dir().join("moai-ws-movedown-last.json");
+        std::fs::remove_file(&tmp_file).ok();
+        let p1 = tmp_dir("project-movedown-last-a");
+        let p2 = tmp_dir("project-movedown-last-b");
+
+        let mut store = WorkspacesStore::load(&tmp_file).unwrap();
+        let ws1 = Workspace::from_path(&p1).unwrap();
+        let ws2 = Workspace::from_path(&p2).unwrap();
+        let id2 = ws2.id.clone();
+        store.add(ws1).unwrap();
+        store.add(ws2).unwrap();
+
+        store.move_down(&id2).unwrap();
+
+        // id2 should remain at index 1 (last)
+        assert_eq!(store.list()[1].id, id2);
+
+        std::fs::remove_file(&tmp_file).ok();
+        std::fs::remove_dir_all(&p1).ok();
+        std::fs::remove_dir_all(&p2).ok();
+    }
+
+    #[test]
+    fn test_move_down_unknown_returns_not_found() {
+        let tmp_file = std::env::temp_dir().join("moai-ws-movedown-unknown.json");
+        std::fs::remove_file(&tmp_file).ok();
+
+        let mut store = WorkspacesStore::load(&tmp_file).unwrap();
+        let result = store.move_down("no-such-id");
+        assert!(matches!(result, Err(WorkspaceError::NotFound(_))));
+
+        std::fs::remove_file(&tmp_file).ok();
+    }
 
     fn tmp_dir(suffix: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("moai-ws-test-{}", suffix));
