@@ -36,6 +36,56 @@ Output:
 - Acceptance criteria
 - Technical approach
 
+### Lightweight SPEC Fast-Track (Plan Phase variant)
+
+For small, well-bounded changes that do not warrant a full Research-Plan-Annotate cycle, the Plan Phase MAY produce a lightweight SPEC consisting of `spec.md` + `progress.md` only — research.md and plan.md are skipped.
+
+Eligibility (ALL conditions must hold):
+- spec.md fits in **≤ 10 KB** (raw file size)
+- Acceptance Criteria count is **≤ 8** (one §10 table)
+- Milestone count is **≤ 2** (single MS or one MS + one follow-up MS)
+- No architectural impact: no new public API surface across crates, no new external dependency, no schema migration, no FROZEN zone touch
+- Implementation is expected to fit in a single PR (≤ ~1500 LOC including tests)
+
+When NOT eligible (use full Research-Plan-Annotate cycle):
+- New crate creation
+- Cross-crate refactoring
+- Public API contract changes
+- Performance-sensitive paths (require benchmarking plan)
+- Security-sensitive paths (require threat model section)
+- Carry-over from prior SPEC's escape hatch (require explicit AC succession)
+
+Lightweight SPEC structure (spec.md sections):
+1. Frontmatter (id, version, status, milestones, language, labels)
+2. HISTORY table
+3. §1 Purpose (≤ 1 paragraph)
+4. §2 Goals (≤ 5 bullets)
+5. §3 Non-Goals / Exclusions (≤ 5 bullets)
+6. §4 Requirements (REQ-XXX-NNN, EARS format, ≤ 10 entries)
+7. §5 Acceptance Criteria (single table, ≤ 8 rows)
+8. §6 File Layout (created / modified / frozen)
+9. §7 Test Strategy (≤ 1 paragraph)
+
+Sections that MAY be omitted vs full SPEC:
+- Background / Motivation analysis (use spec.md §1 Purpose instead)
+- Risk register
+- USER-DECISION gate enumeration (inline in §4 if needed)
+- External references / dependency tables (inline in §6 if needed)
+- Glossary
+
+Examples in this repo:
+- `.moai/specs/SPEC-V0-2-0-MULTI-SHELL-001/` — 8 KB spec.md, 1 MS, 7 AC. Single PR (#83).
+
+Workflow:
+- `/moai plan` invocation MAY auto-detect lightweight eligibility from natural-language description scope. If detected, manager-spec produces only spec.md + progress.md and skips research.md / plan.md.
+- The orchestrator MUST surface "Lightweight SPEC fast-track" classification via AskUserQuestion before generating, so the user can opt into full cycle if desired.
+- Frontmatter `revision` field SHOULD include the marker `(lightweight)` so downstream tooling (audit reports, CI checks) can treat eligibility uniformly.
+
+Constraints:
+- [HARD] Lightweight SPECs MUST still pass the same TRUST 5 gates as full SPECs in the Run Phase. The fast-track applies only to documentation depth, never to implementation quality.
+- [HARD] Lightweight SPECs MAY NOT skip Acceptance Criteria — the §5 table is the contract that drives RED-phase tests.
+- [HARD] If a Lightweight SPEC accumulates more than 2 milestones during implementation, it MUST be promoted to a full SPEC with research.md and plan.md retroactively added before MS-3 begins.
+
 ## Run Phase
 
 Implement specification using configured development methodology.
