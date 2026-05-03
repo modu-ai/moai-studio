@@ -17,6 +17,7 @@
 //! unit-testable without `TestAppContext` (Spike 2 pattern from SPEC-V3-005).
 
 use moai_search::{CancelToken, SearchHit};
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 // ---------------------------------------------------------------------------
@@ -59,6 +60,13 @@ impl SearchStatus {
 // SearchPanel
 // ---------------------------------------------------------------------------
 
+/// Total cap on search hits across all workspaces (REQ-GS-024).
+///
+/// @MX:NOTE: [AUTO] total-cap-constant
+/// When `pending_buffer.len() + results.len()` reaches this value in `add_hit`,
+/// the active session is auto-cancelled and status is set to `CapReached`.
+const TOTAL_HIT_CAP: usize = 1000;
+
 /// GPUI Entity for the sidebar global-search section.
 ///
 /// @MX:ANCHOR: [AUTO] search-panel-entity
@@ -91,6 +99,12 @@ pub struct SearchPanel {
     last_flush_at: Option<Instant>,
     /// Number of active workspaces — drives the 0-workspace edge case.
     workspace_count: usize,
+    /// Keyboard navigation: index of the currently selected result row.
+    ///
+    /// `None` when no row is selected (initial state or after results cleared).
+    selected_index: Option<usize>,
+    /// Per-workspace progress tracking: true when a worker is still running.
+    workspace_progress: HashMap<String, bool>,
 }
 
 impl SearchPanel {
@@ -105,6 +119,8 @@ impl SearchPanel {
             pending_buffer: Vec::new(),
             last_flush_at: None,
             workspace_count: 0,
+            selected_index: None,
+            workspace_progress: HashMap::new(),
         }
     }
 
@@ -191,6 +207,82 @@ impl SearchPanel {
         }
     }
 
+    // ── Keyboard navigation (MS-4 T3) ──
+
+    /// Return the currently selected result index, or `None` if nothing is selected.
+    ///
+    /// @MX:ANCHOR: [AUTO] search-panel-selected-index
+    /// @MX:REASON: [AUTO] fan_in >= 3: move_selection_down, move_selection_up,
+    ///   enter_selected — all read/write this field via accessor.
+    pub fn selected_index(&self) -> Option<usize> {
+        self.selected_index
+    }
+
+    /// Move the keyboard selection down by one row (AC-GS-7).
+    ///
+    /// When no row is selected, selects the first row (index 0).
+    /// When at the last row, stays at the last row (no wrap-around).
+    pub fn move_selection_down(&mut self) {
+        let len = self.results.len();
+        if len == 0 {
+            return;
+        }
+        self.selected_index = Some(match self.selected_index {
+            None => 0,
+            Some(i) => (i + 1).min(len - 1),
+        });
+    }
+
+    /// Move the keyboard selection up by one row (AC-GS-7).
+    ///
+    /// When at the first row (index 0), stays at index 0 (saturating).
+    pub fn move_selection_up(&mut self) {
+        if self.results.is_empty() {
+            return;
+        }
+        self.selected_index = Some(match self.selected_index {
+            None | Some(0) => 0,
+            Some(i) => i - 1,
+        });
+    }
+
+    /// Return a clone of the currently selected `SearchHit`, or `None` when
+    /// no row is selected or the index is out of bounds.
+    ///
+    /// The caller (`RootView::handle_search_open`) performs the actual
+    /// workspace activation + tab open + line scroll (REQ-GS-040).
+    pub fn enter_selected(&self) -> Option<SearchHit> {
+        let idx = self.selected_index?;
+        self.results.get(idx).cloned()
+    }
+
+    /// Hide the panel (equivalent to toggling off).
+    ///
+    /// Called when the user presses Escape while the panel is focused.
+    pub fn escape_pressed(&mut self) {
+        self.is_visible = false;
+        self.cancel_active_session();
+    }
+
+    // ── Per-workspace progress (MS-4 T2) ──
+
+    /// Record the in-progress state for a given workspace (AC-GS-9).
+    ///
+    /// `in_progress = true` means a worker is still running for that workspace.
+    /// `in_progress = false` means the worker has finished (or was not started).
+    pub fn set_workspace_progress(&mut self, workspace_id: &str, in_progress: bool) {
+        self.workspace_progress
+            .insert(workspace_id.to_string(), in_progress);
+    }
+
+    /// Return `true` when a worker for `workspace_id` is still running.
+    pub fn is_workspace_in_progress(&self, workspace_id: &str) -> bool {
+        self.workspace_progress
+            .get(workspace_id)
+            .copied()
+            .unwrap_or(false)
+    }
+
     // ── Session management ──
 
     /// Cancel the active session if one exists (REQ-GS-022).
@@ -213,11 +305,47 @@ impl SearchPanel {
 
     // ── Batch flush ──
 
+    /// User-facing message shown when the total hit cap is reached.
+    pub fn cap_message() -> &'static str {
+        "Too many results — narrow your query"
+    }
+
     /// Append a single hit to the pending buffer (REQ-GS-034).
     ///
-    /// Call `should_flush` + `flush_pending` in the MS-3 poll loop.
+    /// When the combined count (`results.len() + pending_buffer.len()`) reaches
+    /// `TOTAL_HIT_CAP` (1000), the active session is auto-cancelled and status
+    /// is transitioned to `CapReached` (REQ-GS-024). Subsequent calls after cap
+    /// is reached are silently dropped.
+    ///
+    /// @MX:NOTE: [AUTO] add-hit-cap-guard
+    /// The cap guard fires on the hit that causes the total to reach 1000.
+    /// The cancel_token.cancel() call stops the background workers. Any hits
+    /// arriving after the cancel races through the channel are discarded here.
     pub fn add_hit(&mut self, hit: SearchHit) {
+        // Drop hits once cap is reached.
+        if self.status == SearchStatus::CapReached {
+            return;
+        }
+        let total = self.results.len() + self.pending_buffer.len();
+        if total >= TOTAL_HIT_CAP {
+            self.status = SearchStatus::CapReached;
+            self.cancel_active_session();
+            return;
+        }
         self.pending_buffer.push(hit);
+        // Check again after push: if we just crossed the cap boundary, cancel.
+        if self.results.len() + self.pending_buffer.len() >= TOTAL_HIT_CAP {
+            self.status = SearchStatus::CapReached;
+            self.cancel_active_session();
+        }
+    }
+
+    /// Return the number of hits currently waiting in the pending buffer.
+    ///
+    /// Used by integration tests and the cap-check in `add_hit` to compute
+    /// the total hit count without flushing.
+    pub fn pending_buffer_len(&self) -> usize {
+        self.pending_buffer.len()
     }
 
     /// Return `true` if the pending buffer should be flushed to `results`.
@@ -364,6 +492,145 @@ mod tests {
             panel.status.status_text(),
             "Too many results — narrow your query"
         );
+    }
+
+    // ── MS-4 T3: keyboard navigation ──
+
+    /// AC-GS-7: move_selection_down advances the selected index.
+    #[test]
+    fn test_search_panel_navigate_down() {
+        let mut panel = SearchPanel::new();
+        // Add 3 results to results vec directly (simulating flushed hits).
+        panel.results.push(make_hit("ws-1", "hit 0"));
+        panel.results.push(make_hit("ws-1", "hit 1"));
+        panel.results.push(make_hit("ws-1", "hit 2"));
+
+        assert_eq!(panel.selected_index(), None, "initial selection is None");
+        panel.move_selection_down();
+        assert_eq!(panel.selected_index(), Some(0), "first down → index 0");
+        panel.move_selection_down();
+        assert_eq!(panel.selected_index(), Some(1), "second down → index 1");
+        panel.move_selection_down();
+        assert_eq!(panel.selected_index(), Some(2), "third down → index 2");
+        // At last item, further down is a no-op.
+        panel.move_selection_down();
+        assert_eq!(
+            panel.selected_index(),
+            Some(2),
+            "down at last item stays at last"
+        );
+    }
+
+    /// AC-GS-7: move_selection_up at index 0 is a no-op.
+    #[test]
+    fn test_search_panel_navigate_up_at_top_no_op() {
+        let mut panel = SearchPanel::new();
+        panel.results.push(make_hit("ws-1", "hit 0"));
+        panel.move_selection_down(); // index = 0
+        panel.move_selection_up(); // still 0 (saturating)
+        assert_eq!(
+            panel.selected_index(),
+            Some(0),
+            "up at index 0 must stay at 0"
+        );
+    }
+
+    /// AC-GS-7: enter_selected returns the hit at the current selected index.
+    #[test]
+    fn test_search_panel_enter_opens_selected() {
+        let mut panel = SearchPanel::new();
+        panel.results.push(make_hit("ws-1", "hit 0"));
+        panel.results.push(make_hit("ws-1", "hit 1"));
+        panel.results.push(make_hit("ws-1", "hit 2"));
+        panel.move_selection_down(); // 0
+        panel.move_selection_down(); // 1
+        panel.move_selection_down(); // 2
+        let entered = panel.enter_selected();
+        assert!(entered.is_some(), "enter must return a hit");
+        assert_eq!(
+            entered.unwrap().preview,
+            "hit 2",
+            "enter must return the selected hit"
+        );
+    }
+
+    /// AC-GS-7: escape_pressed hides the panel.
+    #[test]
+    fn test_search_panel_escape_closes() {
+        let mut panel = SearchPanel::new();
+        panel.toggle(); // make visible
+        assert!(panel.is_visible(), "panel must be visible before escape");
+        panel.escape_pressed();
+        assert!(!panel.is_visible(), "escape must hide the panel");
+    }
+
+    // ── MS-4 T2: per-workspace progress ──
+
+    /// AC-GS-9: set_workspace_progress records the in-progress state for a workspace.
+    #[test]
+    fn test_search_panel_workspace_progress_set() {
+        let mut panel = SearchPanel::new();
+        panel.set_workspace_progress("ws-1", true);
+        assert!(
+            panel.is_workspace_in_progress("ws-1"),
+            "ws-1 must be in progress after set(true)"
+        );
+        panel.set_workspace_progress("ws-1", false);
+        assert!(
+            !panel.is_workspace_in_progress("ws-1"),
+            "ws-1 must not be in progress after set(false)"
+        );
+    }
+
+    /// AC-GS-9: unknown workspace id returns false (not in progress).
+    #[test]
+    fn test_search_panel_workspace_progress_unknown_is_false() {
+        let panel = SearchPanel::new();
+        assert!(
+            !panel.is_workspace_in_progress("ws-unknown"),
+            "unknown workspace must return false"
+        );
+    }
+
+    // ── MS-4 T1: total cap auto-cancel ──
+
+    /// AC-GS-6 (UI): adding 1000 hits auto-cancels the session and sets CapReached.
+    #[test]
+    fn test_search_panel_total_cap_auto_cancels() {
+        let mut panel = SearchPanel::new();
+        // Status should transition to CapReached after 1000 hits.
+        for i in 0..1000 {
+            panel.add_hit(make_hit("ws-1", &format!("hit {i}")));
+        }
+        assert_eq!(
+            panel.status,
+            SearchStatus::CapReached,
+            "1000 hits must set status to CapReached"
+        );
+    }
+
+    /// AC-GS-6 (UI): cap_message returns the expected user-facing string.
+    #[test]
+    fn test_search_panel_cap_message_too_many_results() {
+        assert_eq!(
+            SearchPanel::cap_message(),
+            "Too many results — narrow your query",
+            "cap_message must match the CapReached status_text"
+        );
+    }
+
+    /// AC-GS-6 (UI): hits added after cap is reached are dropped (ignored).
+    #[test]
+    fn test_search_panel_hits_after_cap_ignored() {
+        let mut panel = SearchPanel::new();
+        for i in 0..1000 {
+            panel.add_hit(make_hit("ws-1", &format!("hit {i}")));
+        }
+        let count_at_cap = panel.pending_buffer.len() + panel.results.len();
+        // Add one more hit after cap.
+        panel.add_hit(make_hit("ws-1", "extra hit"));
+        let count_after = panel.pending_buffer.len() + panel.results.len();
+        assert_eq!(count_at_cap, count_after, "hits after cap must be dropped");
     }
 
     // ── T6: batch flush ──

@@ -53,6 +53,34 @@ pub fn extract_highlight_span(hit: &SearchHit) -> (usize, usize) {
     (start, end)
 }
 
+/// Split a preview string into three segments around a match span.
+///
+/// Returns `(pre, matched, post)` where:
+/// - `pre`  = `preview[..start]`
+/// - `matched` = `preview[start..end]` (the highlighted region)
+/// - `post` = `preview[end..]`
+///
+/// Both `start` and `end` are clamped to `preview.len()` before slicing so
+/// this function never panics on out-of-bounds offsets (AC-GS-8 polish).
+///
+/// This is the logic-level helper for `render_result_row`'s MS-4 highlight
+/// polish. Because it is pure-logic (no GPUI dependency), it is unit-testable
+/// without a GPUI context.
+pub fn extract_preview_segments(
+    preview: &str,
+    start: usize,
+    end: usize,
+) -> (String, String, String) {
+    let len = preview.len();
+    let clamped_start = start.min(len);
+    let clamped_end = end.min(len).max(clamped_start);
+    (
+        preview[..clamped_start].to_string(),
+        preview[clamped_start..clamped_end].to_string(),
+        preview[clamped_end..].to_string(),
+    )
+}
+
 // ---------------------------------------------------------------------------
 // Click handler — MS-3 (REQ-GS-040)
 // ---------------------------------------------------------------------------
@@ -145,6 +173,49 @@ mod tests {
             match_start,
             match_end,
         }
+    }
+
+    // ── MS-4 T4: match highlight segments ──
+
+    /// AC-GS-8 (highlight): three-segment split for a normal match span.
+    #[test]
+    fn test_render_preview_with_highlight_three_segments() {
+        // preview: "use std::path::PathBuf;"
+        // match: "std" at bytes 4..7
+        let (pre, matched, post) = extract_preview_segments("use std::path::PathBuf;", 4, 7);
+        assert_eq!(pre, "use ", "pre-match segment must be 'use '");
+        assert_eq!(matched, "std", "match segment must be 'std'");
+        assert_eq!(
+            post, "::path::PathBuf;",
+            "post-match segment must be '::path::PathBuf;'"
+        );
+    }
+
+    /// AC-GS-8 (highlight): empty match (start == end) returns full preview as plain.
+    #[test]
+    fn test_render_preview_with_highlight_no_match_returns_plain() {
+        let (pre, matched, post) = extract_preview_segments("hello world", 5, 5);
+        assert_eq!(pre, "hello", "pre must be 'hello'");
+        assert_eq!(matched, "", "empty match span returns empty matched");
+        assert_eq!(post, " world", "post must be ' world'");
+    }
+
+    /// AC-GS-8 (highlight): match spanning the full preview.
+    #[test]
+    fn test_render_preview_with_highlight_full_span() {
+        let (pre, matched, post) = extract_preview_segments("rust", 0, 4);
+        assert_eq!(pre, "", "no pre when match starts at 0");
+        assert_eq!(matched, "rust");
+        assert_eq!(post, "", "no post when match ends at len");
+    }
+
+    /// AC-GS-8 (highlight): out-of-bounds end is clamped.
+    #[test]
+    fn test_render_preview_segments_clamps_end() {
+        let (pre, matched, post) = extract_preview_segments("abc", 1, 999);
+        assert_eq!(pre, "a");
+        assert_eq!(matched, "bc");
+        assert_eq!(post, "");
     }
 
     // ── T5: result row layout ──
