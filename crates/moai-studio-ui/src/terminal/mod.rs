@@ -346,6 +346,13 @@ impl TerminalSurface {
                     // Emit event for RootView to handle
                     cx.emit(TerminalClickEvent::OpenSpec(spec_id.to_string()));
                 }
+                ClickAction::CopyUrl(moai_studio_terminal::link::OpenUrl { url }) => {
+                    // SPEC-V0-2-0-OSC8-LIFECYCLE-001 MS-1: CopyUrl resolution exists
+                    // but the right-click / clipboard wire is a follow-up PR (N1, N2).
+                    // For now we just log the request so call sites stay non-panicking
+                    // when the new variant flows through.
+                    tracing::info!(url = %url, "ClickAction::CopyUrl (clipboard wire deferred)");
+                }
             }
         }
     }
