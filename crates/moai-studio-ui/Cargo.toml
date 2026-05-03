@@ -23,6 +23,9 @@ gpui = "0.2"
 # Phase 1.6 (SPEC-V3-001 RG-V3-2): Sidebar 에 워크스페이스 리스트 렌더.
 moai-studio-workspace = { path = "../moai-studio-workspace" }
 
+# SPEC-V0-2-0-GLOBAL-SEARCH-001 MS-2: Search engine domain crate (GPUI-free).
+moai-search = { path = "../moai-search" }
+
 # Phase 2 (SPEC-V3-002 T4): TerminalSurface — terminal crate 타입 소비.
 # T3 완료 후 PtyEvent + RenderSnapshot re-export 가 활성화된다.
 moai-studio-terminal = { path = "../moai-studio-terminal" }

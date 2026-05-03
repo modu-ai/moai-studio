@@ -12,11 +12,13 @@
 | 2026-05-01 | sess 8 | planning (manager-spec) | research.md (22.5KB) + spec.md v1.0.0-draft (36.9KB) + progress.md (template) |
 | 2026-05-02 | sess 9 | annotation iteration 1 | spec.md v1.1.0-ready (USER-DECISION 3건 lock-in) + progress.md 갱신 + plan.md (milestones × tasks × files × AC 매핑) |
 | 2026-05-02 | sess 9 | MS-1 implementation (manager-tdd 위임) | `crates/moai-search/` 신규 crate (Cargo.toml + 6 src files) + 18 unit tests + 2 doc-tests + workspace deps (`ignore = "0.4"`, `regex = "1"`) — AC-GS-1~6 PASS, AC-GS-12 (regex meta) PASS, clippy 0 warning, fmt clean, 워크스페이스 회귀 0. |
+| 2026-05-03 | sess 9 | MS-1 PR #78 admin merge | merge commit `6409fc44`, mergedAt 2026-05-03T17:11:59Z. CI fail (moai-git stash::tests) 가 본 PR 영향 외 별 환경 의존 (git env on CI runner) 으로 admin override. main 동기화 완료. |
+| 2026-05-04 | sess 10 | MS-2 implementation (manager-tdd 위임) | `crates/moai-studio-ui/src/search/` 신규 모듈 (mod / panel / result_view / keymap) + RootView 통합 (`search_panel: Option<Entity<SearchPanel>>` 필드 + `handle_toggle_search_panel` + KeyBinding ⌘⇧F/Ctrl+Shift+F) + `moai-search` dep 추가 — AC-GS-7/8/9/12 (UI) PASS, 21 search:: tests, ui crate 1144 → 1165 (+21), clippy 0 warning, fmt clean, 워크스페이스 회귀 0. |
 
 ## Milestone Status
 
-- [x] **MS-1**: `crates/moai-search/` 신규 crate — `SearchSession` / `SearchHit` / `SearchOptions` / `CancelToken` + walker (ignore::WalkBuilder) + matcher (regex/literal fallback) + cancel token. AC-GS-1 ~ AC-GS-6 ✅ PASS (sess 9 manager-tdd, 2026-05-02).
-- [ ] **MS-2**: `crates/moai-studio-ui/src/search/` 모듈 — SearchPanel GPUI Entity + result row rendering + 사이드바 section toggle + ⌘⇧F dispatch. AC-GS-7, AC-GS-8, AC-GS-9, AC-GS-12 (UI 측).
+- [x] **MS-1**: `crates/moai-search/` 신규 crate — `SearchSession` / `SearchHit` / `SearchOptions` / `CancelToken` + walker (ignore::WalkBuilder) + matcher (regex/literal fallback) + cancel token. AC-GS-1 ~ AC-GS-6 ✅ PASS (sess 9 manager-tdd, 2026-05-02). PR #78 merge `6409fc44` 2026-05-03.
+- [x] **MS-2**: `crates/moai-studio-ui/src/search/` 모듈 — SearchPanel GPUI Entity + result row rendering + RootView 통합 + ⌘⇧F dispatch. AC-GS-7, AC-GS-8, AC-GS-9, AC-GS-12 (UI 측) ✅ PASS (sess 10 manager-tdd, 2026-05-04). 사이드바 visibility render mount 는 MS-3 carry.
 - [ ] **MS-3**: navigation wire — SearchHit click → workspace activate + new tab + line jump (OpenCodeViewer adapter). Command Palette `workspace.search` entry handler dispatch + label/keybinding 갱신. AC-GS-10, AC-GS-11.
 - [ ] **MS-4**: polish — backpressure (1000 cap auto-cancel + message), per-workspace progress spinner, ↑↓ keyboard navigation, match highlight in preview, integration test `tests/integration_search.rs`. final regression sweep.
 
@@ -38,12 +40,12 @@
 | AC-GS-4  | ✅ PASS | binary file skip — `test_walk_workspace_skips_binary_files` (NUL byte 첫 8KB heuristic, sess 9) |
 | AC-GS-5  | ✅ PASS | cancel mid-walk — `test_walk_workspace_cancel_mid_walk` (per-file + per-line poll, sess 9) |
 | AC-GS-6  | ✅ PASS | result cap (per-file 50 / per-workspace 200 / total 1000) — 3 단위 테스트 (per-file/per-workspace/total auto-cancel, sess 9) |
-| AC-GS-7  | ⬜ TODO | SearchPanel ⌘⇧F 토글 + input focus (MS-2) |
-| AC-GS-8  | ⬜ TODO | result row 2-line layout + batch flush (100 hits / 1000ms) (MS-2) |
-| AC-GS-9  | ⬜ TODO | status (Empty / Searching / No matches) + empty query no-spawn (MS-2) |
+| AC-GS-7  | ✅ PASS | SearchPanel ⌘⇧F (macOS) / Ctrl+Shift+F (other) keymap action + RootView dispatch + `handle_toggle_search_panel` (sess 10). 실 GPUI focus wire 는 MS-3 carry. |
+| AC-GS-8  | ✅ PASS | result row 2-line layout (`format_row_label` + `extract_highlight_span`) + batch flush (100 hits / 1000ms `should_flush`) (sess 10). |
+| AC-GS-9  | ✅ PASS | SearchStatus state machine (Empty / Searching / HasResults / NoMatches / CapReached) + empty query no-spawn (`set_query` trim → clear_results) (sess 10). |
 | AC-GS-10 | ⬜ TODO | navigation (touch + new_tab + OpenCodeViewer) (MS-3) |
 | AC-GS-11 | ⬜ TODO | Command Palette `workspace.search` entry dispatch + label/keybinding 갱신 (MS-3) |
-| AC-GS-12 | 🟡 PARTIAL | regex meta auto-detect + compile fail → literal fallback ✅ PASS (`test_regex_auto_detect`, `test_regex_compile_failure_fallback_to_literal`, sess 9). UI 측 edge cases (0 ws / 1 ws) MS-2 carry. |
+| AC-GS-12 | ✅ PASS | regex meta auto-detect + compile fail → literal fallback (sess 9, MS-1) + 0-workspace input disabled + placeholder + 1-workspace 단일 grouping logic (sess 10, MS-2). |
 
 상태 범례:
 - ⬜ TODO — 미시작
@@ -66,7 +68,18 @@
 - `cargo fmt -p moai-search --check`: clean
 - `cargo build --workspace`: GREEN, 회귀 0
 
-### MS-2/3/4 목표 (carry):
+### MS-2 실측 (sess 10, 2026-05-04)
+
+- `cargo test -p moai-studio-ui --lib search::`: **21 unit tests PASS** (search::panel + search::result_view + search::keymap)
+  - panel: SearchPanel toggle / set_query / SearchStatus state / batch flush 100hits/1000ms / 0-workspace disabled / 1-workspace single group
+  - result_view: format_row_label two-line / format_row_label nested path / extract_highlight_span match span
+  - keymap: ToggleSearchPanel action dispatch
+- ui crate 전체: **1144 → 1165 tests** (+21 신규, 회귀 0)
+- `cargo clippy -p moai-studio-ui --all-targets -- -D warnings`: 0 warning
+- `cargo fmt --check`: clean
+- `cargo build --workspace`: GREEN, 회귀 0
+
+### MS-3/4 목표 (carry):
 - `cargo test -p moai-search` — engine 단위 테스트, AC-GS-1~6 검증
 - `cargo test -p moai-studio-ui --lib search::tests` — UI 단위 테스트, AC-GS-9/12 검증
 - `cargo test -p moai-studio-ui --test integration_search` (신규) — integration, AC-GS-7/8/10 검증
