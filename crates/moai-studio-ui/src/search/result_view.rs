@@ -1,12 +1,16 @@
 //! Result row rendering for the global search panel.
 //!
-//! SPEC-V0-2-0-GLOBAL-SEARCH-001 MS-2 T5 (REQ-GS-032).
+//! SPEC-V0-2-0-GLOBAL-SEARCH-001 MS-2 T5 (REQ-GS-032) + MS-3 (REQ-GS-040).
 //!
 //! # Logic-level helpers
 //!
 //! `format_row_label` and `extract_highlight_span` are pure-logic functions
 //! unit-testable without GPUI. The GPUI `render_result_row` function wraps
 //! these into a 2-line GPUI element (Spike 2 pattern).
+//!
+//! `on_row_click` is a logic-level callback — it returns the `SearchHit` to
+//! navigate to. The actual `WorkspacesStore::touch` + `TabContainer::new_tab`
+//! calls are performed in `RootView::handle_search_open` (MS-3 wire).
 //!
 //! # 2-line row layout
 //!
@@ -47,6 +51,27 @@ pub fn extract_highlight_span(hit: &SearchHit) -> (usize, usize) {
     let start = (hit.match_start as usize).min(len);
     let end = (hit.match_end as usize).min(len);
     (start, end)
+}
+
+// ---------------------------------------------------------------------------
+// Click handler — MS-3 (REQ-GS-040)
+// ---------------------------------------------------------------------------
+
+/// Logic-level row-click handler.
+///
+/// Returns a clone of the clicked `SearchHit` so the caller
+/// (`RootView::handle_search_open`) can perform workspace activation +
+/// tab open + line scroll dispatch (REQ-GS-040).
+///
+/// This function is pure-logic (no GPUI dependency) so it can be tested
+/// without `TestAppContext` (Spike 2 pattern).
+///
+/// @MX:NOTE: [AUTO] on-row-click-returns-hit
+/// The caller is responsible for calling WorkspacesStore::touch,
+/// TabContainer::new_tab, and dispatching OpenCodeViewer. This function
+/// only clones the hit; it does NOT perform any side effects.
+pub fn on_row_click(hit: &SearchHit) -> SearchHit {
+    hit.clone()
 }
 
 // ---------------------------------------------------------------------------

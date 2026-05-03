@@ -151,7 +151,14 @@ fn default_entries() -> Vec<CommandEntry> {
         CommandEntry::new("workspace.new", "New Workspace", "Workspace", None),
         CommandEntry::new("workspace.rename", "Rename Workspace", "Workspace", None),
         CommandEntry::new("workspace.delete", "Delete Workspace", "Workspace", None),
-        CommandEntry::new("workspace.search", "Search in Workspace", "Workspace", None),
+        // SPEC-V0-2-0-GLOBAL-SEARCH-001 MS-3 (REQ-GS-051/052): updated label and keybinding.
+        // id and category are frozen (R5 — must not change).
+        CommandEntry::new(
+            "workspace.search",
+            "Search in all workspaces",
+            "Workspace",
+            Some("Cmd+Shift+F"),
+        ),
         // ── Surface ──
         CommandEntry::new(
             "surface.toggle_terminal",
@@ -295,6 +302,54 @@ mod tests {
     fn get_returns_none_for_unknown_id() {
         let reg = CommandRegistry::default_registry();
         assert!(reg.get("nonexistent.command").is_none());
+    }
+
+    // ── T6: workspace.search entry — AC-GS-11 (label + keybinding) ──
+
+    /// AC-GS-11 (REQ-GS-051): workspace.search entry label must be
+    /// "Search in all workspaces".
+    #[test]
+    fn test_workspace_search_entry_label_updated() {
+        let reg = CommandRegistry::default_registry();
+        let entry = reg
+            .get("workspace.search")
+            .expect("workspace.search must exist in registry");
+        assert_eq!(
+            entry.label, "Search in all workspaces",
+            "workspace.search label must be 'Search in all workspaces' (REQ-GS-051)"
+        );
+    }
+
+    /// AC-GS-11 (REQ-GS-052): workspace.search keybinding must be
+    /// Some("Cmd+Shift+F").
+    #[test]
+    fn test_workspace_search_entry_keybinding_set_to_cmd_shift_f() {
+        let reg = CommandRegistry::default_registry();
+        let entry = reg
+            .get("workspace.search")
+            .expect("workspace.search must exist in registry");
+        assert_eq!(
+            entry.keybinding,
+            Some("Cmd+Shift+F"),
+            "workspace.search keybinding must be Some(\"Cmd+Shift+F\") (REQ-GS-052)"
+        );
+    }
+
+    /// AC-GS-11: workspace.search id and category must not change (R5 invariant).
+    #[test]
+    fn test_workspace_search_id_and_category_unchanged() {
+        let reg = CommandRegistry::default_registry();
+        let entry = reg
+            .get("workspace.search")
+            .expect("workspace.search must exist");
+        assert_eq!(
+            entry.id, "workspace.search",
+            "id must remain unchanged (R5)"
+        );
+        assert_eq!(
+            entry.category, "Workspace",
+            "category must remain 'Workspace' (R5)"
+        );
     }
 
     /// Specific required commands exist.
