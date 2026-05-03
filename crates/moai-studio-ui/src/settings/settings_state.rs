@@ -41,6 +41,8 @@ pub enum SettingsSection {
     Rules,
     /// 고급 설정 (skeleton)
     Advanced,
+    /// Claude Code Plugins (read-only skeleton, SPEC-V0-2-0-PLUGIN-MGR-001 MS-1)
+    Plugins,
 }
 
 impl SettingsSection {
@@ -57,14 +59,16 @@ impl SettingsSection {
             Self::Skills => "Skills",
             Self::Rules => "Rules",
             Self::Advanced => "Advanced",
+            Self::Plugins => "Plugins",
         }
     }
 
-    /// 10개 section 을 정해진 순서대로 반환한다 (REQ-V13-010 + MS-4a/4b/4c/4d).
+    /// 11개 section 을 정해진 순서대로 반환한다 (REQ-V13-010 + MS-4a/4b/4c/4d + SPEC-V0-2-0-PLUGIN-MGR-001 MS-1).
     ///
     /// 순서는 sidebar 표시 순서와 일치한다. 새 카탈로그 패널들 (Hooks/MCP/
-    /// Skills/Rules) 은 Agent 다음 위치에 인접 그룹으로 배치한다.
-    pub fn all() -> [SettingsSection; 10] {
+    /// Skills/Rules) 은 Agent 다음 위치에 인접 그룹으로 배치한다. Plugins 는
+    /// enum schema 호환성을 위해 enum 끝 (Advanced 다음 = 11번째) 에 배치한다.
+    pub fn all() -> [SettingsSection; 11] {
         [
             Self::Appearance,
             Self::Keyboard,
@@ -76,6 +80,7 @@ impl SettingsSection {
             Self::Skills,
             Self::Rules,
             Self::Advanced,
+            Self::Plugins,
         ]
     }
 }
@@ -425,6 +430,43 @@ impl AgentState {
 }
 
 // ============================================================
+// PluginsState — PluginsPane in-memory state (SPEC-V0-2-0-PLUGIN-MGR-001 MS-1)
+// ============================================================
+
+/// PluginsPane 의 read-only in-memory 상태 (REQ-PM-007).
+///
+/// audit Top 8 #3 (Plugin Manager UI) skeleton. v0.2.0 단계는 6 개 bundled
+/// plugin info 를 read-only 로 노출만 하며, install / uninstall / enable
+/// 토글과 marketplace fetch 는 별 SPEC carry.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PluginsState {
+    /// User-entered search query — empty string surfaces all entries.
+    pub plugin_filter: String,
+}
+
+impl PluginsState {
+    /// Returns the entries whose `name` or `description` (case-insensitive)
+    /// contain `plugin_filter`. Empty filter returns all entries unchanged.
+    pub fn filtered_plugins<'a, T, F>(&self, entries: &'a [T], project: F) -> Vec<&'a T>
+    where
+        F: Fn(&T) -> (&str, &str),
+    {
+        if self.plugin_filter.is_empty() {
+            return entries.iter().collect();
+        }
+        let needle = self.plugin_filter.to_ascii_lowercase();
+        entries
+            .iter()
+            .filter(|e| {
+                let (name, desc) = project(e);
+                name.to_ascii_lowercase().contains(&needle)
+                    || desc.to_ascii_lowercase().contains(&needle)
+            })
+            .collect()
+    }
+}
+
+// ============================================================
 // HooksState — HooksPane in-memory state (MS-4a skeleton)
 // ============================================================
 
@@ -712,6 +754,8 @@ pub struct SettingsViewState {
     pub rules: RulesPaneState,
     /// AdvancedPane 의 in-memory 상태.
     pub advanced: AdvancedState,
+    /// PluginsPane 의 in-memory 상태 (SPEC-V0-2-0-PLUGIN-MGR-001 MS-1).
+    pub plugins: PluginsState,
     /// SettingsModal 이 표시 중인지 여부 (mount/dismiss 상태).
     pub is_visible: bool,
 }
@@ -730,6 +774,7 @@ impl Default for SettingsViewState {
             skills: SkillsPaneState::default(),
             rules: RulesPaneState::default(),
             advanced: AdvancedState::default(),
+            plugins: PluginsState::default(),
             is_visible: false,
         }
     }
@@ -768,10 +813,10 @@ mod tests {
     // ---- SettingsSection tests ----
 
     #[test]
-    /// SettingsSection::all() 이 10개를 정해진 순서로 반환한다 (REQ-V13-010 + MS-4a/4b/4c/4d).
-    fn section_all_returns_ten_in_order() {
+    /// SettingsSection::all() 이 11개를 정해진 순서로 반환한다 (REQ-V13-010 + MS-4a/4b/4c/4d + REQ-PM-001/002).
+    fn section_all_returns_eleven_in_order() {
         let all = SettingsSection::all();
-        assert_eq!(all.len(), 10);
+        assert_eq!(all.len(), 11);
         assert_eq!(all[0], SettingsSection::Appearance);
         assert_eq!(all[1], SettingsSection::Keyboard);
         assert_eq!(all[2], SettingsSection::Editor);
@@ -782,10 +827,11 @@ mod tests {
         assert_eq!(all[7], SettingsSection::Skills);
         assert_eq!(all[8], SettingsSection::Rules);
         assert_eq!(all[9], SettingsSection::Advanced);
+        assert_eq!(all[10], SettingsSection::Plugins);
     }
 
     #[test]
-    /// 각 section 의 label() 이 올바른 문자열을 반환한다.
+    /// 각 section 의 label() 이 올바른 문자열을 반환한다 (REQ-PM-003 포함).
     fn section_labels_are_correct() {
         assert_eq!(SettingsSection::Appearance.label(), "Appearance");
         assert_eq!(SettingsSection::Keyboard.label(), "Keyboard");
@@ -797,6 +843,30 @@ mod tests {
         assert_eq!(SettingsSection::Skills.label(), "Skills");
         assert_eq!(SettingsSection::Rules.label(), "Rules");
         assert_eq!(SettingsSection::Advanced.label(), "Advanced");
+        assert_eq!(SettingsSection::Plugins.label(), "Plugins");
+    }
+
+    /// AC-PM-7 (REQ-PM-007): SettingsViewState::default() initializes plugins to PluginsState::default().
+    #[test]
+    fn settings_view_state_default_initializes_plugins_state() {
+        let view = SettingsViewState::default();
+        assert_eq!(view.plugins, PluginsState::default());
+        assert_eq!(view.plugins.plugin_filter, "");
+    }
+
+    /// REQ-PM-007 mirror: PluginsState filtered_plugins respects empty filter / case-insensitive match.
+    #[test]
+    fn plugins_state_filtered_plugins_respects_filter() {
+        let state = PluginsState::default();
+        let entries = ["alpha", "Beta", "Gamma"];
+        let visible = state.filtered_plugins(&entries, |s| (s, ""));
+        assert_eq!(visible.len(), 3, "empty filter must surface all");
+
+        let mut state = PluginsState::default();
+        state.plugin_filter = "BET".to_string();
+        let visible = state.filtered_plugins(&entries, |s| (s, ""));
+        assert_eq!(visible.len(), 1);
+        assert_eq!(*visible[0], "Beta");
     }
 
     // ---- AppearanceState tests ----
