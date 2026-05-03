@@ -3,8 +3,15 @@
 //! SPEC: G-2 project wizard implementation.
 //! Step 1: Directory picker, Step 2: Name input, Step 3: SPEC selection,
 //! Step 4: Color tag, Step 5: Confirm + create.
+//!
+//! SPEC-V0-2-0-WIZARD-ENV-001 MS-1 (audit Top 8 #6 후속, v0.2.0 cycle Sprint 11+):
+//! `env_report: Option<EnvironmentReport>` state binding 추가. 외부 caller 가
+//! `detect_with_runner` 결과를 wizard 에 주입하면 후속 render PR 가 사용자에게
+//! 환경 정보 (shell/tmux/node/python/rust/git 가용성) 를 표시한다. 본 SPEC 은
+//! state 만 — UI render 는 carry per N2.
 
 use crate::design::tokens as tok;
+use crate::onboarding::EnvironmentReport;
 use gpui::{
     Context, InteractiveElement, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb,
 };
@@ -126,6 +133,11 @@ pub struct ProjectWizard {
 
     // Step 4: Color tag
     selected_color: Option<ColorTag>,
+
+    // SPEC-V0-2-0-WIZARD-ENV-001 MS-1 (REQ-WE-001): cached env detection report.
+    // None = not yet probed. Populated by external caller via `set_env_report`,
+    // cleared on `dismiss()` along with the rest of the wizard state.
+    env_report: Option<EnvironmentReport>,
 }
 
 impl ProjectWizard {
@@ -138,6 +150,8 @@ impl ProjectWizard {
             project_name: String::new(),
             spec_id: None,
             selected_color: None,
+            // SPEC-V0-2-0-WIZARD-ENV-001 MS-1 (REQ-WE-001): no env probe by default.
+            env_report: None,
         }
     }
 
@@ -160,6 +174,32 @@ impl ProjectWizard {
         self.project_name = String::new();
         self.spec_id = None;
         self.selected_color = None;
+        // SPEC-V0-2-0-WIZARD-ENV-001 MS-1 (REQ-WE-005): drop the cached env probe
+        // so the next mount starts with a fresh slate.
+        self.env_report = None;
+    }
+
+    // ── SPEC-V0-2-0-WIZARD-ENV-001 MS-1 — env_report state binding ──
+
+    /// Inject the latest `EnvironmentReport` (typically from
+    /// `crate::onboarding::detect_with_runner`).
+    /// REQ-WE-002.
+    pub fn set_env_report(&mut self, report: EnvironmentReport) {
+        self.env_report = Some(report);
+    }
+
+    /// Returns the cached environment report, or `None` if no probe has been
+    /// injected since the wizard was last constructed or dismissed.
+    /// REQ-WE-003.
+    pub fn env_report(&self) -> Option<&EnvironmentReport> {
+        self.env_report.as_ref()
+    }
+
+    /// Drop the cached environment report without affecting the rest of the
+    /// wizard state (different from `dismiss()` which resets everything).
+    /// REQ-WE-004.
+    pub fn clear_env_report(&mut self) {
+        self.env_report = None;
     }
 
     /// Check if wizard is visible.
@@ -404,5 +444,117 @@ impl ProjectWizard {
                 )
             }
         }
+    }
+}
+
+// ============================================================
+// Unit tests — SPEC-V0-2-0-WIZARD-ENV-001 MS-1 (AC-WE-1 ~ AC-WE-6)
+// ============================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::onboarding::{EnvironmentReport, Tool, ToolStatus};
+
+    fn mk_report() -> EnvironmentReport {
+        EnvironmentReport::new(vec![
+            (
+                Tool::Shell,
+                ToolStatus::Available {
+                    version: "zsh 5.9".to_string(),
+                },
+            ),
+            (Tool::Tmux, ToolStatus::NotFound),
+            (
+                Tool::Git,
+                ToolStatus::Available {
+                    version: "git 2.43".to_string(),
+                },
+            ),
+        ])
+    }
+
+    /// AC-WE-1 (REQ-WE-001): new() initializes env_report to None.
+    #[test]
+    fn project_wizard_new_initializes_env_report_to_none() {
+        let wiz = ProjectWizard::new();
+        assert!(wiz.env_report().is_none());
+        // Sanity: existing fields remain at default.
+        assert!(!wiz.is_visible());
+    }
+
+    /// AC-WE-2 (REQ-WE-002 / 003): set_env_report stores the report.
+    #[test]
+    fn project_wizard_set_env_report_stores_value() {
+        let mut wiz = ProjectWizard::new();
+        let report = mk_report();
+        wiz.set_env_report(report);
+        let got = wiz.env_report().expect("env_report must be Some");
+        assert_eq!(got.entries.len(), 3);
+        assert_eq!(got.available_count(), 2);
+    }
+
+    /// AC-WE-3 (REQ-WE-004): clear_env_report resets to None.
+    #[test]
+    fn project_wizard_clear_env_report_resets() {
+        let mut wiz = ProjectWizard::new();
+        wiz.set_env_report(mk_report());
+        assert!(wiz.env_report().is_some());
+        wiz.clear_env_report();
+        assert!(wiz.env_report().is_none());
+    }
+
+    /// AC-WE-4 (REQ-WE-005): dismiss() clears env_report along with the rest.
+    #[test]
+    fn project_wizard_dismiss_clears_env_report_and_state() {
+        let mut wiz = ProjectWizard::new();
+        wiz.mount();
+        wiz.set_env_report(mk_report());
+        // Advance a step so reset is observable.
+        wiz.next_step(); // Step1 → Step2 (next() returns None for Step1 only when can_go_next false)
+        assert!(wiz.is_visible());
+        assert!(wiz.env_report().is_some());
+
+        wiz.dismiss();
+
+        assert!(!wiz.is_visible());
+        assert!(wiz.env_report().is_none(), "dismiss must clear env_report");
+        // build_workspace returns None because dir / name reset.
+        assert!(wiz.build_workspace().is_none());
+    }
+
+    /// AC-WE-5 (REQ-WE-006): step navigation is independent of env_report.
+    #[test]
+    fn project_wizard_navigation_is_independent_of_env_report() {
+        let mut wiz_with_env = ProjectWizard::new();
+        wiz_with_env.set_env_report(mk_report());
+        let wiz_without_env = ProjectWizard::new();
+
+        // can_go_next at Step1 depends on selected_directory (None for both),
+        // so both must agree.
+        assert_eq!(
+            wiz_with_env.can_go_next(),
+            wiz_without_env.can_go_next(),
+            "can_go_next must not depend on env_report"
+        );
+        assert_eq!(wiz_with_env.can_go_back(), wiz_without_env.can_go_back());
+
+        // WizardStep enum still exposes 5 variants in canonical order.
+        assert_eq!(WizardStep::ALL.len(), 5);
+    }
+
+    /// AC-WE-6 (REQ-WE-006): build_workspace ignores env_report.
+    #[test]
+    fn project_wizard_build_workspace_ignores_env_report() {
+        let mut wiz = ProjectWizard::new();
+        wiz.selected_directory = Some("/tmp/proj".to_string());
+        wiz.project_name = "Demo".to_string();
+        wiz.set_env_report(mk_report());
+        let ws = wiz.build_workspace().expect("must build");
+        assert_eq!(ws.name, "Demo");
+        assert_eq!(ws.project_path, "/tmp/proj");
+        assert_eq!(ws.spec_id, None);
+        assert_eq!(ws.color_tag, None);
+        // env_report is intentionally NOT carried into NewWorkspace (N7).
     }
 }
