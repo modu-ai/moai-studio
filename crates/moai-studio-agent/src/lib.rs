@@ -16,6 +16,7 @@ pub mod cost;
 pub mod events;
 pub mod filter;
 pub mod instructions;
+pub mod mission_control;
 pub mod quality;
 pub mod ring_buffer;
 pub mod sse_ingest;
@@ -32,6 +33,8 @@ pub use filter::{EventFilter, EventKindDiscriminant, apply_filter};
 pub use instructions::{
     InstructionKind, InstructionNode, InstructionRebuildTrigger, InstructionScanner, ScanPaths,
 };
+// SPEC-V0-2-0-MISSION-CTRL-001 MS-1: per-run summary registry for the parallel-agents grid.
+pub use mission_control::{AgentCard, AgentRunRegistry};
 pub use quality::{DefaultHeuristicEngine, ScoringEngine, Trust5Score};
 pub use quality::{GitMetrics, LspMetrics, SecurityMetrics, TestMetrics};
 pub use ring_buffer::{RingBuffer, RingBufferError};
