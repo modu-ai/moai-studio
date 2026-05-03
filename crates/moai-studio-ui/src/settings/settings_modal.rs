@@ -7,7 +7,7 @@
 
 use crate::settings::panes::{
     AdvancedPane, AgentPane, AppearancePane, EditorPane, HooksPane, KeyboardPane, McpPane,
-    RulesPane, SkillsPane, TerminalPane,
+    PluginsPane, RulesPane, SkillsPane, TerminalPane,
 };
 use crate::settings::settings_state::{SettingsSection, SettingsViewState};
 
@@ -99,8 +99,8 @@ impl SettingsModal {
         self.view_state.selected_section
     }
 
-    /// sidebar 의 10개 section 을 정해진 순서로 반환한다 (AC-V13-2 + MS-4a/4b/4c/4d).
-    pub fn sections(&self) -> [SettingsSection; 10] {
+    /// sidebar 의 11개 section 을 정해진 순서로 반환한다 (AC-V13-2 + MS-4a/4b/4c/4d + SPEC-V0-2-0-PLUGIN-MGR-001 MS-1).
+    pub fn sections(&self) -> [SettingsSection; 11] {
         SettingsSection::all()
     }
 
@@ -156,6 +156,11 @@ impl SettingsModal {
         self.view_state.selected_section == SettingsSection::Advanced
     }
 
+    /// 현재 선택된 section 이 PluginsPane 에 해당하는지 여부 (SPEC-V0-2-0-PLUGIN-MGR-001 MS-1).
+    pub fn is_plugins_active(&self) -> bool {
+        self.view_state.selected_section == SettingsSection::Plugins
+    }
+
     /// 현재 선택된 section 의 타이틀을 반환한다.
     pub fn active_section_title(&self) -> &'static str {
         match self.view_state.selected_section {
@@ -169,6 +174,7 @@ impl SettingsModal {
             SettingsSection::Skills => SkillsPane::title(),
             SettingsSection::Rules => RulesPane::title(),
             SettingsSection::Advanced => AdvancedPane::title(),
+            SettingsSection::Plugins => PluginsPane::title(),
         }
     }
 
@@ -319,10 +325,10 @@ mod tests {
     // ---- sidebar section tests ----
 
     #[test]
-    /// sections() 가 10개 section 을 반환한다 (AC-V13-2 + MS-4a/4b/4c/4d).
-    fn sections_returns_ten() {
+    /// sections() 가 11개 section 을 반환한다 (AC-V13-2 + MS-4a/4b/4c/4d + AC-PM-1).
+    fn sections_returns_eleven() {
         let modal = SettingsModal::new();
-        assert_eq!(modal.sections().len(), 10);
+        assert_eq!(modal.sections().len(), 11);
     }
 
     #[test]
@@ -459,6 +465,7 @@ mod tests {
                 m.is_skills_active(),
                 m.is_rules_active(),
                 m.is_advanced_active(),
+                m.is_plugins_active(),
             ]
         };
         for section in SettingsSection::all() {
@@ -467,6 +474,22 @@ mod tests {
             let count = active.iter().filter(|&&v| v).count();
             assert_eq!(count, 1, "section {:?} 선택 시 정확히 1개만 활성", section);
         }
+    }
+
+    #[test]
+    /// PluginsPane title 이 "Plugins" 이다 (AC-PM-2).
+    fn plugins_pane_title_via_modal_routing() {
+        use crate::settings::panes::PluginsPane;
+        assert_eq!(PluginsPane::title(), "Plugins");
+    }
+
+    #[test]
+    /// SettingsSection::Plugins 선택 시 active_section_title 이 "Plugins" (AC-PM-2 wire).
+    fn plugins_section_selected_routes_title() {
+        let mut modal = SettingsModal::new();
+        modal.select_section(SettingsSection::Plugins);
+        assert_eq!(modal.active_section_title(), "Plugins");
+        assert!(modal.is_plugins_active());
     }
 
     #[test]
