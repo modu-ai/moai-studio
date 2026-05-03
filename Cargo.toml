@@ -22,3 +22,6 @@ dirs = "5"
 image = "0.25"
 # SPEC-V3-016 MS-2: EXIF metadata extraction (REQ-IV-040~045)
 kamadak-exif = "0.6"
+# SPEC-V0-2-0-GLOBAL-SEARCH-001 MS-1: search engine (USER-DECISION-A (a) pure Rust)
+ignore = "0.4"
+regex = "1"
