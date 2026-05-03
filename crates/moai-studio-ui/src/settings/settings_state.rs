@@ -862,8 +862,9 @@ mod tests {
         let visible = state.filtered_plugins(&entries, |s| (s, ""));
         assert_eq!(visible.len(), 3, "empty filter must surface all");
 
-        let mut state = PluginsState::default();
-        state.plugin_filter = "BET".to_string();
+        let state = PluginsState {
+            plugin_filter: "BET".to_string(),
+        };
         let visible = state.filtered_plugins(&entries, |s| (s, ""));
         assert_eq!(visible.len(), 1);
         assert_eq!(*visible[0], "Beta");

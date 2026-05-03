@@ -9,11 +9,12 @@ pub mod clipboard;
 pub mod input;
 
 use crate::design::tokens::{self as tok, ide_accent};
+use crate::terminal::clipboard::{ArboardClipboardWriter, ClipboardWriter};
 use gpui::{
     Context, EventEmitter, InteractiveElement, IntoElement, Keystroke, MouseButton, MouseDownEvent,
     ParentElement, Render, Styled, Window, div, px, rgb,
 };
-use moai_studio_terminal::link::ClickAction;
+use moai_studio_terminal::link::{ClickAction, OpenUrl, VisitedLinkRegistry};
 use std::path::PathBuf;
 
 // ============================================================
@@ -138,23 +139,31 @@ pub struct TerminalState {
 /// T4 에서는 TerminalState 를 직접 관리하고, T3 완료 후 PtyEvent + RenderSnapshot
 /// 으로 전환한다.
 pub struct TerminalSurface {
-    /// 최신 터미널 상태 (T3 완료 후 RenderSnapshot 으로 교체)
+    /// Latest terminal state (to be replaced with RenderSnapshot after T3).
     pub state: TerminalState,
-    /// 폰트 메트릭 — pixel_to_cell 계산용
+    /// Font metrics for pixel_to_cell calculation.
     pub font: FontMetrics,
-    /// 마우스 드래그 선택 영역 (없으면 None)
+    /// Mouse drag selection range (None if no selection).
     pub selection: Option<Selection>,
-    /// 커서 blink 표시 여부
+    /// Cursor blink visibility flag.
     pub cursor_visible: bool,
-    /// PTY stdin writer — T6(ghostty-spike) 에서 실제 PTY sender 로 교체.
+    /// PTY stdin writer — replaced with actual PTY sender in T6(ghostty-spike).
     ///
     /// @MX:TODO: T6 에서 tokio::sync::mpsc::UnboundedSender<Vec<u8>> 로 교체.
     ///   현재는 pending 바이트를 버퍼에 쌓고 inspector 가 drain 한다.
     pub pending_input: Vec<u8>,
+    /// Visited URL registry — tracks which URLs have been opened or copied.
+    ///
+    /// SPEC-V0-2-0-OSC8-LIFECYCLE-001 MS-2 (REQ-OL-011).
+    pub visited_links: VisitedLinkRegistry,
+    /// Clipboard write backend — swappable for testing via `with_clipboard_writer`.
+    ///
+    /// SPEC-V0-2-0-OSC8-LIFECYCLE-001 MS-2 (REQ-OL-011).
+    pub clipboard_writer: Box<dyn ClipboardWriter + Send + Sync>,
 }
 
 impl TerminalSurface {
-    /// 기본 상태로 TerminalSurface 생성.
+    /// Creates a TerminalSurface with default state.
     pub fn new() -> Self {
         Self {
             state: TerminalState::default(),
@@ -162,7 +171,17 @@ impl TerminalSurface {
             selection: None,
             cursor_visible: true,
             pending_input: Vec::new(),
+            visited_links: VisitedLinkRegistry::default(),
+            clipboard_writer: Box::new(ArboardClipboardWriter),
         }
+    }
+
+    /// Builder helper for injecting a custom clipboard writer (used in tests).
+    ///
+    /// SPEC-V0-2-0-OSC8-LIFECYCLE-001 MS-2 (REQ-OL-011).
+    pub fn with_clipboard_writer(mut self, writer: Box<dyn ClipboardWriter + Send + Sync>) -> Self {
+        self.clipboard_writer = writer;
+        self
     }
 
     /// 폰트 메트릭을 갱신한다 (GPUI font system 에서 호출).
@@ -302,6 +321,28 @@ impl TerminalSurface {
         std::mem::take(&mut self.pending_input)
     }
 
+    /// Handles mouse right-click for URL copy.
+    ///
+    /// SPEC-V0-2-0-OSC8-LIFECYCLE-001 MS-2 (REQ-OL-013).
+    /// Converts column to byte offset, then delegates to `copy_url_at`.
+    pub fn handle_click_for_copy(
+        &mut self,
+        _row: u16,
+        col: u16,
+        line_text: &str,
+        _cx: &mut Context<Self>,
+    ) {
+        let byte_offset = moai_studio_terminal::link::col_to_byte_offset(line_text, col as usize);
+        if let Some(url) = copy_url_at(
+            line_text,
+            byte_offset,
+            &mut self.visited_links,
+            self.clipboard_writer.as_ref(),
+        ) {
+            tracing::info!(url = %url, "ClickAction::CopyUrl wrote to clipboard");
+        }
+    }
+
     /// Handles mouse click events on terminal surface.
     ///
     /// AC-LK-4: FilePath span click → log OpenCodeViewer action
@@ -336,6 +377,8 @@ impl TerminalSurface {
                 ClickAction::OpenUrl(moai_studio_terminal::link::OpenUrl { url }) => {
                     // AC-LK-5: open URL in default browser
                     cx.open_url(&url);
+                    // REQ-OL-015: mark visited on left-click OpenUrl
+                    self.visited_links.mark_visited(url.clone());
                     tracing::debug!(url = %url, "Opened URL in browser");
                     // Emit event for RootView to handle
                     cx.emit(TerminalClickEvent::OpenUrl(url.clone()));
@@ -361,6 +404,42 @@ impl TerminalSurface {
 impl Default for TerminalSurface {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// ============================================================
+// copy_url_at — pure logic helper (cx-free, unit-testable)
+// ============================================================
+
+// @MX:NOTE: [AUTO] copy-url-helper-pure-logic
+// @MX:SPEC: SPEC-V0-2-0-OSC8-LIFECYCLE-001 MS-2 (REQ-OL-012)
+// Fan-in: handle_click_for_copy + tests (>=2).
+
+/// Resolves a URL copy action for the given position in a terminal line.
+///
+/// SPEC-V0-2-0-OSC8-LIFECYCLE-001 MS-2 (REQ-OL-012).
+///
+/// Returns `Some(url)` if a URL/OSC-8 span is found at `byte_offset` and the
+/// clipboard write succeeds (or fails-soft with a `tracing::warn!`).
+/// Returns `None` for FilePath / SpecId spans or positions with no span.
+///
+/// **No `cx` dependency** — designed to be unit-tested without a GPUI context.
+pub(crate) fn copy_url_at(
+    line_text: &str,
+    byte_offset: usize,
+    visited: &mut VisitedLinkRegistry,
+    writer: &(dyn ClipboardWriter + Send + Sync),
+) -> Option<String> {
+    if let Some(ClickAction::CopyUrl(OpenUrl { url })) =
+        moai_studio_terminal::link::resolve_click_for_copy(line_text, byte_offset)
+    {
+        if let Err(e) = writer.write(&url) {
+            tracing::warn!(error = %e, "clipboard write failed");
+        }
+        visited.mark_visited(url.clone());
+        Some(url)
+    } else {
+        None
     }
 }
 
@@ -394,7 +473,7 @@ impl Render for TerminalSurface {
             .flex()
             .flex_col()
             .p_2()
-            // AC-LK-4/5: Wire mouse click to handle_click for link detection
+            // AC-LK-4/5: Wire left-click to handle_click for link open
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, event: &MouseDownEvent, _window, cx| {
@@ -403,6 +482,17 @@ impl Render for TerminalSurface {
                     let (row, col) = this.pixel_to_cell(x, y);
                     let line = this.state.row0_text.clone();
                     this.handle_click(row, col, &line, cx);
+                }),
+            )
+            // REQ-OL-014: Wire right-click to handle_click_for_copy for URL copy
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |this, event: &MouseDownEvent, _window, cx| {
+                    let x = f32::from(event.position.x);
+                    let y = f32::from(event.position.y);
+                    let (row, col) = this.pixel_to_cell(x, y);
+                    let line = this.state.row0_text.clone();
+                    this.handle_click_for_copy(row, col, &line, cx);
                 }),
             );
 
@@ -726,5 +816,72 @@ mod tests {
             byte_offset, 7,
             "UTF-8 byte offset should be calculated correctly"
         );
+    }
+
+    // ── SPEC-V0-2-0-OSC8-LIFECYCLE-001 MS-2 — copy_url_at + visited tracking tests ──
+
+    use crate::terminal::clipboard::MockClipboardWriter;
+    use moai_studio_terminal::link::VisitedLinkRegistry;
+
+    /// AC-OL-11: copy_url_at returns the URL and marks it visited when a URL span is hit.
+    #[test]
+    fn copy_url_at_url_returns_url_and_marks_visited() {
+        let mut visited = VisitedLinkRegistry::default();
+        let mock = MockClipboardWriter::default();
+        let line = "see https://example.com/foo for details";
+        let col = line.find("example").unwrap();
+        let byte = moai_studio_terminal::link::col_to_byte_offset(line, col);
+        let result = copy_url_at(line, byte, &mut visited, &mock);
+        assert_eq!(result.as_deref(), Some("https://example.com/foo"));
+        assert_eq!(mock.contents(), vec!["https://example.com/foo"]);
+        assert!(visited.is_visited("https://example.com/foo"));
+    }
+
+    /// AC-OL-12 case 1: copy_url_at returns None for a FilePath span.
+    #[test]
+    fn copy_url_at_file_path_returns_none() {
+        let mut visited = VisitedLinkRegistry::default();
+        let mock = MockClipboardWriter::default();
+        let line = "error at src/main.rs:42:10 here";
+        let col = line.find("main").unwrap();
+        let byte = moai_studio_terminal::link::col_to_byte_offset(line, col);
+        let result = copy_url_at(line, byte, &mut visited, &mock);
+        assert!(result.is_none());
+        assert!(mock.contents().is_empty());
+        assert_eq!(visited.count(), 0);
+    }
+
+    /// AC-OL-12 case 2: copy_url_at returns None for a SPEC-ID span.
+    #[test]
+    fn copy_url_at_spec_id_returns_none() {
+        let mut visited = VisitedLinkRegistry::default();
+        let mock = MockClipboardWriter::default();
+        let line = "Working on SPEC-V3-001 today";
+        let col = line.find("V3").unwrap();
+        let byte = moai_studio_terminal::link::col_to_byte_offset(line, col);
+        let result = copy_url_at(line, byte, &mut visited, &mock);
+        assert!(result.is_none());
+        assert!(mock.contents().is_empty());
+        assert_eq!(visited.count(), 0);
+    }
+
+    /// AC-OL-12 case 3: copy_url_at returns None for plain text (no span).
+    #[test]
+    fn copy_url_at_plain_text_returns_none() {
+        let mut visited = VisitedLinkRegistry::default();
+        let mock = MockClipboardWriter::default();
+        let line = "plain text no links here";
+        let byte = moai_studio_terminal::link::col_to_byte_offset(line, 5);
+        let result = copy_url_at(line, byte, &mut visited, &mock);
+        assert!(result.is_none());
+        assert!(mock.contents().is_empty());
+        assert_eq!(visited.count(), 0);
+    }
+
+    /// AC-OL-13: TerminalSurface::new() initializes visited_links as empty.
+    #[test]
+    fn terminal_surface_new_default_visited_links_empty() {
+        let s = TerminalSurface::new();
+        assert_eq!(s.visited_links.count(), 0);
     }
 }
