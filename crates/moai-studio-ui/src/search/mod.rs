@@ -12,9 +12,11 @@
 //! - [`keymap`]: `ToggleSearchPanel` action definition for ⌘⇧F / Ctrl+Shift+F.
 
 pub mod keymap;
+pub mod navigation;
 pub mod panel;
 pub mod result_view;
 
 pub use keymap::ToggleSearchPanel;
+pub use navigation::{NavigationOutcome, hit_to_open_code_viewer, touch_workspace};
 pub use panel::{SearchPanel, SearchStatus};
-pub use result_view::{extract_highlight_span, format_row_label};
+pub use result_view::{extract_highlight_span, format_row_label, on_row_click};

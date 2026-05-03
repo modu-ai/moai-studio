@@ -200,6 +200,17 @@ impl SearchPanel {
         }
     }
 
+    // ── Navigation wire — MS-3 (REQ-GS-040) ──
+
+    /// Record that a result row was clicked, returning the `SearchHit` to
+    /// navigate to. The actual navigation side-effects (workspace activate,
+    /// new tab, scroll-to-line) are performed by `RootView::handle_search_open`.
+    ///
+    /// Returns `None` when `index` is out of bounds — no panic (REQ-GS-042).
+    pub fn hit_for_row_click(&self, index: usize) -> Option<&SearchHit> {
+        self.results.get(index)
+    }
+
     // ── Batch flush ──
 
     /// Append a single hit to the pending buffer (REQ-GS-034).
