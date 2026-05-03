@@ -2,8 +2,8 @@
 
 **Started**: 2026-05-01 sess 8 (planning phase)
 **Branch**: `feature/SPEC-V0-2-0-GLOBAL-SEARCH-001-ms1-engine`
-**SPEC status**: ready (annotation iteration 1 complete 2026-05-02 sess 9, USER-DECISION 3건 모두 (a) lock-in)
-**Completion date**: TBD
+**SPEC status**: implemented (MS-1/2/3/4 모두 ✅ PASS, 12 AC 모두 ✅ PASS — 2026-05-04 sess 10)
+**Completion date**: 2026-05-04 sess 10 (PR #81 머지 시 GA 확정)
 
 ## Implementation Timeline
 
@@ -15,13 +15,15 @@
 | 2026-05-03 | sess 9 | MS-1 PR #78 admin merge | merge commit `6409fc44`, mergedAt 2026-05-03T17:11:59Z. CI fail (moai-git stash::tests) 가 본 PR 영향 외 별 환경 의존 (git env on CI runner) 으로 admin override. main 동기화 완료. |
 | 2026-05-04 | sess 10 | MS-2 implementation (manager-tdd 위임) | `crates/moai-studio-ui/src/search/` 신규 모듈 (mod / panel / result_view / keymap) + RootView 통합 (`search_panel: Option<Entity<SearchPanel>>` 필드 + `handle_toggle_search_panel` + KeyBinding ⌘⇧F/Ctrl+Shift+F) + `moai-search` dep 추가 — AC-GS-7/8/9/12 (UI) PASS, 21 search:: tests, ui crate 1144 → 1165 (+21), clippy 0 warning, fmt clean, 워크스페이스 회귀 0. |
 | 2026-05-04 | sess 10 | MS-3 implementation (manager-tdd 위임) | `navigation.rs` 신규 (hit_to_open_code_viewer + touch_workspace + NavigationOutcome) + `result_view.on_row_click` + `panel.hit_for_row_click` + `RootView::handle_search_open` / `handle_search_open_with_cx` / `dispatch_command_workspace_search` + `palette/registry.rs` workspace.search label/keybinding 갱신 + `last_open_code_viewer` 필드 추가 — AC-GS-10/11 PASS, 15 신규 tests, ui crate 1165 → 1180 (+15), clippy 0 warning, fmt clean, 워크스페이스 회귀 0. |
+| 2026-05-04 | sess 10 | MS-3 PR #80 admin merge | merge commit `e132e6f8`, mergedAt 2026-05-03T17:43:08Z. CI fail (moai-git stash::tests, MS-1/2 동일 별 환경 의존) admin override. main 동기화. |
+| 2026-05-04 | sess 10 | MS-4 implementation (manager-tdd 위임) | panel.rs (TOTAL_HIT_CAP=1000 const + cap_message + add_hit cap 가드 + selected_index 키보드 nav + workspace_progress 맵), result_view.rs (extract_preview_segments 3-segment helper), mod.rs re-export, tests/integration_search.rs 신규 (12 e2e tests — search flow / palette / cap / keyboard nav / open call) — MS-4 task T1~T5 PASS, search:: 28 → 41 (+13 unit), ui crate 1180 → 1193 (+13), integration 12 PASS, clippy 0 warning, fmt clean, 워크스페이스 회귀 0. **AC 12건 모두 PASS — SPEC GA 준비 완료**. |
 
 ## Milestone Status
 
 - [x] **MS-1**: `crates/moai-search/` 신규 crate — `SearchSession` / `SearchHit` / `SearchOptions` / `CancelToken` + walker (ignore::WalkBuilder) + matcher (regex/literal fallback) + cancel token. AC-GS-1 ~ AC-GS-6 ✅ PASS (sess 9 manager-tdd, 2026-05-02). PR #78 merge `6409fc44` 2026-05-03.
 - [x] **MS-2**: `crates/moai-studio-ui/src/search/` 모듈 — SearchPanel GPUI Entity + result row rendering + RootView 통합 + ⌘⇧F dispatch. AC-GS-7, AC-GS-8, AC-GS-9, AC-GS-12 (UI 측) ✅ PASS (sess 10 manager-tdd, 2026-05-04). 사이드바 visibility render mount 는 MS-3 carry.
-- [x] **MS-3**: navigation wire — SearchHit click → workspace activate + new tab + line jump (OpenCodeViewer adapter). Command Palette `workspace.search` entry handler dispatch + label/keybinding 갱신. AC-GS-10, AC-GS-11. ✅ PASS (sess 10 manager-tdd, 2026-05-04). 15 신규 tests, ui 1165 → 1180.
-- [ ] **MS-4**: polish — backpressure (1000 cap auto-cancel + message), per-workspace progress spinner, ↑↓ keyboard navigation, match highlight in preview, integration test `tests/integration_search.rs`. final regression sweep.
+- [x] **MS-3**: navigation wire — SearchHit click → workspace activate + new tab + line jump (OpenCodeViewer adapter). Command Palette `workspace.search` entry handler dispatch + label/keybinding 갱신. AC-GS-10, AC-GS-11 ✅ PASS (sess 10 manager-tdd, 2026-05-04). PR #80 merge `e132e6f8` 2026-05-03.
+- [x] **MS-4**: polish — TOTAL_HIT_CAP=1000 auto-cancel + cap_message, per-workspace progress map, ↑↓ keyboard nav (selected_index + move_up/down + enter_selected + escape_pressed), match highlight 3-segment splitter (extract_preview_segments), integration test `tests/integration_search.rs` 12 e2e — final regression sweep ✅ PASS (sess 10 manager-tdd, 2026-05-04). 13 신규 unit + 12 integration, ui 1180 → 1193.
 
 ## USER-DECISION Resolutions
 
@@ -90,16 +92,18 @@
 - `cargo fmt --check`: clean
 - `cargo build --workspace`: GREEN, 회귀 0
 
-### MS-4 목표 (carry):
-- `cargo test -p moai-search` — engine 단위 테스트, AC-GS-1~6 검증
-- `cargo test -p moai-studio-ui --lib search::tests` — UI 단위 테스트, AC-GS-9/12 검증
-- `cargo test -p moai-studio-ui --test integration_search` (신규) — integration, AC-GS-7/8/10 검증
-- `cargo clippy --workspace -- -D warnings` 0 warning
-- `cargo fmt --check` clean
+### MS-4 실측 (sess 10, 2026-05-04)
 
-v0.1.2 GA baseline 회귀 0:
-- 1148 ui crate tests 보존
-- workspace + terminal + spec + 기타 crates 테스트 모두 GREEN
+- `cargo test -p moai-studio-ui --lib search::`: **41 unit tests PASS** (MS-3 28 + MS-4 13: cap auto-cancel + cap_message + per-workspace progress + selected_index nav + move_up/down + enter_selected + escape_pressed + extract_preview_segments 3-segment)
+- `cargo test -p moai-studio-ui --test integration_search`: **12 integration tests PASS** (e2e search flow / palette workspace.search / total cap auto-cancel / keyboard navigation / open call resolves OCV / unknown workspace no-panic / 등)
+- `cargo test -p moai-studio-ui --lib`: **1193 PASS** (baseline 1180 + 13 신규)
+- `cargo clippy -p moai-studio-ui --all-targets -- -D warnings`: 0 warning
+- `cargo fmt --check`: clean
+- `cargo build --workspace`: GREEN, 회귀 0
+
+### Final SPEC GA 회귀 보존
+
+v0.1.2 GA baseline 회귀 0 — ui 1148 → 1193 (+45 신규 across MS-1~MS-4 + integration 12), terminal / workspace / spec / 기타 crates 모두 GREEN.
 
 ## Known Limitations (lock-in 후, v1 scope)
 
