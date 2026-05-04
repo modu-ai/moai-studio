@@ -2522,6 +2522,23 @@ fn workspace_section(is_empty: bool, rows: Vec<gpui::Stateful<gpui::Div>>) -> im
 /// - inactive: BORDER_STRONG dim outline — 시각적 우선순위 낮춤
 ///
 /// 이전 v0.1.0 에서는 모든 row 가 ws.color (orange-red) 로 동일하여 active 구분이 어려웠음.
+// SPEC-V0-3-0-WORKSPACE-DOT-COLOR-001 (REQ-WDC-001): dot color helper.
+//
+// Returns (inner_color, outer_ring_color). The inner color always reflects the
+// workspace's user-chosen color tag; the outer ring is `Some(tok::ACCENT)` when
+// the row is the active workspace, providing an accent halo on top of the tag
+// color. Active state is no longer encoded by the inner color itself, so the
+// chosen color tag is always visible.
+pub(crate) fn workspace_dot_color(ws_color: u32, is_active: bool) -> (u32, Option<u32>) {
+    let outer = if is_active { Some(tok::ACCENT) } else { None };
+    (ws_color, outer)
+}
+
+// SPEC-V0-3-0-WORKSPACE-DOT-COLOR-001 (REQ-WDC-002, REQ-WDC-004): the inner
+// dot now carries `ws.color` (from WORKSPACE_COLOR_PALETTE via
+// SPEC-V0-3-0-WORKSPACE-COLOR-001), and active rows gain a 1px outer ring in
+// `tok::ACCENT`. Prior to this SPEC the inner dot was hardcoded to
+// `tok::ACCENT` / `tok::BORDER_STRONG`, masking the user-chosen color tag.
 fn workspace_row(ws: &Workspace, is_active: bool) -> gpui::Stateful<gpui::Div> {
     let bg = if is_active {
         tok::BG_ELEVATED
@@ -2533,11 +2550,15 @@ fn workspace_row(ws: &Workspace, is_active: bool) -> gpui::Stateful<gpui::Div> {
     } else {
         tok::FG_SECONDARY
     };
-    let dot_color = if is_active {
-        tok::ACCENT
-    } else {
-        tok::BORDER_STRONG
-    };
+    let (inner_color, outer_ring) = workspace_dot_color(ws.color, is_active);
+    let mut dot = div()
+        .w(px(8.))
+        .h(px(8.))
+        .rounded_full()
+        .bg(rgb(inner_color));
+    if let Some(ring) = outer_ring {
+        dot = dot.border_1().border_color(rgb(ring));
+    }
     div()
         .id(gpui::SharedString::from(format!("ws-row-{}", ws.id)))
         .flex()
@@ -2550,7 +2571,7 @@ fn workspace_row(ws: &Workspace, is_active: bool) -> gpui::Stateful<gpui::Div> {
         .bg(rgb(bg))
         .hover(|s| s.bg(rgb(tok::BG_ELEVATED)))
         .cursor_pointer()
-        .child(div().w(px(8.)).h(px(8.)).rounded_full().bg(rgb(dot_color)))
+        .child(dot)
         .child(div().text_sm().text_color(rgb(fg)).child(ws.name.clone()))
 }
 
@@ -6179,6 +6200,54 @@ mod tests {
             view.color_picker_modal.is_none(),
             "modal dismissed even on err"
         );
+    }
+
+    // ── SPEC-V0-3-0-WORKSPACE-DOT-COLOR-001 (AC-WDC-1~5) ──
+
+    /// AC-WDC-1: inactive row → (ws_color, None).
+    #[test]
+    fn workspace_dot_color_inactive_returns_ws_color_only() {
+        let (inner, outer) = super::workspace_dot_color(0xff0000, false);
+        assert_eq!(inner, 0xff0000);
+        assert_eq!(outer, None);
+    }
+
+    /// AC-WDC-2: active row → (ws_color, Some(ACCENT)).
+    #[test]
+    fn workspace_dot_color_active_returns_ws_color_plus_accent_ring() {
+        let (inner, outer) = super::workspace_dot_color(0x00ff00, true);
+        assert_eq!(inner, 0x00ff00);
+        assert_eq!(outer, Some(tok::ACCENT));
+    }
+
+    /// AC-WDC-3: 12 palette entries × {active, inactive} 모두 inner == 입력
+    /// ws_color, outer 는 active 일 때만 Some.
+    #[test]
+    fn workspace_dot_color_table_for_all_palette_entries() {
+        for &color in workspace_color::WORKSPACE_COLOR_PALETTE.iter() {
+            let (inner_a, outer_a) = super::workspace_dot_color(color, true);
+            assert_eq!(inner_a, color, "active inner == ws_color");
+            assert_eq!(outer_a, Some(tok::ACCENT), "active outer == ACCENT");
+
+            let (inner_i, outer_i) = super::workspace_dot_color(color, false);
+            assert_eq!(inner_i, color, "inactive inner == ws_color");
+            assert_eq!(outer_i, None, "inactive outer is None");
+        }
+    }
+
+    /// AC-WDC-4: workspace_row(active) returns without panic.
+    #[test]
+    fn workspace_row_active_smoke() {
+        let ws = make_ws("alpha", "alpha", 100);
+        // The row builder must not panic. We do not assert on element tree.
+        let _row = super::workspace_row(&ws, true);
+    }
+
+    /// AC-WDC-5: workspace_row(inactive) returns without panic.
+    #[test]
+    fn workspace_row_inactive_smoke() {
+        let ws = make_ws("alpha", "alpha", 100);
+        let _row = super::workspace_row(&ws, false);
     }
 
     /// AC-MW-7: sidebar_visible 토글이 main_body 의 sidebar 분기를 제어한다.
