@@ -632,6 +632,47 @@ impl RootView {
         self.rename_modal = None;
     }
 
+    // ── SPEC-V0-3-0-COLOR-PICKER-RENDER-001 (REQ-CPR-001~003) ──
+    // ColorPickerModal lifecycle: commit/cancel/select. Render side mounts at
+    // render() body parallel to rename_modal / delete_confirmation overlays.
+
+    /// Commit the open color picker modal: persist the selected color via
+    /// `store.set_color`, mirror into `self.workspaces`, and close the modal.
+    ///
+    /// Returns `Some((ws_id, color))` on success. Returns `None` when the
+    /// modal is closed, or the store rejects the change (target not found).
+    /// AC-CPR-1, AC-CPR-2, AC-CPR-6.
+    pub fn commit_color_picker_modal(&mut self) -> Option<(String, u32)> {
+        let modal = self.color_picker_modal.as_ref()?;
+        let ws_id = modal.target().to_string();
+        let color = modal.selected_color();
+        if let Err(e) = self.store.set_color(&ws_id, color) {
+            tracing::warn!(
+                error = ?e,
+                ws_id,
+                "commit_color_picker_modal: store.set_color failed"
+            );
+            self.color_picker_modal = None;
+            return None;
+        }
+        self.color_picker_modal = None;
+        self.sync_workspaces_from_store();
+        Some((ws_id, color))
+    }
+
+    /// Cancel the open color picker modal without persisting. AC-CPR-3.
+    pub fn cancel_color_picker_modal(&mut self) {
+        self.color_picker_modal = None;
+    }
+
+    /// Update the in-progress selection on the open color picker modal.
+    /// No-op when the modal is closed. AC-CPR-4, AC-CPR-5.
+    pub fn color_picker_select(&mut self, color: u32) {
+        if let Some(modal) = self.color_picker_modal.as_mut() {
+            modal.select(color);
+        }
+    }
+
     // @MX:NOTE: [AUTO] REQ-D2-MS6-4 — confirm_delete_modal removes via store,
     //   mirrors into self.workspaces, and reassigns active_id when the deleted
     //   workspace was active to avoid a dangling reference.
@@ -2260,6 +2301,13 @@ impl Render for RootView {
                     .as_ref()
                     .map(|c| render_delete_confirmation_overlay(c, cx)),
             )
+            // SPEC-V0-3-0-COLOR-PICKER-RENDER-001 (REQ-CPR-006): color picker overlay.
+            // Mounted when color_picker_modal == Some. Parent SPEC carry-forward #1.
+            .children(
+                self.color_picker_modal
+                    .as_ref()
+                    .map(|m| render_color_picker_overlay(m, cx)),
+            )
             // SPEC-V0-2-0-MISSION-CTRL-001 MS-2 (REQ-MC-024): Mission Control overlay.
             // Mounted when mission_control == Some. Activation trigger (command palette
             // entry / key bind) is a follow-up PR per SPEC §7.
@@ -3021,6 +3069,125 @@ fn render_rename_modal_overlay(
                                     MouseButton::Left,
                                     cx.listener(|this, _ev, _window, cx| {
                                         let _ = this.commit_rename_modal();
+                                        cx.notify();
+                                    }),
+                                ),
+                        ),
+                ),
+        )
+}
+
+/// SPEC-V0-3-0-COLOR-PICKER-RENDER-001 (REQ-CPR-004, REQ-CPR-005):
+/// Color picker overlay for workspace color tags.
+///
+/// Centered scrim + 360px card containing a 4×3 swatch grid (12 palette
+/// colors), Cancel and Commit buttons. Each swatch dispatches
+/// `color_picker_select(color)`. The currently-selected swatch carries a
+/// 2px white border for emphasis. Visual idiom matches
+/// `render_rename_modal_overlay`.
+fn render_color_picker_overlay(
+    modal: &workspace_menu::ColorPickerModal,
+    cx: &mut Context<RootView>,
+) -> impl IntoElement {
+    let selected = modal.selected_color();
+    let palette = workspace_color::WORKSPACE_COLOR_PALETTE;
+
+    // Build 3 rows of 4 swatches each (12 total).
+    let mut rows: Vec<gpui::Div> = Vec::with_capacity(3);
+    for row_idx in 0..3 {
+        let mut row = div().flex().flex_row().gap_2();
+        for col_idx in 0..4 {
+            let i = row_idx * 4 + col_idx;
+            let color = palette[i];
+            let is_selected = color == selected;
+            let mut swatch = div()
+                .id(("color-picker-swatch", i))
+                .w(px(28.0))
+                .h(px(28.0))
+                .rounded_md()
+                .bg(rgb(color))
+                .cursor_pointer()
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, _ev, _window, cx| {
+                        this.color_picker_select(color);
+                        cx.notify();
+                    }),
+                );
+            if is_selected {
+                swatch = swatch.border_2().border_color(rgb(tok::FG_PRIMARY));
+            } else {
+                swatch = swatch.border_1().border_color(rgb(tok::BORDER_SUBTLE));
+            }
+            row = row.child(swatch);
+        }
+        rows.push(row);
+    }
+
+    div()
+        .absolute()
+        .inset_0()
+        .bg(gpui::rgba(0x08_0c_0b_8c)) // scrim dark — palette/settings parity
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .child(
+            div()
+                .w(px(360.0))
+                .bg(rgb(crate::design::tokens::theme::dark::background::PANEL))
+                .rounded_lg()
+                .p_4()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(rgb(tok::FG_PRIMARY))
+                        .child("Pick Workspace Color"),
+                )
+                .child(div().flex().flex_col().gap_2().children(rows))
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .gap_2()
+                        .justify_end()
+                        .child(
+                            div()
+                                .id("color-picker-cancel")
+                                .px_3()
+                                .py_1()
+                                .rounded_md()
+                                .bg(rgb(tok::BG_SURFACE))
+                                .text_sm()
+                                .text_color(rgb(tok::FG_SECONDARY))
+                                .cursor_pointer()
+                                .child("Cancel")
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(|this, _ev, _window, cx| {
+                                        this.cancel_color_picker_modal();
+                                        cx.notify();
+                                    }),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .id("color-picker-commit")
+                                .px_3()
+                                .py_1()
+                                .rounded_md()
+                                .bg(rgb(tok::ACCENT))
+                                .text_sm()
+                                .text_color(rgb(tok::FG_PRIMARY))
+                                .cursor_pointer()
+                                .child("Commit")
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(|this, _ev, _window, cx| {
+                                        let _ = this.commit_color_picker_modal();
                                         cx.notify();
                                     }),
                                 ),
@@ -5882,6 +6049,136 @@ mod tests {
     fn color_picker_modal_defaults_to_none() {
         let view = RootView::new(vec![], dummy_path());
         assert!(view.color_picker_modal.is_none());
+    }
+
+    // ── SPEC-V0-3-0-COLOR-PICKER-RENDER-001 (AC-CPR-1~6) ──
+
+    /// AC-CPR-1: commit on closed modal returns None and is a no-op.
+    #[test]
+    fn commit_color_picker_modal_returns_none_when_modal_closed() {
+        let mut view = RootView::new(vec![], dummy_path());
+        assert!(view.color_picker_modal.is_none());
+        let outcome = view.commit_color_picker_modal();
+        assert!(outcome.is_none());
+        assert!(view.color_picker_modal.is_none());
+    }
+
+    /// AC-CPR-2: commit persists selected color via store and syncs sidebar.
+    #[test]
+    fn commit_color_picker_modal_persists_color_and_syncs_sidebar() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let path = tmp.path().join("ws.json");
+        let mut seed = moai_studio_workspace::WorkspacesStore::empty(path.clone());
+        let initial_color = workspace_color::WORKSPACE_COLOR_PALETTE[0];
+        seed.add(make_ws("alpha", "alpha", 100)).expect("seed");
+        // Apply initial color to seed so we can detect the change.
+        seed.set_color("ws-alpha", initial_color)
+            .expect("seed color");
+
+        let initial_workspaces = seed.list().to_vec();
+        let mut view = RootView::new(initial_workspaces, path);
+        // RootView::new constructs an empty in-memory store; install the seed.
+        view.store = seed;
+
+        // Open modal targeting ws-alpha with current color, then select a
+        // distinct palette entry.
+        let new_color = workspace_color::WORKSPACE_COLOR_PALETTE[5];
+        view.color_picker_modal = Some(workspace_menu::ColorPickerModal::open(
+            "ws-alpha",
+            initial_color,
+        ));
+        view.color_picker_select(new_color);
+
+        let outcome = view.commit_color_picker_modal();
+        assert_eq!(outcome, Some(("ws-alpha".to_string(), new_color)));
+        assert!(view.color_picker_modal.is_none(), "modal dismissed");
+        // Sidebar mirror reflects the new color.
+        let synced = view
+            .workspaces
+            .iter()
+            .find(|w| w.id == "ws-alpha")
+            .expect("ws-alpha present");
+        assert_eq!(synced.color, new_color, "sidebar synced from store");
+    }
+
+    /// AC-CPR-3: cancel dismisses the modal without persisting any change.
+    #[test]
+    fn cancel_color_picker_modal_dismisses_without_change() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let path = tmp.path().join("ws.json");
+        let mut seed = moai_studio_workspace::WorkspacesStore::empty(path.clone());
+        let initial_color = workspace_color::WORKSPACE_COLOR_PALETTE[0];
+        seed.add(make_ws("alpha", "alpha", 100)).expect("seed");
+        seed.set_color("ws-alpha", initial_color)
+            .expect("seed color");
+
+        let initial_workspaces = seed.list().to_vec();
+        let mut view = RootView::new(initial_workspaces, path);
+        view.store = seed;
+        view.color_picker_modal = Some(workspace_menu::ColorPickerModal::open(
+            "ws-alpha",
+            initial_color,
+        ));
+        // Even after a select, cancel must not persist.
+        view.color_picker_select(workspace_color::WORKSPACE_COLOR_PALETTE[3]);
+        view.cancel_color_picker_modal();
+        assert!(view.color_picker_modal.is_none());
+
+        // In-memory workspaces unchanged (still palette[0]).
+        let unchanged = view
+            .workspaces
+            .iter()
+            .find(|w| w.id == "ws-alpha")
+            .expect("ws-alpha present");
+        assert_eq!(unchanged.color, initial_color, "in-memory unchanged");
+    }
+
+    /// AC-CPR-4: select updates the in-progress selected_color when modal open.
+    #[test]
+    fn color_picker_select_updates_selected_when_open() {
+        let mut view = RootView::new(vec![], dummy_path());
+        let initial = workspace_color::WORKSPACE_COLOR_PALETTE[0];
+        let next = workspace_color::WORKSPACE_COLOR_PALETTE[7];
+        view.color_picker_modal = Some(workspace_menu::ColorPickerModal::open(
+            "ws-anything",
+            initial,
+        ));
+        view.color_picker_select(next);
+        let modal = view.color_picker_modal.as_ref().expect("modal open");
+        assert_eq!(modal.selected_color(), next);
+        assert_eq!(modal.target(), "ws-anything", "target preserved");
+    }
+
+    /// AC-CPR-5: select is a no-op when the modal is closed (no panic).
+    #[test]
+    fn color_picker_select_is_noop_when_modal_closed() {
+        let mut view = RootView::new(vec![], dummy_path());
+        assert!(view.color_picker_modal.is_none());
+        view.color_picker_select(workspace_color::WORKSPACE_COLOR_PALETTE[2]);
+        assert!(view.color_picker_modal.is_none());
+    }
+
+    /// AC-CPR-6: commit handles missing target gracefully — store rejects with
+    /// NotFound, modal is dismissed, return value is None.
+    #[test]
+    fn commit_color_picker_modal_handles_missing_target_gracefully() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let path = tmp.path().join("ws.json");
+        // Empty store on disk so any target_id will be NotFound.
+        let seed = moai_studio_workspace::WorkspacesStore::empty(path.clone());
+        seed.save().expect("save empty");
+
+        let mut view = RootView::new(vec![], path);
+        view.color_picker_modal = Some(workspace_menu::ColorPickerModal::open(
+            "ws-missing",
+            workspace_color::WORKSPACE_COLOR_PALETTE[0],
+        ));
+        let outcome = view.commit_color_picker_modal();
+        assert!(outcome.is_none());
+        assert!(
+            view.color_picker_modal.is_none(),
+            "modal dismissed even on err"
+        );
     }
 
     /// AC-MW-7: sidebar_visible 토글이 main_body 의 sidebar 분기를 제어한다.
