@@ -4,7 +4,7 @@
 |-------|-------|
 | **ID** | SPEC-V0-3-0-PALETTE-POLISH-001 |
 | **Title** | CommandRegistry 확장 60+ entries (recent files / plugin actions / layout / help / spec) |
-| **Status** | in_progress |
+| **Status** | merged (PR #102, 2026-05-04 main 9dd0c69) — MS-1 100% (44→69 entries / 11→15 categories). fuzzy weight + GPUI category render carry. |
 | **Priority** | Low (P3 polish) |
 | **Revision** | 1.0 (lightweight) |
 | **Dependencies** | SPEC-V3-012 MS-4 (CommandRegistry baseline) |

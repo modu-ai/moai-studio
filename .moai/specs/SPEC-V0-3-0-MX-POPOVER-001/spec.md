@@ -4,7 +4,7 @@
 |-------|-------|
 | **ID** | SPEC-V0-3-0-MX-POPOVER-001 |
 | **Title** | MXGutterLine hover detection + MXPopover render/dismiss + content fetch from MxAnnotation |
-| **Status** | in_progress |
+| **Status** | merged (PR #103, 2026-05-04 main 77388b6) — MS-1 100%. ui +12 tests (1332→1344). 키보드 nav / ARIA / click-to-pin / multi-tag / WARN UI carry to MS-2. |
 | **Priority** | Low (P3 polish) |
 | **Revision** | 1.0 (lightweight) |
 | **Dependencies** | SPEC-V3-006 MS-3a (MxTagScanner / MxPopoverData / GutterIcon 자료구조 — 이미 land) |
