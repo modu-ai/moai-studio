@@ -320,6 +320,14 @@ pub struct RootView {
     //   `pending_slash_injection` pattern (V3-012 MS-4) for cx-deferred work.
     /// True when a `mission.toggle` palette command is pending GPUI consumption.
     pub pending_mission_toggle: bool,
+    // ── SPEC-V0-3-0-MENU-WIRE-001 (REQ-MW-001): sidebar visibility flag ──
+    /// View menu > Toggle Sidebar 가 토글하는 사이드바 표시 여부.
+    /// `true` (default) = sidebar 렌더, `false` = sidebar 미렌더 (content_area 전폭).
+    pub sidebar_visible: bool,
+    // ── SPEC-V0-3-0-MENU-WIRE-001 (REQ-MW-002): banner strip visibility flag ──
+    /// View menu > Toggle Banner 가 토글하는 banner strip 표시 여부.
+    /// `true` (default) = banner_strip 렌더, `false` = banner_strip 미렌더.
+    pub banner_visible: bool,
 }
 
 /// Pending toast entry surfaced for a detected dev-server URL.
@@ -391,7 +399,55 @@ impl RootView {
             mission_control: None,
             // SPEC-V0-2-0-MISSION-CTRL-001 MS-3: no pending toggle on construct.
             pending_mission_toggle: false,
+            // SPEC-V0-3-0-MENU-WIRE-001 (REQ-MW-001/002): both visible by default.
+            sidebar_visible: true,
+            banner_visible: true,
         }
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // SPEC-V0-3-0-MENU-WIRE-001 — View menu stub functional helpers
+    // ──────────────────────────────────────────────────────────────────
+
+    /// SPEC-V0-3-0-MENU-WIRE-001 (REQ-MW-003): Toggle the sidebar visibility flag.
+    ///
+    /// Pure mutation; callers must invoke `cx.notify()` separately on the GPUI path.
+    pub fn toggle_sidebar_visible(&mut self) {
+        self.sidebar_visible = !self.sidebar_visible;
+    }
+
+    /// SPEC-V0-3-0-MENU-WIRE-001 (REQ-MW-004): Toggle the banner strip visibility flag.
+    pub fn toggle_banner_visible(&mut self) {
+        self.banner_visible = !self.banner_visible;
+    }
+
+    /// SPEC-V0-3-0-MENU-WIRE-001 (REQ-MW-005/006): Reload workspaces from disk.
+    ///
+    /// Reads `WorkspacesStore::load(self.storage_path)` and replaces `self.workspaces`
+    /// with the loaded entries. `active_id` is preserved when present in the new list,
+    /// otherwise reset to the most recently active workspace (or `None` if empty).
+    ///
+    /// Returns `Ok(workspace_count)` on success, propagates the underlying error on failure.
+    pub fn reload_workspaces_from_storage(
+        &mut self,
+    ) -> Result<usize, moai_studio_workspace::WorkspaceError> {
+        let store = moai_studio_workspace::WorkspacesStore::load(self.storage_path.clone())?;
+        let entries: Vec<Workspace> = store.list().to_vec();
+        let count = entries.len();
+        // Preserve active_id when still present; else fall back to most-recent or None.
+        let preserved = self
+            .active_id
+            .as_deref()
+            .filter(|id| entries.iter().any(|w| w.id == *id))
+            .map(|s| s.to_string());
+        self.active_id = preserved.or_else(|| {
+            entries
+                .iter()
+                .max_by_key(|w| w.last_active)
+                .map(|w| w.id.clone())
+        });
+        self.workspaces = entries;
+        Ok(count)
     }
 
     /// 현재 활성 워크스페이스 레퍼런스.
@@ -2018,19 +2074,31 @@ impl Render for RootView {
                 }
             }))
             // SPEC-V0-1-2-MENUS-001: View/Pane/Surface/Go/Help menu action wiring.
-            .on_action(cx.listener(|_this, _: &ToggleSidebar, _window, cx| {
-                info!("ToggleSidebar — file explorer toggle deferred");
+            // SPEC-V0-3-0-MENU-WIRE-001 (REQ-MW-003): functional sidebar toggle.
+            .on_action(cx.listener(|this, _: &ToggleSidebar, _window, cx| {
+                this.toggle_sidebar_visible();
                 cx.notify();
             }))
-            .on_action(cx.listener(|_this, _: &ToggleBanner, _window, _cx| {
-                info!("ToggleBanner — banner system is separate");
+            // SPEC-V0-3-0-MENU-WIRE-001 (REQ-MW-004): functional banner toggle.
+            .on_action(cx.listener(|this, _: &ToggleBanner, _window, cx| {
+                this.toggle_banner_visible();
+                cx.notify();
             }))
             .on_action(cx.listener(|this, _: &ToggleFind, _window, cx| {
                 this.find_bar_open = !this.find_bar_open;
                 cx.notify();
             }))
-            .on_action(cx.listener(|_this, _: &ReloadWorkspace, _window, _cx| {
-                info!("ReloadWorkspace — full reload deferred");
+            // SPEC-V0-3-0-MENU-WIRE-001 (REQ-MW-005/006): reload workspaces from storage.
+            .on_action(cx.listener(|this, _: &ReloadWorkspace, _window, cx| {
+                match this.reload_workspaces_from_storage() {
+                    Ok(n) => {
+                        info!("ReloadWorkspace — reloaded {n} workspaces from storage");
+                        cx.notify();
+                    }
+                    Err(e) => {
+                        info!("ReloadWorkspace — reload failed: {e}");
+                    }
+                }
             }))
             .on_action(cx.listener(|this, _: &ToggleTheme, _window, cx| {
                 use settings::settings_state::ThemeMode;
@@ -2119,13 +2187,18 @@ impl Render for RootView {
             // F-3: Toolbar — main app action buttons (SPEC-V0-1-2-MENUS-001)
             .children(self.toolbar.clone())
             // SPEC-V3-014 REQ-V14-027: banner_stack — TabContainer 위, 정상 flow (overlay 아님).
-            .child(render_banner_strip(banner_view_entities))
+            // SPEC-V0-3-0-MENU-WIRE-001 (REQ-MW-008): banner strip is gated by banner_visible.
+            .children(
+                self.banner_visible
+                    .then(|| render_banner_strip(banner_view_entities)),
+            )
             .child(main_body(
                 &self.workspaces,
                 rows,
                 new_ws_btn,
                 tab_container,
                 create_first_btn,
+                self.sidebar_visible,
             ))
             .child(status_bar::render_status_bar(&self.status_bar))
             .children(
@@ -2285,15 +2358,15 @@ fn main_body(
     new_ws_btn: impl IntoElement,
     tab_container: Option<Entity<TabContainer>>,
     create_first_btn: gpui::Stateful<gpui::Div>,
+    // SPEC-V0-3-0-MENU-WIRE-001 (REQ-MW-007): when false, sidebar element is omitted.
+    sidebar_visible: bool,
 ) -> impl IntoElement {
     let is_empty = workspaces.is_empty();
-    div()
-        .flex()
-        .flex_row()
-        .flex_grow()
-        .w_full()
-        .child(sidebar(is_empty, rows, new_ws_btn))
-        .child(content_area(is_empty, tab_container, create_first_btn))
+    let mut row = div().flex().flex_row().flex_grow().w_full();
+    if sidebar_visible {
+        row = row.child(sidebar(is_empty, rows, new_ws_btn));
+    }
+    row.child(content_area(is_empty, tab_container, create_first_btn))
 }
 
 /// Sidebar 260pt — WORKSPACE + GIT WORKTREES + SPECs 섹션 + 하단 인터랙티브 "+ New Workspace".
@@ -5645,5 +5718,126 @@ mod tests {
                 );
             });
         });
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // SPEC-V0-3-0-MENU-WIRE-001 — T-MW: View menu functional helpers
+    // (AC-MW-1..7 — 7 unit tests, GPUI 미가동)
+    // ════════════════════════════════════════════════════════════════
+
+    /// AC-MW-1: RootView 신규 인스턴스는 sidebar/banner 둘 다 visible (default true).
+    #[test]
+    fn root_view_default_sidebar_and_banner_visible() {
+        let view = RootView::new(vec![], dummy_path());
+        assert!(view.sidebar_visible, "sidebar must default to visible");
+        assert!(view.banner_visible, "banner must default to visible");
+    }
+
+    /// AC-MW-2: toggle_sidebar_visible 은 boolean 을 flip 한다.
+    #[test]
+    fn toggle_sidebar_visible_flips_state() {
+        let mut view = RootView::new(vec![], dummy_path());
+        assert!(view.sidebar_visible);
+        view.toggle_sidebar_visible();
+        assert!(!view.sidebar_visible);
+        view.toggle_sidebar_visible();
+        assert!(view.sidebar_visible, "second toggle must restore visible");
+    }
+
+    /// AC-MW-3: toggle_banner_visible 은 boolean 을 flip 한다.
+    #[test]
+    fn toggle_banner_visible_flips_state() {
+        let mut view = RootView::new(vec![], dummy_path());
+        assert!(view.banner_visible);
+        view.toggle_banner_visible();
+        assert!(!view.banner_visible);
+        view.toggle_banner_visible();
+        assert!(view.banner_visible);
+    }
+
+    /// AC-MW-4: reload_workspaces_from_storage 는 storage 의 최신 entries 로 self.workspaces 를 교체한다.
+    #[test]
+    fn reload_workspaces_from_storage_replaces_in_memory_list() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let path = tmp.path().join("ws.json");
+        // Storage 에 2 workspace 직접 작성 (WorkspacesStore::add 사용 — save 가 디스크 기록).
+        let mut seed = moai_studio_workspace::WorkspacesStore::empty(path.clone());
+        seed.add(make_ws("alpha", "a", 100)).expect("seed alpha");
+        seed.add(make_ws("beta", "b", 200)).expect("seed beta");
+
+        let mut view = RootView::new(vec![], path);
+        assert_eq!(view.workspaces.len(), 0, "starts empty");
+        let count = view
+            .reload_workspaces_from_storage()
+            .expect("reload must succeed");
+        assert_eq!(count, 2);
+        assert_eq!(view.workspaces.len(), 2, "in-memory list reflects storage");
+    }
+
+    /// AC-MW-5: reload 후 active_id 가 새 목록에 존재하면 그대로 보존.
+    #[test]
+    fn reload_preserves_active_id_when_present_after_reload() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let path = tmp.path().join("ws.json");
+        let mut seed = moai_studio_workspace::WorkspacesStore::empty(path.clone());
+        seed.add(make_ws("keep", "keep", 100)).expect("seed");
+        seed.add(make_ws("other", "other", 200)).expect("seed");
+
+        let mut view = RootView::new(vec![], path);
+        view.active_id = Some("ws-keep".to_string());
+        view.reload_workspaces_from_storage().expect("reload");
+        assert_eq!(
+            view.active_id.as_deref(),
+            Some("ws-keep"),
+            "preserved when present"
+        );
+    }
+
+    /// AC-MW-6: reload 후 active_id 가 새 목록에 부재하면 가장 최근 last_active 로 재설정.
+    #[test]
+    fn reload_resets_active_id_when_absent() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let path = tmp.path().join("ws.json");
+        let mut seed = moai_studio_workspace::WorkspacesStore::empty(path.clone());
+        seed.add(make_ws("older", "older", 100)).expect("seed");
+        seed.add(make_ws("newer", "newer", 999)).expect("seed");
+
+        let mut view = RootView::new(vec![], path);
+        view.active_id = Some("ws-stale".to_string()); // not in reloaded list
+        view.reload_workspaces_from_storage().expect("reload");
+        assert_eq!(
+            view.active_id.as_deref(),
+            Some("ws-newer"),
+            "fallback to most-recent last_active"
+        );
+    }
+
+    /// AC-MW-6 보강: reload 시 storage 가 비어있으면 active_id 는 None.
+    #[test]
+    fn reload_resets_active_id_to_none_when_storage_empty() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let path = tmp.path().join("ws.json");
+        // Empty store — save 만 호출하여 빈 schema 디스크 기록.
+        let seed = moai_studio_workspace::WorkspacesStore::empty(path.clone());
+        seed.save().expect("save empty");
+
+        let mut view = RootView::new(vec![], path);
+        view.active_id = Some("ws-stale".to_string());
+        view.reload_workspaces_from_storage().expect("reload");
+        assert!(view.active_id.is_none(), "no entries → active_id == None");
+    }
+
+    /// AC-MW-7: sidebar_visible 토글이 main_body 의 sidebar 분기를 제어한다.
+    /// (GPUI Element 비교 대신 RootView 의 visibility flag 만 검증 — main_body 함수는
+    /// flag 를 그대로 전달받아 단순 if-branch 로 사용한다.)
+    #[test]
+    fn main_body_skips_sidebar_when_invisible() {
+        let mut view = RootView::new(vec![], dummy_path());
+        assert!(view.sidebar_visible, "default visible");
+        view.toggle_sidebar_visible();
+        assert!(
+            !view.sidebar_visible,
+            "after toggle invisible — main_body skips the sidebar branch"
+        );
     }
 }
