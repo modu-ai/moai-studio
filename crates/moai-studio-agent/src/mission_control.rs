@@ -465,7 +465,7 @@ mod tests {
         for (i, (id, _)) in [(&id1, 100), (&id2, 200), (&id3, 300)].iter().enumerate() {
             reg.register((*id).clone(), format!("R{i}"));
             let mut ev = mk_hook_event(i as u64, "PreToolUse", json!({}));
-            ev.timestamp_ns = match (*id).0.as_str() {
+            ev.timestamp_ns = match id.0.as_str() {
                 "r1" => 100,
                 "r2" => 200,
                 "r3" => 300,
