@@ -197,6 +197,21 @@ impl WorkspacesStore {
     ///
     /// Returns `Err(EmptyName)` when `new_name` trims to blank.
     /// Returns `Err(NotFound)` when `id` does not exist in the store.
+    /// SPEC-V0-3-0-WORKSPACE-COLOR-001 (REQ-WC-004): Set workspace color by id and persist.
+    ///
+    /// Returns `Err(NotFound)` when `id` does not exist in the store. Color is a packed
+    /// `0xRRGGBB` u32 (zero-extended to 0x00RRGGBB on the JSON wire).
+    pub fn set_color(&mut self, id: &str, color: u32) -> Result<(), WorkspaceError> {
+        let ws = self
+            .file
+            .workspaces
+            .iter_mut()
+            .find(|w| w.id == id)
+            .ok_or_else(|| WorkspaceError::NotFound(id.to_string()))?;
+        ws.color = color;
+        self.save()
+    }
+
     pub fn rename(&mut self, id: &str, new_name: &str) -> Result<(), WorkspaceError> {
         let trimmed = new_name.trim();
         if trimmed.is_empty() {
@@ -667,5 +682,47 @@ mod tests {
         assert!(path.is_ok());
         let p = path.unwrap();
         assert!(p.ends_with("workspaces.json"));
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // SPEC-V0-3-0-WORKSPACE-COLOR-001 — set_color API tests
+    // ════════════════════════════════════════════════════════════════
+
+    /// AC-WC-3: set_color updates the workspace color and persists.
+    #[test]
+    fn set_color_updates_existing_workspace_and_persists() {
+        let tmp_file = std::env::temp_dir().join("moai-ws-set-color.json");
+        std::fs::remove_file(&tmp_file).ok();
+        let project = tmp_dir("project-color");
+
+        let mut store = WorkspacesStore::load(&tmp_file).unwrap();
+        let ws = Workspace::from_path(&project).unwrap();
+        let id = ws.id.clone();
+        store.add(ws).unwrap();
+
+        store
+            .set_color(&id, 0xFF00FF)
+            .expect("set_color must succeed");
+        assert_eq!(store.list()[0].color, 0xFF00FF);
+
+        // Persistence — reload and verify.
+        let reloaded = WorkspacesStore::load(&tmp_file).unwrap();
+        assert_eq!(reloaded.list()[0].color, 0xFF00FF);
+
+        std::fs::remove_file(&tmp_file).ok();
+        std::fs::remove_dir_all(&project).ok();
+    }
+
+    /// AC-WC-4: set_color returns NotFound when id is unknown.
+    #[test]
+    fn set_color_returns_not_found_when_id_missing() {
+        let tmp_file = std::env::temp_dir().join("moai-ws-set-color-missing.json");
+        std::fs::remove_file(&tmp_file).ok();
+
+        let mut store = WorkspacesStore::load(&tmp_file).unwrap();
+        let result = store.set_color("ws-does-not-exist", 0x123456);
+        assert!(matches!(result, Err(WorkspaceError::NotFound(_))));
+
+        std::fs::remove_file(&tmp_file).ok();
     }
 }
