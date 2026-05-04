@@ -110,6 +110,7 @@ actions!(
         ToggleDevTools,
     ]
 );
+use crate::onboarding::{RealCommandRunner, detect_with_runner};
 use moai_studio_workspace::{Workspace, WorkspacesStore};
 use panes::PaneId;
 use std::collections::HashMap;
@@ -1888,7 +1889,40 @@ impl RootView {
                 w.mount();
             });
         }
+        // SPEC-V0-2-0-WIZARD-ENV-001 MS-2 (REQ-WE-012): kick off async env
+        // detect so the wizard banner populates without blocking the UI thread.
+        self.trigger_env_detect(cx);
         cx.notify();
+    }
+
+    /// SPEC-V0-2-0-WIZARD-ENV-001 MS-2 (REQ-WE-012/013): trigger async env
+    /// detect into the project wizard.
+    ///
+    /// Spawns `detect_with_runner(&RealCommandRunner)` on the GPUI background
+    /// executor, then forwards the resulting `EnvironmentReport` to the
+    /// project wizard via `set_env_report`. Avoids blocking the main thread
+    /// for the ~600 ms it takes to invoke six `std::process::Command`
+    /// children sequentially.
+    ///
+    /// No-op when the project wizard has not been instantiated yet
+    /// (e.g., very early in startup before `run_app` has wired it up).
+    pub(crate) fn trigger_env_detect(&mut self, cx: &mut Context<Self>) {
+        let Some(wizard) = self.project_wizard.clone() else {
+            return;
+        };
+        let bg = cx
+            .background_executor()
+            .spawn(async move { detect_with_runner(&RealCommandRunner) });
+        cx.spawn(async move |_this, cx| {
+            let report = bg.await;
+            wizard
+                .update(cx, |w, cx| {
+                    w.set_env_report(report);
+                    cx.notify();
+                })
+                .ok();
+        })
+        .detach();
     }
 }
 
@@ -5564,6 +5598,51 @@ mod tests {
                 // Nothing happened.
                 assert!(view.mission_control.is_none());
                 assert!(!view.pending_mission_toggle);
+            });
+        });
+    }
+
+    // ============================================================
+    // SPEC-V0-2-0-WIZARD-ENV-001 MS-2 — RootView::trigger_env_detect
+    // (AC-WE-13)
+    // ============================================================
+
+    /// AC-WE-13 (REQ-WE-013): trigger_env_detect exists with the expected
+    /// signature. Compile-time check only — invoking it requires GPUI
+    /// background_executor to actually run six `std::process::Command`
+    /// children, which is unsuitable for a unit test environment.
+    #[test]
+    fn trigger_env_detect_method_has_expected_signature() {
+        let _: fn(&mut RootView, &mut Context<RootView>) = RootView::trigger_env_detect;
+    }
+
+    /// AC-WE-13 supporting: handle_add_workspace mounts the wizard so the
+    /// banner has somewhere to render before the async detect resolves.
+    /// env_report stays None at this point — the spawn is detached and the
+    /// background task does not race to completion within the synchronous
+    /// portion of the test (process::Command bound).
+    #[test]
+    fn handle_add_workspace_mounts_wizard_with_env_report_none() {
+        use gpui::TestAppContext;
+
+        let mut cx = TestAppContext::single();
+        let root = cx.new(|_cx| RootView::new(vec![], dummy_path()));
+        cx.update(|app| {
+            root.update(app, |view: &mut RootView, cx| {
+                // Wire up the wizard the same way `run_app` does (line 3158-3159).
+                view.project_wizard = Some(cx.new(|_| wizard::ProjectWizard::new()));
+                assert!(view.project_wizard.is_some());
+
+                view.handle_add_workspace(cx);
+
+                let wizard_entity = view.project_wizard.as_ref().expect("wizard");
+                let (visible, env_none) = wizard_entity
+                    .read_with(cx, |w, _cx| (w.is_visible(), w.env_report().is_none()));
+                assert!(visible, "handle_add_workspace must mount the wizard");
+                assert!(
+                    env_none,
+                    "env_report stays None synchronously; async detect populates it later"
+                );
             });
         });
     }
