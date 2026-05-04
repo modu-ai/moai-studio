@@ -11,7 +11,7 @@
 //! state 만 — UI render 는 carry per N2.
 
 use crate::design::tokens as tok;
-use crate::onboarding::EnvironmentReport;
+use crate::onboarding::{EnvironmentReport, Tool};
 use gpui::{
     Context, InteractiveElement, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb,
 };
@@ -257,6 +257,38 @@ impl Default for ProjectWizard {
     }
 }
 
+// SPEC-V0-2-0-WIZARD-ENV-001 MS-2 — pure formatters for the env section.
+// These free functions stay outside `impl ProjectWizard` so unit tests can
+// exercise them without constructing the wizard or touching GPUI.
+
+/// SPEC-V0-2-0-WIZARD-ENV-001 MS-2 (REQ-WE-010, AC-WE-7): formatted env headline.
+///
+/// Returns a string of the form "{available}/6 tools available" using the
+/// canonical 6-tool baseline from `Tool::all()`.
+pub(crate) fn format_env_summary(report: &EnvironmentReport) -> String {
+    format!("{}/6 tools available", report.available_count())
+}
+
+/// SPEC-V0-2-0-WIZARD-ENV-001 MS-2 (REQ-WE-011, AC-WE-8/9):
+/// joined missing-tool display names, or `None` when every tool resolved.
+///
+/// Display names follow `Tool::display_name()` verbatim — Tmux maps to
+/// "tmux" (lowercase) while Python and Git use title case.
+pub(crate) fn format_missing_tools_label(report: &EnvironmentReport) -> Option<String> {
+    let missing = report.missing_tools();
+    if missing.is_empty() {
+        None
+    } else {
+        Some(
+            missing
+                .iter()
+                .map(|t: &Tool| t.display_name())
+                .collect::<Vec<_>>()
+                .join(", "),
+        )
+    }
+}
+
 impl Render for ProjectWizard {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         if !self.visible {
@@ -310,6 +342,9 @@ impl Render for ProjectWizard {
                                     .child(format!("Step {} of 5", self.current_step.number())),
                             ),
                     )
+                    // SPEC-V0-2-0-WIZARD-ENV-001 MS-2 (REQ-WE-007): env section
+                    // between header and progress bar — auto-detect status row.
+                    .child(self.render_env_section())
                     // Progress bar
                     .child(
                         div()
@@ -353,6 +388,49 @@ impl Render for ProjectWizard {
 }
 
 impl ProjectWizard {
+    /// SPEC-V0-2-0-WIZARD-ENV-001 MS-2 (REQ-WE-007/008/009): env section row.
+    ///
+    /// Branches on `env_report` state:
+    /// - `None` → "Detecting environment..." muted placeholder.
+    /// - `Some(report)` complete → headline + "All tools detected" accent line.
+    /// - `Some(report)` partial → headline + missing tools (joined by ", ").
+    ///
+    /// Layout is a single column block intended for insertion between the
+    /// header and the progress bar inside `Render::render`.
+    fn render_env_section(&self) -> gpui::Div {
+        match self.env_report.as_ref() {
+            None => div()
+                .text_xs()
+                .text_color(rgb(tok::FG_MUTED))
+                .child("Detecting environment..."),
+            Some(report) => {
+                let headline = format_env_summary(report);
+                let mut col = div().flex().flex_col().gap_1().child(
+                    div()
+                        .text_sm()
+                        .text_color(rgb(tok::FG_PRIMARY))
+                        .child(format!("Environment: {headline}")),
+                );
+                if report.is_complete() {
+                    col = col.child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(tok::ACCENT))
+                            .child("All tools detected"),
+                    );
+                } else if let Some(missing) = format_missing_tools_label(report) {
+                    col = col.child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(tok::FG_SECONDARY))
+                            .child(format!("Missing: {missing}")),
+                    );
+                }
+                col
+            }
+        }
+    }
+
     fn render_navigation(&self) -> gpui::Div {
         let mut nav = div().flex().flex_row().justify_between();
 
@@ -556,5 +634,128 @@ mod tests {
         assert_eq!(ws.spec_id, None);
         assert_eq!(ws.color_tag, None);
         // env_report is intentionally NOT carried into NewWorkspace (N7).
+    }
+
+    // ============================================================
+    // SPEC-V0-2-0-WIZARD-ENV-001 MS-2 — env render helpers + render section
+    // (AC-WE-7 ~ AC-WE-12)
+    // ============================================================
+
+    fn mk_complete_report() -> EnvironmentReport {
+        EnvironmentReport::new(vec![
+            (
+                Tool::Shell,
+                ToolStatus::Available {
+                    version: "zsh 5.9".to_string(),
+                },
+            ),
+            (
+                Tool::Tmux,
+                ToolStatus::Available {
+                    version: "tmux 3.5".to_string(),
+                },
+            ),
+            (
+                Tool::Node,
+                ToolStatus::Available {
+                    version: "v20".to_string(),
+                },
+            ),
+            (
+                Tool::Python,
+                ToolStatus::Available {
+                    version: "Python 3.12".to_string(),
+                },
+            ),
+            (
+                Tool::Rust,
+                ToolStatus::Available {
+                    version: "cargo 1.92".to_string(),
+                },
+            ),
+            (
+                Tool::Git,
+                ToolStatus::Available {
+                    version: "git 2.43".to_string(),
+                },
+            ),
+        ])
+    }
+
+    fn mk_partial_report_missing_tmux_python() -> EnvironmentReport {
+        EnvironmentReport::new(vec![
+            (
+                Tool::Shell,
+                ToolStatus::Available {
+                    version: "zsh 5.9".to_string(),
+                },
+            ),
+            (Tool::Tmux, ToolStatus::NotFound),
+            (
+                Tool::Node,
+                ToolStatus::Available {
+                    version: "v20".to_string(),
+                },
+            ),
+            (Tool::Python, ToolStatus::NotFound),
+            (
+                Tool::Rust,
+                ToolStatus::Available {
+                    version: "cargo 1.92".to_string(),
+                },
+            ),
+            (
+                Tool::Git,
+                ToolStatus::Available {
+                    version: "git 2.43".to_string(),
+                },
+            ),
+        ])
+    }
+
+    /// AC-WE-7 (REQ-WE-010): partial report — `2/6 tools available`.
+    #[test]
+    fn format_env_summary_partial_returns_two_of_six() {
+        let report = mk_report(); // 3 entries, Shell + Git available, Tmux missing → 2/6
+        assert_eq!(format_env_summary(&report), "2/6 tools available");
+    }
+
+    /// AC-WE-12 부분: complete report — `6/6 tools available`.
+    #[test]
+    fn format_env_summary_complete_returns_six_of_six() {
+        let report = mk_complete_report();
+        assert_eq!(format_env_summary(&report), "6/6 tools available");
+    }
+
+    /// AC-WE-8 (REQ-WE-011 negative): all available — `None`.
+    #[test]
+    fn format_missing_tools_label_complete_returns_none() {
+        let report = mk_complete_report();
+        assert!(format_missing_tools_label(&report).is_none());
+    }
+
+    /// AC-WE-9 (REQ-WE-011 positive): Tmux + Python missing → `"tmux, Python"`.
+    ///
+    /// Display name comes from `Tool::display_name()` verbatim:
+    /// Tmux → "tmux" (lowercase), Python → "Python".
+    #[test]
+    fn format_missing_tools_label_partial_joins_display_names() {
+        let report = mk_partial_report_missing_tmux_python();
+        let label = format_missing_tools_label(&report).expect("must be Some");
+        assert_eq!(label, "tmux, Python");
+    }
+
+    /// AC-WE-10 (REQ-WE-008/014): mount + render_env_section produce a Div
+    /// without panicking when env_report is None (Detecting branch). Verifies
+    /// the helper compiles and the wizard remains in a consistent state
+    /// after mount() (env_report stays None until external set_env_report).
+    #[test]
+    fn wizard_render_env_section_with_none_compiles_and_state_stable() {
+        let mut wiz = ProjectWizard::new();
+        wiz.mount();
+        assert!(wiz.is_visible());
+        assert!(wiz.env_report().is_none());
+        // Helper returns a Div — calling it must not panic.
+        let _section: gpui::Div = wiz.render_env_section();
     }
 }
