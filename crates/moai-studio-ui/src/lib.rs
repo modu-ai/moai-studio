@@ -26,6 +26,8 @@ pub mod agent;
 pub mod status_bar;
 // SPEC-V3-004 MS-4 (audit D-2): sidebar workspace context menu skeleton.
 pub mod workspace_menu;
+// SPEC-V0-3-0-WORKSPACE-COLOR-001: workspace color preset palette (D-5 audit Top 16 #14).
+pub mod workspace_color;
 // SPEC-V0-1-2-MENUS-001 F-3: Toolbar 모듈
 pub mod toolbar;
 // G-2: Project Wizard 모듈
@@ -328,6 +330,10 @@ pub struct RootView {
     /// View menu > Toggle Banner 가 토글하는 banner strip 표시 여부.
     /// `true` (default) = banner_strip 렌더, `false` = banner_strip 미렌더.
     pub banner_visible: bool,
+    // ── SPEC-V0-3-0-WORKSPACE-COLOR-001 (REQ-WC-008): color picker modal slot ──
+    /// Workspace color picker modal state.  `None` = closed (default),
+    /// `Some(ColorPickerModal)` = open for a target workspace.
+    pub color_picker_modal: Option<workspace_menu::ColorPickerModal>,
 }
 
 /// Pending toast entry surfaced for a detected dev-server URL.
@@ -402,6 +408,8 @@ impl RootView {
             // SPEC-V0-3-0-MENU-WIRE-001 (REQ-MW-001/002): both visible by default.
             sidebar_visible: true,
             banner_visible: true,
+            // SPEC-V0-3-0-WORKSPACE-COLOR-001 (REQ-WC-008): closed on construct.
+            color_picker_modal: None,
         }
     }
 
@@ -419,6 +427,15 @@ impl RootView {
     /// SPEC-V0-3-0-MENU-WIRE-001 (REQ-MW-004): Toggle the banner strip visibility flag.
     pub fn toggle_banner_visible(&mut self) {
         self.banner_visible = !self.banner_visible;
+    }
+
+    /// SPEC-V0-3-0-WORKSPACE-COLOR-001 (REQ-WC-009): Compute the next color for a new workspace.
+    ///
+    /// Round-robin from `WORKSPACE_COLOR_PALETTE` based on the count of currently
+    /// loaded workspaces. Caller (wizard build flow) is responsible for applying
+    /// the returned color to `Workspace.color` before persisting.
+    pub fn next_color_for_new_workspace(&self) -> u32 {
+        workspace_color::next_color(self.workspaces.len())
     }
 
     /// SPEC-V0-3-0-MENU-WIRE-001 (REQ-MW-005/006): Reload workspaces from disk.
@@ -511,6 +528,14 @@ impl RootView {
                 // workspaces vector from the store so the rendered sidebar reflects
                 // the new order. Caller (GPUI handler) still owns cx.notify().
                 self.sync_workspaces_from_store();
+            }
+            // SPEC-V0-3-0-WORKSPACE-COLOR-001 (REQ-WC-005): mount color picker.
+            WorkspaceMenuOutcome::OpenColorPicker {
+                ws_id,
+                current_color,
+            } => {
+                self.color_picker_modal =
+                    Some(workspace_menu::ColorPickerModal::open(ws_id, current_color));
             }
             WorkspaceMenuOutcome::Unknown => {
                 tracing::warn!(
@@ -5825,6 +5850,38 @@ mod tests {
         view.active_id = Some("ws-stale".to_string());
         view.reload_workspaces_from_storage().expect("reload");
         assert!(view.active_id.is_none(), "no entries → active_id == None");
+    }
+
+    /// AC-WC-9 helper: next_color_for_new_workspace round-robins via existing count.
+    #[test]
+    fn next_color_for_new_workspace_round_robins_via_count() {
+        // Empty workspace list → palette[0].
+        let view0 = RootView::new(vec![], dummy_path());
+        assert_eq!(
+            view0.next_color_for_new_workspace(),
+            workspace_color::WORKSPACE_COLOR_PALETTE[0]
+        );
+
+        // 3 existing workspaces → palette[3].
+        let view3 = RootView::new(
+            vec![
+                make_ws("a", "1", 100),
+                make_ws("b", "2", 200),
+                make_ws("c", "3", 300),
+            ],
+            dummy_path(),
+        );
+        assert_eq!(
+            view3.next_color_for_new_workspace(),
+            workspace_color::WORKSPACE_COLOR_PALETTE[3]
+        );
+    }
+
+    /// AC-WC-8 helper: color_picker_modal slot defaults to None on construct.
+    #[test]
+    fn color_picker_modal_defaults_to_none() {
+        let view = RootView::new(vec![], dummy_path());
+        assert!(view.color_picker_modal.is_none());
     }
 
     /// AC-MW-7: sidebar_visible 토글이 main_body 의 sidebar 분기를 제어한다.

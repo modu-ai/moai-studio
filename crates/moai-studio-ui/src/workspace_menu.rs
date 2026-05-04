@@ -28,13 +28,16 @@ pub enum WorkspaceMenuAction {
     MoveUp,
     /// Move the workspace one position downwards in the sidebar list.
     MoveDown,
+    /// SPEC-V0-3-0-WORKSPACE-COLOR-001 (REQ-WC-005): open a color picker modal.
+    ChangeColor,
 }
 
 impl WorkspaceMenuAction {
     /// Canonical ordering of the actions as they appear in the menu.
-    pub fn all() -> [WorkspaceMenuAction; 4] {
+    pub fn all() -> [WorkspaceMenuAction; 5] {
         [
             WorkspaceMenuAction::Rename,
+            WorkspaceMenuAction::ChangeColor,
             WorkspaceMenuAction::Delete,
             WorkspaceMenuAction::MoveUp,
             WorkspaceMenuAction::MoveDown,
@@ -48,6 +51,7 @@ impl WorkspaceMenuAction {
             WorkspaceMenuAction::Delete => "Delete",
             WorkspaceMenuAction::MoveUp => "Move Up",
             WorkspaceMenuAction::MoveDown => "Move Down",
+            WorkspaceMenuAction::ChangeColor => "Change Color",
         }
     }
 
@@ -118,8 +122,51 @@ impl WorkspaceMenu {
     /// Returns the canonical action list to render inside the menu.
     /// Pure helper — kept as an associated function so the renderer can
     /// reuse this without owning a `WorkspaceMenu` instance.
-    pub fn items() -> [WorkspaceMenuAction; 4] {
+    pub fn items() -> [WorkspaceMenuAction; 5] {
         WorkspaceMenuAction::all()
+    }
+}
+
+// ============================================================
+// ColorPickerModal — SPEC-V0-3-0-WORKSPACE-COLOR-001 REQ-WC-007
+// ============================================================
+
+/// SPEC-V0-3-0-WORKSPACE-COLOR-001 (REQ-WC-007): Color picker modal logic.
+///
+/// Logic-only state machine for the workspace color picker. GPUI render side
+/// (swatch grid overlay) is deferred to a follow-up SPEC. Callers drive the
+/// modal lifecycle: `open` → `select` → read `selected_color()` → caller
+/// invokes `WorkspacesStore::set_color` → caller dismisses the modal.
+#[derive(Debug, Clone)]
+pub struct ColorPickerModal {
+    target_id: String,
+    selected: u32,
+}
+
+impl ColorPickerModal {
+    /// Open the modal for the given workspace, pre-seeding the selection with
+    /// the workspace's current color.
+    pub fn open(target_id: impl Into<String>, current_color: u32) -> Self {
+        Self {
+            target_id: target_id.into(),
+            selected: current_color,
+        }
+    }
+
+    /// Update the in-progress selection. Caller is responsible for ensuring
+    /// the value comes from the canonical palette.
+    pub fn select(&mut self, color: u32) {
+        self.selected = color;
+    }
+
+    /// Currently-selected color.
+    pub fn selected_color(&self) -> u32 {
+        self.selected
+    }
+
+    /// Workspace id this modal is targeting.
+    pub fn target(&self) -> &str {
+        &self.target_id
     }
 }
 
@@ -247,6 +294,9 @@ pub enum WorkspaceMenuOutcome {
     OpenRenameModal { ws_id: String, current_name: String },
     /// The Delete action was triggered; caller should open a `DeleteConfirmation`.
     OpenDeleteConfirmation { ws_id: String },
+    /// SPEC-V0-3-0-WORKSPACE-COLOR-001 (REQ-WC-005): caller should open a
+    /// `ColorPickerModal` pre-seeded with `current_color`.
+    OpenColorPicker { ws_id: String, current_color: u32 },
     /// A reorder (MoveUp / MoveDown) completed successfully.
     Reordered,
     /// The action could not be applied (e.g. workspace not found in store).
@@ -292,6 +342,13 @@ pub fn dispatch_workspace_menu_action(
         WorkspaceMenuAction::MoveDown => match store.move_down(ws_id) {
             Ok(()) => WorkspaceMenuOutcome::Reordered,
             Err(_) => WorkspaceMenuOutcome::Unknown,
+        },
+        WorkspaceMenuAction::ChangeColor => match store.list().iter().find(|w| w.id == ws_id) {
+            Some(ws) => WorkspaceMenuOutcome::OpenColorPicker {
+                ws_id: ws_id.to_string(),
+                current_color: ws.color,
+            },
+            None => WorkspaceMenuOutcome::Unknown,
         },
     }
 }
@@ -504,15 +561,15 @@ mod tests {
         std::fs::remove_file(&tmp_file).ok();
     }
 
-    /// AC-D2-1: all four actions are exposed and have non-empty labels.
+    /// AC-D2-1 / AC-WC-5: all five actions are exposed and have non-empty labels.
     #[test]
-    fn workspace_menu_action_all_returns_four_distinct_variants() {
+    fn workspace_menu_action_all_returns_five_distinct_variants() {
         let actions = WorkspaceMenuAction::all();
-        assert_eq!(actions.len(), 4);
+        assert_eq!(actions.len(), 5);
         let labels: Vec<&'static str> = actions.iter().map(|a| a.label()).collect();
         assert_eq!(
             labels,
-            vec!["Rename", "Delete", "Move Up", "Move Down"],
+            vec!["Rename", "Change Color", "Delete", "Move Up", "Move Down"],
             "label order must match canonical enum order"
         );
         // Each label must be unique and non-empty.
@@ -537,6 +594,52 @@ mod tests {
         assert!(!WorkspaceMenuAction::Rename.is_destructive());
         assert!(!WorkspaceMenuAction::MoveUp.is_destructive());
         assert!(!WorkspaceMenuAction::MoveDown.is_destructive());
+        // AC-WC-6: ChangeColor is non-destructive.
+        assert!(!WorkspaceMenuAction::ChangeColor.is_destructive());
+    }
+
+    // ── T-WC: ColorPickerModal — SPEC-V0-3-0-WORKSPACE-COLOR-001 REQ-WC-007 ──
+
+    /// AC-WC-7: open seeds target + selected_color; select updates the choice.
+    #[test]
+    fn color_picker_modal_open_seeds_state_and_select_updates() {
+        let mut modal = ColorPickerModal::open("ws-a", 0xFF0000);
+        assert_eq!(modal.target(), "ws-a");
+        assert_eq!(modal.selected_color(), 0xFF0000);
+        modal.select(0x00FF00);
+        assert_eq!(modal.selected_color(), 0x00FF00);
+        assert_eq!(modal.target(), "ws-a", "target is stable across selections");
+    }
+
+    /// AC-WC-7 보강: dispatch ChangeColor 가 OpenColorPicker 를 반환한다.
+    #[test]
+    fn dispatch_change_color_returns_open_color_picker() {
+        let tmp_file = std::env::temp_dir().join("moai-dispatch-color.json");
+        std::fs::remove_file(&tmp_file).ok();
+        let project = std::env::temp_dir().join("moai-dispatch-color-project");
+        std::fs::create_dir_all(&project).unwrap();
+
+        let mut store = moai_studio_workspace::WorkspacesStore::load(&tmp_file).unwrap();
+        let ws = moai_studio_workspace::Workspace::from_path(&project).unwrap();
+        let id = ws.id.clone();
+        let color = ws.color;
+        store.add(ws).unwrap();
+
+        let outcome =
+            dispatch_workspace_menu_action(WorkspaceMenuAction::ChangeColor, &id, &mut store);
+        match outcome {
+            WorkspaceMenuOutcome::OpenColorPicker {
+                ws_id,
+                current_color,
+            } => {
+                assert_eq!(ws_id, id);
+                assert_eq!(current_color, color);
+            }
+            other => panic!("expected OpenColorPicker, got {other:?}"),
+        }
+
+        std::fs::remove_file(&tmp_file).ok();
+        std::fs::remove_dir_all(&project).ok();
     }
 
     /// AC-D2-2: default state is closed.
