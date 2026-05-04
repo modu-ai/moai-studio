@@ -4,7 +4,7 @@
 |-------|-------|
 | **ID** | SPEC-V0-3-0-WORKSPACE-COLOR-001 |
 | **Title** | Workspace 별 사용자 선택 색상 (palette + ColorPickerModal logic) |
-| **Status** | in_progress |
+| **Status** | merged (PR #101, 2026-05-04 main 47e1b47) — logic-only closure. GPUI render carry to SPEC-V0-3-0-COLOR-PICKER-RENDER-001 (sess 18 entry). |
 | **Priority** | Low (P3 polish) |
 | **Revision** | 1.0 (lightweight) |
 | **Dependencies** | SPEC-V3-004 MS-5/6 (WorkspaceMenu skeleton) |

@@ -93,7 +93,7 @@
 |----|-------|-----|--------|-------------|------|-------------|----------|
 | **E-1** | SPEC Card (active SPEC) | High | PARTIAL | ⬆ | MED | **YES** | `spec_ui/` 7 modules. PR #69 터미널 SPEC-ID 클릭 + PR #75 AC chip row. **SpecPanelView master-detail 통합 미완** (list/detail/kanban 별도 view). v0.3.0 후보. |
 | **E-2** | TRUST 5 Dashboard (5-axis radar) | High | DONE | — | MED | NO | V3-017. `crates/moai-studio-ui/src/quality/` 62KB: radar + dimension detail + history + quality_gate. v0.2.0 변화 없음 (안정). |
-| **E-3** | @MX tag gutter + popover | High | PARTIAL | — | MED | **YES** | `viewer/mx_gutter.rs` 19KB MXPopover + MXGutterLine. 거터 표시 OK, popover hover state + popover positioning + content fetch 미완. v0.3.0 polish 후보. |
+| **E-3** | @MX tag gutter + popover | High | PARTIAL (95%) | ⬆⬆ | MED | YES | `viewer/mx_gutter.rs` 19KB → 26KB. MS-3a 자료구조 (`MxPopoverData` — 이전 "MXPopover" 표현은 audit-stale 정정) + RealMxScanner regex 모두 land. **MS-1 GA (PR #103, sess 17 — SPEC-V0-3-0-MX-POPOVER-001)**: hit_test_gutter + MxHoverFsm (Closed/Hovering/Open + 200ms debounce) + should_flip_left + render_popover_text + 12 신규 tests. **carry to MS-2**: 키보드 nav / ARIA / click-to-pin / multi-tag / WARN missing-REASON UI + GPUI 결합 (실 MouseMove → on_gutter_hover wiring + popover element render + tick scheduling). |
 | **E-4** | Hook event stream (27 events) | High | PARTIAL | ⬆ | LOW | **YES** | `moai-hook-http/src/` HTTP server OK + sse_ingest.rs 11KB pump_into_registry (PR #89). 27 events 전수 wire 미완. v0.3.0 후보 (E-5 MS-3b 와 통합 가능). |
 | **E-5** | Mission Control (parallel agents grid) | High | PARTIAL (90%) | ⬆⬆ | MED | **YES** | `mission_control.rs` 20.6KB AgentRunRegistry (PR #87) + `mission_control_view.rs` GPUI Entity (PR #88) + sse_ingest pump_into_registry (PR #89). **MS-3b carry**: HTTP client subscribe + Cmd+Shift+M (USER-DECISION-MC-A: reqwest vs ureq). |
 | **E-6** | Kanban Board (SPEC lifecycle) | Med | DONE | — | MED | NO | `spec_ui/kanban_view.rs` 24KB. SPEC-V3-009 RG-SU-3. |
@@ -344,10 +344,11 @@ v0.5.0+ deferred:
 
 ### Priority 3 — Polish (audit Top 16 후반)
 
-11. **E-3 @MX tag popover hover 풀 동작** ⭐⭐⭐
-    - **Why**: viewer/mx_gutter.rs 19KB MXPopover skeleton 후속. hover state + popover positioning + content fetch.
-    - **Scope**: hover detection + popover anchor + 거터 클릭 → popover open + ESC close. ~500 LOC.
-    - **SPEC**: Lightweight SPEC SPEC-V0-3-0-MX-POPOVER-001 (적격: ≤10KB, AC ≤8, 1 milestone).
+11. **E-3 @MX tag popover hover 풀 동작** ⭐⭐⭐ — ✅ **MS-1 GA (PR #103, sess 17)**
+    - **Why**: viewer/mx_gutter.rs MxPopoverData 후속 (이전 "MXPopover" 표현 audit-stale 정정). hover state + popover positioning + content fetch.
+    - **Scope**: hover detection + popover anchor + 거터 클릭 → popover open + ESC close. ~500 LOC 목표 → 실제 ~280 LOC + 12 tests.
+    - **SPEC**: Lightweight SPEC SPEC-V0-3-0-MX-POPOVER-001 (7.4KB / 8 AC / 1 MS).
+    - **Carry to MS-2**: 키보드 nav (Tab/Arrow) / ARIA role+속성 / click-to-pin + Jump to SPEC 버튼 / 한 줄 multi-tag / WARN missing-REASON 인라인 경고 UI + GPUI 결합 (실 MouseMove → on_gutter_hover, popover element render, tick scheduling).
 
 12. **F-1 Command Palette polish (40+ → 60+)** ⭐⭐⭐
     - **Why**: 추가 commands (recent files, project switcher, theme picker, plugin actions, settings shortcut, font size, layout) + category sub-menu + fuzzy ranking 개선.

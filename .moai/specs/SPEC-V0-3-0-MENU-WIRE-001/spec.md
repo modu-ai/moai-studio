@@ -4,7 +4,7 @@
 |-------|-------|
 | **ID** | SPEC-V0-3-0-MENU-WIRE-001 |
 | **Title** | View menu 잔존 stub functional wiring (ToggleSidebar / ToggleBanner / ReloadWorkspace) |
-| **Status** | in_progress |
+| **Status** | merged (PR #100, 2026-05-04 main 859e6fe) — MS-1 closure (3 stub functional). 5 stub carry to Surface SPEC + Pane SPEC. |
 | **Priority** | Medium |
 | **Revision** | 1.0 (lightweight) |
 | **Dependencies** | SPEC-V0-1-2-MENUS-001 (carry §3.1) |
