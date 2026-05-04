@@ -44,6 +44,9 @@ impl CommandEntry {
 // ============================================================
 
 /// All available command categories in display order.
+///
+/// SPEC-V0-3-0-PALETTE-POLISH-001 (REQ-PP-002): 4 신규 카테고리 추가
+/// (Plugin / Layout / Help / Spec). 기존 11 → 15 categories.
 pub const CATEGORIES: &[&str] = &[
     "File",
     "View",
@@ -56,6 +59,10 @@ pub const CATEGORIES: &[&str] = &[
     "Git",
     "Agent",
     "Terminal",
+    "Plugin",
+    "Layout",
+    "Help",
+    "Spec",
 ];
 
 // ============================================================
@@ -199,6 +206,65 @@ fn default_entries() -> Vec<CommandEntry> {
         // ── Terminal ──
         // SPEC-V0-2-0-MULTI-SHELL-001 REQ-MS-006: shell.switch Command Palette entry.
         CommandEntry::new("shell.switch", "Switch Shell...", "Terminal", None),
+        // ════════════════════════════════════════════════════════════════
+        // SPEC-V0-3-0-PALETTE-POLISH-001 — 25 신규 entries (audit Top 16 #12)
+        // ════════════════════════════════════════════════════════════════
+        // ── File extras (REQ-PP-003) ──
+        CommandEntry::new("file.recent_1", "Recent File 1", "File", None),
+        CommandEntry::new("file.recent_2", "Recent File 2", "File", None),
+        CommandEntry::new("file.recent_3", "Recent File 3", "File", None),
+        CommandEntry::new("file.recent_4", "Recent File 4", "File", None),
+        CommandEntry::new("file.recent_5", "Recent File 5", "File", None),
+        CommandEntry::new("file.duplicate", "Duplicate File", "File", None),
+        CommandEntry::new("file.rename", "Rename File", "File", Some("F2")),
+        // ── Workspace extras ──
+        CommandEntry::new(
+            "workspace.recent",
+            "Recent Workspaces...",
+            "Workspace",
+            None,
+        ),
+        CommandEntry::new(
+            "workspace.add_existing",
+            "Add Existing Workspace...",
+            "Workspace",
+            None,
+        ),
+        CommandEntry::new(
+            "workspace.show_in_finder",
+            "Show Workspace in Finder",
+            "Workspace",
+            None,
+        ),
+        // ── Plugin (REQ-PP-004) ──
+        CommandEntry::new("plugin.list", "Show Installed Plugins", "Plugin", None),
+        CommandEntry::new("plugin.refresh", "Refresh Plugin List", "Plugin", None),
+        CommandEntry::new("plugin.install", "Install Plugin...", "Plugin", None),
+        CommandEntry::new("plugin.disable", "Disable Plugin...", "Plugin", None),
+        CommandEntry::new("plugin.enable", "Enable Plugin...", "Plugin", None),
+        // ── Layout (REQ-PP-005) ──
+        CommandEntry::new("layout.center", "Center Layout", "Layout", None),
+        CommandEntry::new("layout.zoom_in", "Zoom In", "Layout", Some("Cmd+=")),
+        CommandEntry::new("layout.zoom_out", "Zoom Out", "Layout", Some("Cmd+-")),
+        CommandEntry::new("layout.reset_zoom", "Reset Zoom", "Layout", Some("Cmd+0")),
+        // ── Help (REQ-PP-006) ──
+        CommandEntry::new("help.open_docs", "Open Documentation", "Help", None),
+        CommandEntry::new("help.report_issue", "Report Issue", "Help", None),
+        CommandEntry::new(
+            "help.shortcuts",
+            "Show Keyboard Shortcuts",
+            "Help",
+            Some("Cmd+/"),
+        ),
+        // ── Spec (REQ-PP-007) ──
+        CommandEntry::new(
+            "spec.open_panel",
+            "Open SPEC Panel",
+            "Spec",
+            Some("Cmd+Shift+P"),
+        ),
+        CommandEntry::new("spec.new_spec", "Create New SPEC...", "Spec", None),
+        CommandEntry::new("spec.refresh", "Refresh SPEC List", "Spec", None),
     ]
 }
 
@@ -211,13 +277,13 @@ mod tests {
     use super::*;
     use std::collections::HashSet;
 
-    /// AC-PL-16: default registry has >= 30 entries.
+    /// AC-PL-16 / AC-PP-1 (SPEC-V0-3-0-PALETTE-POLISH-001): registry has >= 60 entries.
     #[test]
-    fn default_registry_has_at_least_30_entries() {
+    fn default_registry_has_at_least_60_entries() {
         let reg = CommandRegistry::default_registry();
         assert!(
-            reg.entries.len() >= 30,
-            "registry must have >= 30 entries, got {}",
+            reg.entries.len() >= 60,
+            "registry must have >= 60 entries (audit Top 16 #12), got {}",
             reg.entries.len()
         );
     }
@@ -240,6 +306,7 @@ mod tests {
     }
 
     /// All expected categories are present in registry.
+    /// AC-PP-2 (SPEC-V0-3-0-PALETTE-POLISH-001): 4 신규 카테고리 (Plugin/Layout/Help/Spec) 모두 포함.
     #[test]
     fn all_expected_categories_present() {
         let reg = CommandRegistry::default_registry();
@@ -254,6 +321,11 @@ mod tests {
             "Theme",
             "Git",
             "Agent",
+            "Terminal",
+            "Plugin", // SPEC-V0-3-0-PALETTE-POLISH-001 신규
+            "Layout", // SPEC-V0-3-0-PALETTE-POLISH-001 신규
+            "Help",   // SPEC-V0-3-0-PALETTE-POLISH-001 신규
+            "Spec",   // SPEC-V0-3-0-PALETTE-POLISH-001 신규
         ];
         for cat in &expected {
             assert!(
@@ -389,6 +461,107 @@ mod tests {
         assert_eq!(entry.label, "Search in all workspaces");
         assert_eq!(entry.category, "Workspace");
         assert_eq!(entry.keybinding, Some("Cmd+Shift+F"));
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // SPEC-V0-3-0-PALETTE-POLISH-001 — T-PP: Registry expansion checks
+    // ════════════════════════════════════════════════════════════════
+
+    /// AC-PP-3: file.recent_1 ~ file.recent_5 exist with category "File".
+    #[test]
+    fn registry_exposes_five_file_recent_slots() {
+        let reg = CommandRegistry::default_registry();
+        for n in 1..=5 {
+            let id = format!("file.recent_{n}");
+            let entry = reg
+                .get(&id)
+                .unwrap_or_else(|| panic!("{id} must exist in registry"));
+            assert_eq!(entry.category, "File", "{id} category must be 'File'");
+        }
+    }
+
+    /// AC-PP-4: 5 Plugin entries (list/refresh/install/disable/enable).
+    #[test]
+    fn registry_exposes_five_plugin_entries() {
+        let reg = CommandRegistry::default_registry();
+        let ids = [
+            "plugin.list",
+            "plugin.refresh",
+            "plugin.install",
+            "plugin.disable",
+            "plugin.enable",
+        ];
+        for id in &ids {
+            let entry = reg.get(id).unwrap_or_else(|| panic!("{id} must exist"));
+            assert_eq!(entry.category, "Plugin", "{id} category must be 'Plugin'");
+        }
+    }
+
+    /// AC-PP-5: 4 Layout entries (center/zoom_in/zoom_out/reset_zoom).
+    #[test]
+    fn registry_exposes_four_layout_entries() {
+        let reg = CommandRegistry::default_registry();
+        let ids = [
+            "layout.center",
+            "layout.zoom_in",
+            "layout.zoom_out",
+            "layout.reset_zoom",
+        ];
+        for id in &ids {
+            let entry = reg.get(id).unwrap_or_else(|| panic!("{id} must exist"));
+            assert_eq!(entry.category, "Layout", "{id} category must be 'Layout'");
+        }
+    }
+
+    /// AC-PP-6: Help (3) + Spec (3) entries.
+    #[test]
+    fn registry_exposes_help_and_spec_entries() {
+        let reg = CommandRegistry::default_registry();
+        let help_ids = ["help.open_docs", "help.report_issue", "help.shortcuts"];
+        let spec_ids = ["spec.open_panel", "spec.new_spec", "spec.refresh"];
+        for id in &help_ids {
+            let entry = reg.get(id).unwrap_or_else(|| panic!("{id} must exist"));
+            assert_eq!(entry.category, "Help");
+        }
+        for id in &spec_ids {
+            let entry = reg.get(id).unwrap_or_else(|| panic!("{id} must exist"));
+            assert_eq!(entry.category, "Spec");
+        }
+    }
+
+    /// AC-PP-2 / REQ-PP-002: CATEGORIES const reflects 4 신규 카테고리.
+    #[test]
+    fn categories_const_includes_four_new_categories() {
+        for cat in ["Plugin", "Layout", "Help", "Spec"] {
+            assert!(
+                CATEGORIES.contains(&cat),
+                "CATEGORIES const must include '{cat}'"
+            );
+        }
+        assert_eq!(CATEGORIES.len(), 15, "11 base + 4 new = 15 categories");
+    }
+
+    /// REQ-PP-008: 기존 44 entries 의 호환성 — workspace.search / pane.split_horizontal
+    /// 등 기존 ids 가 그대로 존재한다.
+    #[test]
+    fn legacy_entries_remain_unchanged() {
+        let reg = CommandRegistry::default_registry();
+        // 4 안전 샘플 — id / category / label 모두 보존 검증.
+        let ws = reg.get("workspace.search").expect("workspace.search");
+        assert_eq!(ws.label, "Search in all workspaces");
+        assert_eq!(ws.category, "Workspace");
+        assert_eq!(ws.keybinding, Some("Cmd+Shift+F"));
+
+        let split = reg
+            .get("pane.split_horizontal")
+            .expect("pane.split_horizontal");
+        assert_eq!(split.category, "Pane");
+
+        let theme = reg.get("theme.toggle").expect("theme.toggle");
+        assert_eq!(theme.category, "Theme");
+
+        let shell = reg.get("shell.switch").expect("shell.switch");
+        assert_eq!(shell.category, "Terminal");
     }
 
     /// Specific required commands exist.
