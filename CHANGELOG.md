@@ -7,6 +7,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-05-04
+
+v0.2.0 는 v0.1.2 GA 이후 audit Top 8 candidates 기반 Sprint 4~13 진행 결과의 minor release. 18 PR (#78~#95) 연속 admin squash merge — 회귀 0, ui crate tests 1148 → 1312 (+164), agent 105 → 129 (+24), terminal 27 → 47 (+20), workspace 17 → 26 (+9). Lightweight SPEC fast-track 7건 적용 (PLUGIN-MGR / TOOLBAR-WIRE / ONBOARDING-ENV / OSC8-LIFECYCLE MS-1 / WIZARD-ENV MS-1 / OSC8-LIFECYCLE MS-2 / WIZARD-ENV MS-2). audit Top 8 진척: 0/8 → **6/8 GA + 1.75/8 PARTIAL = 96.9%**.
+
+### Added
+
+#### Sprint 4 — Workspace Global Search (D-4 GA)
+
+- **feat(workspace,ui)**: SPEC-V0-2-0-GLOBAL-SEARCH-001 MS-1~MS-4 — workspace 전역 파일 + content + symbol search engine + Cmd+Shift+F sidebar UI + result navigation + polish (PR #78~#81). Pure Rust grep + ignore + tantivy 무의존, USER-DECISION-A (a) 채택. ui +70 / workspace +9 / search +18 tests.
+
+#### Sprint 5/6 — Workspace Switcher Context Menu (D-2 GA)
+
+- **feat(workspace,ui)**: SPEC-V3-004 MS-5/MS-6 — D-2 workspace switcher 우클릭 ContextMenu (Rename modal / Delete confirmation / Move up/down) RootView wire + reorder sync (PR #82, #84). +9 workspace / +14 menu / +13 ui T8 tests.
+
+#### Sprint 6 — Multi-Shell Picker (A-4 GA)
+
+- **feat(terminal,ui)**: SPEC-V0-2-0-MULTI-SHELL-001 — terminal pane shell switcher (zsh/bash/fish/sh + custom path) + RootView dispatch action + key binding (PR #83). +9 terminal / +5 ui tests.
+
+#### Sprint 7 — Plugin Manager UI (I-3 GA, Lightweight #1)
+
+- **feat(settings)**: SPEC-V0-2-0-PLUGIN-MGR-001 MS-1 — Plugins pane skeleton (`crates/moai-studio-ui/src/settings/panes/plugins.rs` 신규 ~280 LOC). PluginInfo struct + 6 bundled canonical seed (moai-adk / claude-code-skills / mermaid-diagrams / git-co-author / nextra-docs / shadcn-ui-helper) + PluginsState filter + filtered_plugins generic helper (PR #86). SettingsSection::Plugins 11번째 variant. +15 tests.
+
+#### Sprint 8 — Mission Control (E-5 90%)
+
+- **feat(agent)**: SPEC-V0-2-0-MISSION-CTRL-001 MS-1 — AgentRunRegistry domain (~440 LOC). AgentCard struct (run_id / label / status / last_event_summary / last_event_at / cost / event_count) + 11 API + hook event_name → AgentRunStatus auto-transition (SessionStart→Running, Stop→Completed, Notification(error)→Failed) + truncate_chars helper (PR #87). +18 agent tests.
+- **feat(ui)**: SPEC-V0-2-0-MISSION-CTRL-001 MS-2 — Mission Control 2x2 grid render (`crates/moai-studio-ui/src/agent/mission_control_view.rs` ~330 LOC). CellData + MissionControlView (snapshot + max_cells=4) + status_pill_color / format_cost ($0.0001 4-decimal) + RootView mission_control entity field + 3 lifecycle helpers (PR #88). ADR-MC-1 deviation: View 가 Vec<AgentCard> 스냅샷 owned. +16 tests.
+- **feat(agent,ui)**: SPEC-V0-2-0-MISSION-CTRL-001 MS-3 partial — pump_into_registry SSE chunk router + Command Palette mission.toggle + RootView pending_mission_toggle drain pattern (PR #89). +6 agent +7 ui tests. MS-3b HTTP subscribe carry (USER-DECISION-MC-A: reqwest vs ureq).
+
+#### Sprint 9 — Toolbar Wire (F-3 GA, Lightweight #2)
+
+- **feat(toolbar,ui)**: SPEC-V0-2-0-TOOLBAR-WIRE-001 MS-1 — 7 button on_mouse_down → cx.dispatch_action wire (NewWorkspace / ToggleSidebar / OpenSettings / OpenCommandPalette / NewTerminalSurface / ToggleFind / OpenDocumentation). 기존 7 on_action listener 보존 (PR #90). +7 ui tests.
+
+#### Sprint 10/11+/13 — Onboarding Env Detect (F-6 GA, Lightweight #3+#5+#7)
+
+- **feat(ui)**: SPEC-V0-2-0-ONBOARDING-ENV-001 MS-1 — env detection module (`crates/moai-studio-ui/src/onboarding/{mod.rs, env.rs}` 신규 ~440 LOC). Tool enum (6 variant) + ToolStatus + EnvironmentReport + CommandRunner trait + RealCommandRunner + detect_with_runner + parse_version_from_stdout (PR #91). +13 ui tests.
+- **feat(ui)**: SPEC-V0-2-0-WIZARD-ENV-001 MS-1 — ProjectWizard env_report state binding (`Option<EnvironmentReport>` field + 3 setter/getter, dismiss reset 통합, PR #93). +6 ui tests.
+- **feat(ui)**: SPEC-V0-2-0-WIZARD-ENV-001 MS-2 — wizard env section render + RootView async auto-detect (`format_env_summary` / `format_missing_tools_label` pure helpers + `render_env_section` Detecting/banner 분기 + `RootView::trigger_env_detect` cx.background_executor + cx.spawn 패턴, PR #95). +7 ui tests. **F-6 audit 100% 완전 마감**.
+
+#### Sprint 11/12 — OSC 8 Hyperlink Lifecycle (B-1 85%, Lightweight #4+#6)
+
+- **feat(terminal)**: SPEC-V0-2-0-OSC8-LIFECYCLE-001 MS-1 — VisitedLinkRegistry + ClickAction::CopyUrl variant + resolve_click_for_copy* helpers (`crates/moai-studio-terminal/src/link.rs` 확장, PR #92). +11 terminal tests.
+- **feat(ui,terminal)**: SPEC-V0-2-0-OSC8-LIFECYCLE-001 MS-2 — ClipboardWriter trait abstraction + ArboardClipboardWriter / MockClipboardWriter + TerminalSurface visited_links + clipboard_writer fields + copy_url_at pure helper + handle_click_for_copy method + MouseButton::Right wire + mark_visited on left-click OpenUrl (PR #94). +10 ui tests. visited URL span 색상 렌더는 MS-3 carry (T5/T6 cell-grid render path 의존).
+
+### Changed
+
+- **chore(spec-workflow)**: Lightweight SPEC fast-track variant 신설 — `.claude/rules/moai/workflow/spec-workflow.md §Plan Phase` (PR #85). 적격성: spec.md ≤ 10 KB, AC ≤ 8, milestones ≤ 2, no architectural impact, 단일 PR. v0.2.0 cycle 에서 7회 적용으로 패턴 검증.
+- **chore(settings)**: clippy field-reassign-with-default 1건 정리 — `crates/moai-studio-ui/src/settings/settings_state.rs:865` (PR #86 carry, OSC8-LIFECYCLE MS-2 PR #94 에서 drive-by fix).
+
+### Test Coverage
+
+- ui crate tests: **1148 → 1312** (+164 신규 tests over 18 PR)
+- agent crate tests: **105 → 129** (+24)
+- terminal crate tests: **27 → 47** (+20)
+- workspace crate tests: **17 → 26** (+9)
+- 18 PR 연속 회귀 0 (one-cycle execution, #78 ~ #95, all admin-merged)
+- clippy 0 warnings on changed files (modulo 1 잔존 pre-existing in mission_control.rs:468)
+- fmt clean across all PRs
+
+### audit Top 8 진척 (96.9% — sess 14 진입 시점)
+
+| Item | Status | Closing PR |
+|------|--------|-----------|
+| D-4 Global Search | ✅ GA | #78~#81 |
+| D-2 Workspace switcher | ✅ GA | #82, #84 |
+| A-4 Multi-shell picker | ✅ GA | #83 |
+| I-3 Plugin Manager UI | ✅ GA | #86 |
+| F-3 Toolbar wire | ✅ GA | #90 |
+| **F-6 Onboarding env** | ✅ **GA (NEW)** | #91, #93, #95 |
+| E-5 Mission Control | 🟡 90% | #87~#89 (MS-3b carry) |
+| B-1 OSC 8 lifecycle | 🟡 85% | #92, #94 (MS-3 carry) |
+| F-4 Status Bar | ⏸️ pending | (별 STATUS-BAR-WIRE-001 SPEC) |
+
+### Deferred to v0.2.x patch / v0.3.0
+
+- **B-1 MS-3** — visited URL span 색상 렌더 (T5/T6 cell-grid render path 의존, 별 SPEC 또는 T5/T6 통합)
+- **E-5 MS-3b** — HTTP client subscribe + Cmd+Shift+M key binding (REQ-MC-031, USER-DECISION-MC-A: reqwest vs ureq, 별 HOOK-WIRE-001 SPEC 후보)
+- **F-4 Status Bar** — git2 + LSP + agent runtime cross-component (별 STATUS-BAR-WIRE-001 full SPEC)
+- **Pre-existing clippy warning**: `crates/moai-studio-agent/src/mission_control.rs:468` explicit_auto_deref (PR #89 carry) — 별 fix PR 또는 MISSION-CTRL 후속 SPEC
+
+### Workspace Versioning
+
+- `[workspace.package].version`: 0.1.2 → **0.2.0**
+- All 22 crates inherit via `version.workspace = true`
+
 ## [0.1.2] — 2026-05-01
 
 v0.1.2 는 v0.1.1 GA 직후 audit (`.moai/specs/RELEASE-V0.1.2/feature-audit.md`) 기반 16-task plan 의 incremental polish + skeleton release. 모든 변경은 single-session 14 PR 연속 회귀 0 으로 머지됨 (#63 ~ #76). audit feature mapping 의 stale 항목 7건 식별 및 v0.2.0 deferred backlog 정리.
