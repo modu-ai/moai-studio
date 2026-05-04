@@ -17,6 +17,7 @@
 
 use crate::design::tokens::mx_tag;
 use regex::Regex;
+use std::time::Instant;
 
 // @MX:ANCHOR: [AUTO] mx-tag-scanner-trait
 // @MX:REASON: [AUTO] SPEC-V3-006 MS-3a AC-MV-6. MxTagScanner 는 mock (MS-3a) 과
@@ -288,6 +289,194 @@ impl MxTagScanner for RealMxScanner {
         }
 
         tags
+    }
+}
+
+// ============================================================
+// SPEC-V0-3-0-MX-POPOVER-001 MS-1: hover detection + popover FSM
+// ============================================================
+
+// @MX:ANCHOR: [AUTO] mx-popover-fsm
+// @MX:REASON: [AUTO] SPEC-V0-3-0-MX-POPOVER-001 MS-1 AC-MXP-1~6.
+//   Pure-data state machine isolated from GPUI for unit-test coverage.
+//   fan_in >= 3: viewer mouse-move handler, viewer escape handler, viewer tick.
+
+/// Hover debounce before promoting Hovering -> Open (REQ-MXP-003).
+pub const MX_HOVER_DEBOUNCE_MS: u128 = 200;
+
+/// Hit-test gutter pixel-y to a line index (REQ-MXP-001).
+///
+/// `viewport_y` is the mouse y coordinate relative to the gutter top edge.
+/// Returns `None` when the coordinate falls outside the gutter band or the
+/// line height is non-positive.
+pub fn hit_test_gutter(viewport_y: f32, line_height: f32, num_lines: usize) -> Option<usize> {
+    if viewport_y < 0.0 || line_height <= 0.0 {
+        return None;
+    }
+    let idx = (viewport_y / line_height).floor() as usize;
+    if idx < num_lines { Some(idx) } else { None }
+}
+
+/// Decide whether the popover should flip to the anchor's left side (REQ-MXP-006).
+///
+/// When the available width on the anchor's right side is smaller than the
+/// popover width, the popover flips to the anchor's left.
+pub fn should_flip_left(anchor_x: f32, popover_width: f32, viewport_width: f32) -> bool {
+    let available_right = viewport_width - anchor_x;
+    available_right < popover_width
+}
+
+/// Render popover content as plain text (REQ-MXP-004).
+///
+/// Used as the unit-testable surface for popover content composition. The
+/// GPUI render layer reads the same `MxPopoverData` and produces the visual
+/// element; the text rendering preserves identical token order.
+pub fn render_popover_text(data: &MxPopoverData) -> String {
+    let mut parts: Vec<String> = Vec::with_capacity(4);
+    parts.push(data.kind.icon().to_string());
+    parts.push(data.body.clone());
+    if let Some(reason) = &data.reason {
+        parts.push(reason.clone());
+    }
+    if let Some(spec_id) = &data.spec_id {
+        parts.push(spec_id.clone());
+    }
+    parts.join(" | ")
+}
+
+/// FSM state for the @MX gutter hover popover (REQ-MXP-002, MXP-003, MXP-005).
+#[derive(Debug, Clone, PartialEq)]
+pub enum MxPopoverState {
+    /// No hover in progress.
+    Closed,
+    /// Mouse is hovering a gutter icon but the debounce has not elapsed yet.
+    Hovering {
+        line: usize,
+        tag_index: usize,
+        started_at: Instant,
+    },
+    /// Popover is open with content derived from the hovered tag.
+    Open {
+        tag_index: usize,
+        data: MxPopoverData,
+        anchor_line: usize,
+    },
+}
+
+/// Hover state machine that drives popover open/close (REQ-MXP-002~005).
+///
+/// Pure-data; no GPUI dependency. The viewer feeds mouse events / ticks /
+/// escape into the FSM and reads `state()` to decide rendering.
+#[derive(Debug, Clone)]
+pub struct MxHoverFsm {
+    state: MxPopoverState,
+    mouse_in_popover: bool,
+}
+
+impl MxHoverFsm {
+    pub fn new() -> Self {
+        Self {
+            state: MxPopoverState::Closed,
+            mouse_in_popover: false,
+        }
+    }
+
+    /// MouseMove over a gutter line. If the line carries a tag, enters
+    /// `Hovering` (resetting the timer when the line changes).
+    pub fn on_gutter_hover(&mut self, line: usize, icons: &[GutterIcon], now: Instant) {
+        let icon = icons.iter().find(|ic| ic.line == line);
+        match (self.state.clone(), icon) {
+            (_, None) => {
+                // No tag at this line. Close unless the user has crossed into
+                // the popover area (which keeps the popover alive).
+                if !self.mouse_in_popover {
+                    self.state = MxPopoverState::Closed;
+                }
+            }
+            (MxPopoverState::Closed, Some(icon)) => {
+                self.state = MxPopoverState::Hovering {
+                    line,
+                    tag_index: icon.tag_index,
+                    started_at: now,
+                };
+            }
+            (
+                MxPopoverState::Hovering {
+                    line: prev_line, ..
+                },
+                Some(icon),
+            ) if prev_line != line => {
+                self.state = MxPopoverState::Hovering {
+                    line,
+                    tag_index: icon.tag_index,
+                    started_at: now,
+                };
+            }
+            (MxPopoverState::Hovering { .. }, Some(_)) => {
+                // Same line: keep timer.
+            }
+            (MxPopoverState::Open { .. }, _) => {
+                // Already open; movement does not change state until dismissed.
+            }
+        }
+    }
+
+    /// Set whether the mouse is currently inside the popover area. Toggling to
+    /// `true` while a popover is open prevents the dismiss-on-leave path.
+    pub fn set_mouse_in_popover(&mut self, inside: bool) {
+        self.mouse_in_popover = inside;
+    }
+
+    /// Mouse left both gutter and popover (REQ-MXP-005).
+    pub fn on_mouse_leave_all(&mut self) {
+        self.mouse_in_popover = false;
+        self.state = MxPopoverState::Closed;
+    }
+
+    /// Escape pressed (REQ-MXP-005).
+    pub fn on_escape(&mut self) {
+        self.mouse_in_popover = false;
+        self.state = MxPopoverState::Closed;
+    }
+
+    /// Frame tick: promote `Hovering` -> `Open` once the debounce elapses
+    /// (REQ-MXP-003).
+    pub fn tick(&mut self, now: Instant, tags: &[MxTag]) {
+        if let MxPopoverState::Hovering {
+            line,
+            tag_index,
+            started_at,
+        } = self.state.clone()
+            && now.saturating_duration_since(started_at).as_millis() >= MX_HOVER_DEBOUNCE_MS
+            && let Some(tag) = tags.get(tag_index)
+        {
+            self.state = MxPopoverState::Open {
+                tag_index,
+                data: MxPopoverData::from_tag(tag),
+                anchor_line: line,
+            };
+        }
+    }
+
+    pub fn state(&self) -> &MxPopoverState {
+        &self.state
+    }
+
+    pub fn is_open(&self) -> bool {
+        matches!(self.state, MxPopoverState::Open { .. })
+    }
+
+    pub fn open_data(&self) -> Option<&MxPopoverData> {
+        match &self.state {
+            MxPopoverState::Open { data, .. } => Some(data),
+            _ => None,
+        }
+    }
+}
+
+impl Default for MxHoverFsm {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -590,5 +779,254 @@ mod tests {
         let tags = scanner.scan(source);
         assert_eq!(tags.len(), 1);
         assert!(tags[0].body.contains("[AUTO]"), "body 에 [AUTO] 포함");
+    }
+
+    // ============================================================
+    // T6: SPEC-V0-3-0-MX-POPOVER-001 MS-1 — hover/popover FSM
+    // (AC-MXP-1 ~ AC-MXP-6)
+    // ============================================================
+
+    use std::time::Duration;
+
+    fn sample_icons(tags: &[MxTag]) -> Vec<GutterIcon> {
+        let scanner = MockMxScanner::with_tags(tags.to_vec());
+        scanner.gutter_icons(tags)
+    }
+
+    // ── AC-MXP-1: hit-test gutter ──
+
+    #[test]
+    fn ac_mxp_1_hit_test_returns_line_index_within_band() {
+        // line_height=20, viewport_y=50 → floor(50/20) = 2.
+        assert_eq!(hit_test_gutter(50.0, 20.0, 5), Some(2));
+        // Top of line 0.
+        assert_eq!(hit_test_gutter(0.0, 20.0, 5), Some(0));
+        // Just below top of line 4.
+        assert_eq!(hit_test_gutter(80.5, 20.0, 5), Some(4));
+    }
+
+    #[test]
+    fn ac_mxp_1_hit_test_returns_none_when_outside_band() {
+        // 5 lines * 20 = 100 px band; y=150 is below.
+        assert_eq!(hit_test_gutter(150.0, 20.0, 5), None);
+        // Negative y.
+        assert_eq!(hit_test_gutter(-1.0, 20.0, 5), None);
+        // Non-positive line_height.
+        assert_eq!(hit_test_gutter(50.0, 0.0, 5), None);
+        assert_eq!(hit_test_gutter(50.0, -20.0, 5), None);
+    }
+
+    // ── AC-MXP-2: hover → debounce → open ──
+
+    #[test]
+    fn ac_mxp_2_hover_promotes_to_open_after_debounce() {
+        let tags = vec![MxTag {
+            kind: MxTagKind::Anchor,
+            body: "anchored".into(),
+            line: 2,
+            reason: None,
+            spec_id: None,
+        }];
+        let icons = sample_icons(&tags);
+
+        let mut fsm = MxHoverFsm::new();
+        let t0 = Instant::now();
+        fsm.on_gutter_hover(2, &icons, t0);
+        assert!(matches!(
+            fsm.state(),
+            MxPopoverState::Hovering {
+                line: 2,
+                tag_index: 0,
+                ..
+            }
+        ));
+
+        // Tick before debounce -> still hovering.
+        fsm.tick(t0 + Duration::from_millis(100), &tags);
+        assert!(
+            !fsm.is_open(),
+            "100ms < 200ms debounce, must remain hovering"
+        );
+
+        // Tick after debounce -> open.
+        fsm.tick(t0 + Duration::from_millis(201), &tags);
+        assert!(fsm.is_open(), "201ms >= 200ms debounce, must open");
+        assert_eq!(fsm.open_data().map(|d| d.kind), Some(MxTagKind::Anchor));
+    }
+
+    #[test]
+    fn ac_mxp_2_changing_line_resets_debounce_timer() {
+        let tags = vec![
+            MxTag {
+                kind: MxTagKind::Anchor,
+                body: "a".into(),
+                line: 1,
+                reason: None,
+                spec_id: None,
+            },
+            MxTag {
+                kind: MxTagKind::Note,
+                body: "b".into(),
+                line: 4,
+                reason: None,
+                spec_id: None,
+            },
+        ];
+        let icons = sample_icons(&tags);
+
+        let mut fsm = MxHoverFsm::new();
+        let t0 = Instant::now();
+        fsm.on_gutter_hover(1, &icons, t0);
+        // After 150ms move to line 4 -> timer resets, started_at = t0+150.
+        fsm.on_gutter_hover(4, &icons, t0 + Duration::from_millis(150));
+        // Tick at t0+250 -> only 100ms on line 4, must remain hovering.
+        fsm.tick(t0 + Duration::from_millis(250), &tags);
+        assert!(!fsm.is_open());
+        // Tick at t0+360 -> 210ms on line 4, opens with the line-4 tag.
+        fsm.tick(t0 + Duration::from_millis(360), &tags);
+        assert!(fsm.is_open());
+        assert_eq!(fsm.open_data().map(|d| d.kind), Some(MxTagKind::Note));
+    }
+
+    // ── AC-MXP-3: popover content includes icon + body + reason + spec_id ──
+
+    #[test]
+    fn ac_mxp_3_render_text_includes_warn_icon_body_reason_spec_id() {
+        let data = MxPopoverData {
+            kind: MxTagKind::Warn,
+            body: "goroutine without context".into(),
+            reason: Some("no cancel prop".into()),
+            fan_in: "N/A".into(),
+            spec_id: Some("SPEC-V3-006".into()),
+        };
+        let rendered = render_popover_text(&data);
+        assert!(rendered.contains("⚠"), "warn icon present");
+        assert!(
+            rendered.contains("goroutine without context"),
+            "body present"
+        );
+        assert!(rendered.contains("no cancel prop"), "reason present");
+        assert!(rendered.contains("SPEC-V3-006"), "spec id present");
+    }
+
+    #[test]
+    fn ac_mxp_3_render_text_omits_optional_fields_when_none() {
+        let data = MxPopoverData {
+            kind: MxTagKind::Note,
+            body: "context note".into(),
+            reason: None,
+            fan_in: "N/A".into(),
+            spec_id: None,
+        };
+        let rendered = render_popover_text(&data);
+        assert!(rendered.contains("ℹ"));
+        assert!(rendered.contains("context note"));
+        // No spurious empty separators; reason / spec id absent.
+        assert!(!rendered.contains("None"));
+    }
+
+    // ── AC-MXP-4: mouse-leave-all dismisses ──
+
+    #[test]
+    fn ac_mxp_4_mouse_leave_all_closes_open_popover() {
+        let tags = vec![MxTag {
+            kind: MxTagKind::Todo,
+            body: "todo".into(),
+            line: 0,
+            reason: None,
+            spec_id: None,
+        }];
+        let icons = sample_icons(&tags);
+
+        let mut fsm = MxHoverFsm::new();
+        let t0 = Instant::now();
+        fsm.on_gutter_hover(0, &icons, t0);
+        fsm.tick(t0 + Duration::from_millis(201), &tags);
+        assert!(fsm.is_open());
+
+        fsm.on_mouse_leave_all();
+        assert!(matches!(fsm.state(), MxPopoverState::Closed));
+        assert!(fsm.open_data().is_none());
+    }
+
+    #[test]
+    fn ac_mxp_4_mouse_in_popover_keeps_state_when_gutter_has_no_tag() {
+        let tags = vec![MxTag {
+            kind: MxTagKind::Anchor,
+            body: "a".into(),
+            line: 1,
+            reason: None,
+            spec_id: None,
+        }];
+        let icons = sample_icons(&tags);
+
+        let mut fsm = MxHoverFsm::new();
+        let t0 = Instant::now();
+        fsm.on_gutter_hover(1, &icons, t0);
+        fsm.tick(t0 + Duration::from_millis(201), &tags);
+        assert!(fsm.is_open());
+
+        // Mouse moves into popover area, then over a gutter line without a tag.
+        fsm.set_mouse_in_popover(true);
+        fsm.on_gutter_hover(99, &icons, t0 + Duration::from_millis(300));
+        assert!(fsm.is_open(), "popover stays open while mouse is inside it");
+    }
+
+    // ── AC-MXP-5: Escape dismisses ──
+
+    #[test]
+    fn ac_mxp_5_escape_closes_open_popover() {
+        let tags = vec![MxTag {
+            kind: MxTagKind::Note,
+            body: "n".into(),
+            line: 3,
+            reason: None,
+            spec_id: None,
+        }];
+        let icons = sample_icons(&tags);
+
+        let mut fsm = MxHoverFsm::new();
+        let t0 = Instant::now();
+        fsm.on_gutter_hover(3, &icons, t0);
+        fsm.tick(t0 + Duration::from_millis(201), &tags);
+        assert!(fsm.is_open());
+
+        fsm.on_escape();
+        assert!(matches!(fsm.state(), MxPopoverState::Closed));
+    }
+
+    #[test]
+    fn ac_mxp_5_escape_closes_hovering_state_too() {
+        let tags = vec![MxTag {
+            kind: MxTagKind::Note,
+            body: "n".into(),
+            line: 0,
+            reason: None,
+            spec_id: None,
+        }];
+        let icons = sample_icons(&tags);
+
+        let mut fsm = MxHoverFsm::new();
+        let t0 = Instant::now();
+        fsm.on_gutter_hover(0, &icons, t0);
+        // Don't tick — stay in Hovering.
+        fsm.on_escape();
+        assert!(matches!(fsm.state(), MxPopoverState::Closed));
+    }
+
+    // ── AC-MXP-6: flip when right space < popover width ──
+
+    #[test]
+    fn ac_mxp_6_flip_to_left_when_right_space_insufficient() {
+        // viewport=800, popover=300, anchor_x=600 → right=200 < 300 → flip.
+        assert!(should_flip_left(600.0, 300.0, 800.0));
+    }
+
+    #[test]
+    fn ac_mxp_6_no_flip_when_right_space_sufficient() {
+        // viewport=800, popover=300, anchor_x=400 → right=400 ≥ 300 → no flip.
+        assert!(!should_flip_left(400.0, 300.0, 800.0));
+        // Edge case: exactly equal → fits, no flip.
+        assert!(!should_flip_left(500.0, 300.0, 800.0));
     }
 }
