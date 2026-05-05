@@ -1023,11 +1023,33 @@ impl RootView {
         }
 
         if id.starts_with("pane.") {
-            tracing::info!(
-                command = id,
-                "pane command not yet wired — deferred to pane SPEC"
-            );
-            return true;
+            // SPEC-V0-3-0-PANE-WIRE-001 (REQ-PW-007): route known pane sub-commands.
+            // cx is not available in dispatch_command (context-free signature);
+            // GPUI action handlers (on_action) handle actual state mutation.
+            //
+            // Three specific sub-commands are wired (pane.close, pane.focus_next,
+            // pane.focus_prev); split commands and other pane.* are handled by
+            // on_action wiring or remain deferred — all return true except
+            // unrecognised pane.* ids which return false (AC-PW-6).
+            match id {
+                // Wired via SPEC-V0-3-0-PANE-WIRE-001.
+                "pane.close" | "pane.focus_next" | "pane.focus_prev" => {
+                    tracing::info!(command = id, "pane command routed (PANE-WIRE-001)");
+                    return true;
+                }
+                // Wired via SPEC-V0-1-2-MENUS-001 / split on_action handlers.
+                "pane.split_horizontal" | "pane.split_vertical" => {
+                    tracing::info!(command = id, "pane split command — handled by on_action");
+                    return true;
+                }
+                other => {
+                    tracing::warn!(
+                        command = other,
+                        "pane command not recognised — returning false"
+                    );
+                    return false;
+                }
+            }
         }
 
         if id.starts_with("workspace.") {
@@ -1731,6 +1753,100 @@ impl RootView {
         cx.notify();
     }
 
+    // ── SPEC-V0-3-0-PANE-WIRE-001: pane action helpers ──
+
+    /// SPEC-V0-3-0-PANE-WIRE-001 (REQ-PW-001): Close the currently focused pane.
+    ///
+    /// Resolves `last_focused_pane` from the active tab, calls `PaneTree::close_pane`,
+    /// then updates `last_focused_pane` to `root_pane_id()` (sibling promotion result).
+    /// No-op when `tab_container` is None or `last_focused_pane` is None (logs warn).
+    pub fn close_focused_pane(&mut self, cx: &mut Context<Self>) {
+        let Some(container) = self.tab_container.clone() else {
+            tracing::warn!("close_focused_pane: tab_container is None — ignored");
+            return;
+        };
+        let focused = container.read(cx).active_tab().last_focused_pane.clone();
+        let Some(focused_id) = focused else {
+            tracing::warn!("close_focused_pane: last_focused_pane is None — ignored");
+            return;
+        };
+        container.update(cx, |tc, _cx| {
+            let tab = tc.active_tab_mut();
+            match tab.pane_tree.close_pane(&focused_id) {
+                Ok(()) => {
+                    // After close, focus the root pane (sibling promotion result).
+                    tab.last_focused_pane = tab.pane_tree.root_pane_id().cloned();
+                }
+                Err(e) => {
+                    tracing::warn!(?e, ?focused_id, "close_focused_pane: close_pane failed");
+                }
+            }
+        });
+        cx.notify();
+    }
+
+    /// SPEC-V0-3-0-PANE-WIRE-001 (REQ-PW-002): Focus the next pane (in-order, wrap-around).
+    ///
+    /// Collects `leaves()` from the active tab's pane tree, locates the current
+    /// `last_focused_pane`, and advances to `(idx + 1) % len`.
+    /// No-op when `tab_container` is None (logs warn).
+    pub fn focus_next_pane(&mut self, cx: &mut Context<Self>) {
+        let Some(container) = self.tab_container.clone() else {
+            tracing::warn!("focus_next_pane: tab_container is None — ignored");
+            return;
+        };
+        container.update(cx, |tc, _cx| {
+            let tab = tc.active_tab_mut();
+            let leaf_ids: Vec<panes::PaneId> = tab
+                .pane_tree
+                .leaves()
+                .into_iter()
+                .map(|l| l.id.clone())
+                .collect();
+            if leaf_ids.is_empty() {
+                tracing::warn!("focus_next_pane: no leaves — ignored");
+                return;
+            }
+            let current = tab
+                .last_focused_pane
+                .clone()
+                .unwrap_or_else(|| leaf_ids[0].clone());
+            tab.last_focused_pane = next_focus_in_leaves(&leaf_ids, &current);
+        });
+        cx.notify();
+    }
+
+    /// SPEC-V0-3-0-PANE-WIRE-001 (REQ-PW-003): Focus the previous pane (in-order, wrap-around).
+    ///
+    /// Collects `leaves()` from the active tab's pane tree, locates the current
+    /// `last_focused_pane`, and moves to `(idx + len - 1) % len`.
+    /// No-op when `tab_container` is None (logs warn).
+    pub fn focus_prev_pane(&mut self, cx: &mut Context<Self>) {
+        let Some(container) = self.tab_container.clone() else {
+            tracing::warn!("focus_prev_pane: tab_container is None — ignored");
+            return;
+        };
+        container.update(cx, |tc, _cx| {
+            let tab = tc.active_tab_mut();
+            let leaf_ids: Vec<panes::PaneId> = tab
+                .pane_tree
+                .leaves()
+                .into_iter()
+                .map(|l| l.id.clone())
+                .collect();
+            if leaf_ids.is_empty() {
+                tracing::warn!("focus_prev_pane: no leaves — ignored");
+                return;
+            }
+            let current = tab
+                .last_focused_pane
+                .clone()
+                .unwrap_or_else(|| leaf_ids[0].clone());
+            tab.last_focused_pane = prev_focus_in_leaves(&leaf_ids, &current);
+        });
+        cx.notify();
+    }
+
     /// SPEC-V0-1-2-MENUS-001 MS-2 (AC-MN-8): mount or dismiss the SPEC panel
     /// overlay. Mirrors the body of `handle_spec_key_event` so menu/keybinding
     /// dispatch and the legacy direct key handler stay in sync.
@@ -2289,14 +2405,17 @@ impl Render for RootView {
             .on_action(cx.listener(|this, _: &SplitDown, _window, cx| {
                 this.handle_split_action(panes::tree::SplitDirection::Vertical, cx);
             }))
-            .on_action(cx.listener(|_this, _: &ClosePane, _window, _cx| {
-                info!("ClosePane — pane management deferred");
+            // SPEC-V0-3-0-PANE-WIRE-001 (REQ-PW-004): ClosePane wires to close_focused_pane.
+            .on_action(cx.listener(|this, _: &ClosePane, _window, cx| {
+                this.close_focused_pane(cx);
             }))
-            .on_action(cx.listener(|_this, _: &FocusNextPane, _window, _cx| {
-                info!("FocusNextPane — pane focus deferred");
+            // SPEC-V0-3-0-PANE-WIRE-001 (REQ-PW-005): FocusNextPane wires to focus_next_pane.
+            .on_action(cx.listener(|this, _: &FocusNextPane, _window, cx| {
+                this.focus_next_pane(cx);
             }))
-            .on_action(cx.listener(|_this, _: &FocusPrevPane, _window, _cx| {
-                info!("FocusPrevPane — pane focus deferred");
+            // SPEC-V0-3-0-PANE-WIRE-001 (REQ-PW-006): FocusPrevPane wires to focus_prev_pane.
+            .on_action(cx.listener(|this, _: &FocusPrevPane, _window, cx| {
+                this.focus_prev_pane(cx);
             }))
             // SPEC-V0-3-0-SURFACE-MENU-WIRE-001 (REQ-SMW-004/005/006): functional wire.
             .on_action(cx.listener(|this, _: &NewTerminalSurface, _window, cx| {
@@ -3590,6 +3709,89 @@ pub fn run_app(workspaces: Vec<Workspace>, storage_path: PathBuf) {
 /// 스캐폴드 hello 유지 (non-GPUI 경로용).
 pub fn hello() {
     info!("moai-studio-ui: scaffold entry. GPUI 엔트리는 run_app(workspaces)");
+}
+
+// ============================================================
+// SPEC-V0-3-0-PANE-WIRE-001: cx-free pane focus helpers
+// ============================================================
+
+/// Pane command variants for dispatch routing (AC-PW-6).
+///
+/// Used by `route_pane_command_to_kind` to distinguish known pane palette commands
+/// from unrecognised ones without requiring a GPUI context.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PaneCommand {
+    /// Corresponds to "pane.close" — close the currently focused pane.
+    Close,
+    /// Corresponds to "pane.focus_next" — rotate focus forward through leaves.
+    FocusNext,
+    /// Corresponds to "pane.focus_prev" — rotate focus backward through leaves.
+    FocusPrev,
+}
+
+/// SPEC-V0-3-0-PANE-WIRE-001 (REQ-PW-007): Route a `pane.*` command id to a `PaneCommand`.
+///
+/// Returns `Some(PaneCommand)` for the three wired ids, `None` for any other string.
+/// This function is cx-free and fully unit-testable (AC-PW-6).
+pub fn route_pane_command_to_kind(id: &str) -> Option<PaneCommand> {
+    match id {
+        "pane.close" => Some(PaneCommand::Close),
+        "pane.focus_next" => Some(PaneCommand::FocusNext),
+        "pane.focus_prev" => Some(PaneCommand::FocusPrev),
+        _ => None,
+    }
+}
+
+/// SPEC-V0-3-0-PANE-WIRE-001 (REQ-PW-002): Return the next leaf id in a rotation.
+///
+/// Given an ordered slice of `PaneId` values and the currently focused `current` id:
+/// - Returns `Some(leaves[(idx + 1) % len])` when `current` is found.
+/// - When `current` is not in `leaves` (orphan), returns `Some(leaves[0])` as fallback (AC-PW-7).
+/// - Returns `None` only when `leaves` is empty.
+pub fn next_focus_in_leaves(
+    leaves: &[panes::PaneId],
+    current: &panes::PaneId,
+) -> Option<panes::PaneId> {
+    if leaves.is_empty() {
+        return None;
+    }
+    let idx = leaves
+        .iter()
+        .position(|id| id == current)
+        .unwrap_or(usize::MAX);
+    let next_idx = if idx == usize::MAX {
+        // Orphan focus: fall back to first leaf (AC-PW-7).
+        0
+    } else {
+        (idx + 1) % leaves.len()
+    };
+    Some(leaves[next_idx].clone())
+}
+
+/// SPEC-V0-3-0-PANE-WIRE-001 (REQ-PW-003): Return the previous leaf id in a rotation.
+///
+/// Given an ordered slice of `PaneId` values and the currently focused `current` id:
+/// - Returns `Some(leaves[(idx + len - 1) % len])` when `current` is found.
+/// - When `current` is not in `leaves` (orphan), returns `Some(leaves[0])` as fallback.
+/// - Returns `None` only when `leaves` is empty.
+pub fn prev_focus_in_leaves(
+    leaves: &[panes::PaneId],
+    current: &panes::PaneId,
+) -> Option<panes::PaneId> {
+    if leaves.is_empty() {
+        return None;
+    }
+    let idx = leaves
+        .iter()
+        .position(|id| id == current)
+        .unwrap_or(usize::MAX);
+    let prev_idx = if idx == usize::MAX {
+        // Orphan focus: fall back to first leaf.
+        0
+    } else {
+        (idx + leaves.len() - 1) % leaves.len()
+    };
+    Some(leaves[prev_idx].clone())
 }
 
 // ============================================================
@@ -6442,5 +6644,133 @@ mod tests {
             view.leaf_payloads.is_empty(),
             "leaf_payloads must be empty when there is no focused pane to mount to"
         );
+    }
+
+    // ── T-PW block: SPEC-V0-3-0-PANE-WIRE-001 cx-free helper unit tests ──
+
+    /// AC-PW-1: next_focus_in_leaves([A, B, C], A) == Some(B).
+    #[test]
+    fn next_focus_returns_next_leaf() {
+        let a = panes::PaneId::new_from_literal("a");
+        let b = panes::PaneId::new_from_literal("b");
+        let c = panes::PaneId::new_from_literal("c");
+        let leaves = vec![a.clone(), b.clone(), c.clone()];
+        let result = next_focus_in_leaves(&leaves, &a);
+        assert_eq!(result, Some(b), "focused A in [A,B,C] → next is B");
+    }
+
+    /// AC-PW-2: next_focus_in_leaves([A, B, C], C) == Some(A) (wrap-around).
+    #[test]
+    fn next_focus_wraps_to_first() {
+        let a = panes::PaneId::new_from_literal("a");
+        let b = panes::PaneId::new_from_literal("b");
+        let c = panes::PaneId::new_from_literal("c");
+        let leaves = vec![a.clone(), b.clone(), c.clone()];
+        let result = next_focus_in_leaves(&leaves, &c);
+        assert_eq!(
+            result,
+            Some(a),
+            "focused C (last) in [A,B,C] → next wraps to A"
+        );
+    }
+
+    /// AC-PW-3: prev_focus_in_leaves([A, B, C], A) == Some(C) (wrap-around).
+    #[test]
+    fn prev_focus_wraps_to_last() {
+        let a = panes::PaneId::new_from_literal("a");
+        let b = panes::PaneId::new_from_literal("b");
+        let c = panes::PaneId::new_from_literal("c");
+        let leaves = vec![a.clone(), b.clone(), c.clone()];
+        let result = prev_focus_in_leaves(&leaves, &a);
+        assert_eq!(
+            result,
+            Some(c),
+            "focused A (first) in [A,B,C] → prev wraps to C"
+        );
+    }
+
+    /// AC-PW-4: prev_focus_in_leaves([A, B, C], C) == Some(B).
+    #[test]
+    fn prev_focus_returns_prev_leaf() {
+        let a = panes::PaneId::new_from_literal("a");
+        let b = panes::PaneId::new_from_literal("b");
+        let c = panes::PaneId::new_from_literal("c");
+        let leaves = vec![a.clone(), b.clone(), c.clone()];
+        let result = prev_focus_in_leaves(&leaves, &c);
+        assert_eq!(result, Some(b), "focused C in [A,B,C] → prev is B");
+    }
+
+    /// AC-PW-5: single-leaf rotation — next and prev both return Some(A).
+    #[test]
+    fn focus_rotation_single_leaf_is_self() {
+        let a = panes::PaneId::new_from_literal("a");
+        let leaves = vec![a.clone()];
+        assert_eq!(
+            next_focus_in_leaves(&leaves, &a),
+            Some(a.clone()),
+            "single-leaf next returns self"
+        );
+        assert_eq!(
+            prev_focus_in_leaves(&leaves, &a),
+            Some(a.clone()),
+            "single-leaf prev returns self"
+        );
+    }
+
+    /// AC-PW-6: dispatch_command("pane.unknown_xxx") returns false;
+    /// route_pane_command_to_kind("pane.close") returns Some.
+    #[test]
+    fn dispatch_command_pane_unknown_returns_false() {
+        let mut view = RootView::new(vec![], dummy_path());
+        // Unknown pane sub-command must return false (graceful degradation).
+        let handled = view.dispatch_command("pane.unknown_xxx");
+        assert!(!handled, "pane.unknown_xxx must return false");
+        // Known sub-commands must route to Some variant.
+        assert!(
+            route_pane_command_to_kind("pane.close").is_some(),
+            "pane.close must route to Some"
+        );
+        assert!(
+            route_pane_command_to_kind("pane.focus_next").is_some(),
+            "pane.focus_next must route to Some"
+        );
+        assert!(
+            route_pane_command_to_kind("pane.focus_prev").is_some(),
+            "pane.focus_prev must route to Some"
+        );
+        assert!(
+            route_pane_command_to_kind("pane.unknown_xxx").is_none(),
+            "pane.unknown_xxx must route to None"
+        );
+    }
+
+    /// AC-PW-7: orphan focus falls back to first leaf.
+    #[test]
+    fn next_focus_orphan_falls_back_to_first() {
+        let a = panes::PaneId::new_from_literal("a");
+        let b = panes::PaneId::new_from_literal("b");
+        let orphan = panes::PaneId::new_from_literal("orphan-not-in-list");
+        let leaves = vec![a.clone(), b.clone()];
+        let result = next_focus_in_leaves(&leaves, &orphan);
+        assert_eq!(result, Some(a), "orphan focus falls back to first leaf");
+    }
+
+    /// AC-PW-6 routing: route_pane_command_to_kind returns correct PaneCommand variants.
+    #[test]
+    fn route_pane_command_to_kind_returns_correct_variants() {
+        assert!(matches!(
+            route_pane_command_to_kind("pane.close"),
+            Some(PaneCommand::Close)
+        ));
+        assert!(matches!(
+            route_pane_command_to_kind("pane.focus_next"),
+            Some(PaneCommand::FocusNext)
+        ));
+        assert!(matches!(
+            route_pane_command_to_kind("pane.focus_prev"),
+            Some(PaneCommand::FocusPrev)
+        ));
+        assert!(route_pane_command_to_kind("pane.split_horizontal").is_none());
+        assert!(route_pane_command_to_kind("pane.whatever").is_none());
     }
 }
