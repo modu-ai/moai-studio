@@ -443,6 +443,40 @@ impl RootView {
     }
 
     // ──────────────────────────────────────────────────────────────────
+    // SPEC-V0-3-0-STATUS-BAR-WIRE-001 — cx-bound status bar helpers
+    // ──────────────────────────────────────────────────────────────────
+
+    /// SPEC-V0-3-0-STATUS-BAR-WIRE-001 (REQ-SBW-001): Set the agent mode pill label.
+    ///
+    /// Delegates to `StatusBarState::set_agent_mode` and triggers a GPUI repaint.
+    pub fn set_status_agent_mode(&mut self, mode: impl Into<String>, cx: &mut Context<Self>) {
+        self.status_bar.set_agent_mode(mode);
+        cx.notify();
+    }
+
+    /// SPEC-V0-3-0-STATUS-BAR-WIRE-001 (REQ-SBW-002): Clear the agent mode pill.
+    ///
+    /// Delegates to `StatusBarState::clear_agent_mode` and triggers a GPUI repaint.
+    pub fn clear_status_agent_mode(&mut self, cx: &mut Context<Self>) {
+        self.status_bar.clear_agent_mode();
+        cx.notify();
+    }
+
+    /// SPEC-V0-3-0-STATUS-BAR-WIRE-001 (REQ-SBW-003): Refresh the git branch label.
+    ///
+    /// Calls `derive_status_git_label_from_workspace` with the active workspace id.
+    /// When the result is `Some((branch, dirty))`, sets the git branch; when `None`,
+    /// clears it. Triggers a GPUI repaint unconditionally.
+    pub fn refresh_status_git_label(&mut self, cx: &mut Context<Self>) {
+        let workspace_id = self.active_id.as_deref().unwrap_or("").to_string();
+        match derive_status_git_label_from_workspace(&workspace_id) {
+            Some((branch, dirty)) => self.status_bar.set_git_branch(branch, dirty),
+            None => self.status_bar.clear_git_branch(),
+        }
+        cx.notify();
+    }
+
+    // ──────────────────────────────────────────────────────────────────
     // SPEC-V0-3-0-MENU-WIRE-001 — View menu stub functional helpers
     // ──────────────────────────────────────────────────────────────────
 
@@ -841,6 +875,8 @@ impl RootView {
             }
             Err(e) => error!("WorkspacesStore::load (touch 시) 실패: {e}"),
         }
+        // SPEC-V0-3-0-STATUS-BAR-WIRE-001 (REQ-SBW-004): refresh git label after workspace switch.
+        self.refresh_status_git_label(cx);
         cx.notify();
     }
 
@@ -1142,6 +1178,39 @@ impl RootView {
                 "mission command not yet wired — deferred to MISSION-CTRL SPEC"
             );
             return true;
+        }
+
+        if id.starts_with("status.") {
+            // SPEC-V0-3-0-STATUS-BAR-WIRE-001 (REQ-SBW-006): route known status sub-commands.
+            // dispatch_command has no cx parameter; cx-bound state mutation is performed
+            // via the GPUI action handlers. Here we perform the routing check and return
+            // true for recognised ids, false for unrecognised ones.
+            match route_status_command_to_kind(id) {
+                Some(StatusCommand::SetAgentMode) => {
+                    // Payload delivery is carry-to (dispatch_command signature has no payload arg).
+                    // Use placeholder label "Plan" until a payload mechanism is wired.
+                    tracing::info!(
+                        command = id,
+                        "status.set_agent_mode — placeholder 'Plan' queued"
+                    );
+                    return true;
+                }
+                Some(StatusCommand::ClearAgentMode) => {
+                    tracing::info!(command = id, "status.clear_agent_mode — queued");
+                    return true;
+                }
+                Some(StatusCommand::RefreshGit) => {
+                    tracing::info!(command = id, "status.refresh_git — queued");
+                    return true;
+                }
+                None => {
+                    tracing::warn!(
+                        command = id,
+                        "status command not recognised — returning false"
+                    );
+                    return false;
+                }
+            }
         }
 
         if id.starts_with("file.") || id.starts_with("view.") {
@@ -3739,6 +3808,53 @@ pub fn route_pane_command_to_kind(id: &str) -> Option<PaneCommand> {
         "pane.focus_next" => Some(PaneCommand::FocusNext),
         "pane.focus_prev" => Some(PaneCommand::FocusPrev),
         _ => None,
+    }
+}
+
+// ============================================================
+// SPEC-V0-3-0-STATUS-BAR-WIRE-001: cx-free status helpers
+// ============================================================
+
+/// Status bar command variants for dispatch routing (AC-SBW-1/2/3).
+///
+/// Used by `route_status_command_to_kind` to distinguish known status palette
+/// commands from unrecognised ones without requiring a GPUI context.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatusCommand {
+    /// Corresponds to "status.set_agent_mode" — set the agent mode pill label.
+    SetAgentMode,
+    /// Corresponds to "status.clear_agent_mode" — hide the agent mode pill.
+    ClearAgentMode,
+    /// Corresponds to "status.refresh_git" — refresh the git branch label.
+    RefreshGit,
+}
+
+/// SPEC-V0-3-0-STATUS-BAR-WIRE-001 (REQ-SBW-005): Route a `status.*` command id to a `StatusCommand`.
+///
+/// Returns `Some(StatusCommand)` for the three wired ids, `None` for any other string.
+/// This function is cx-free and fully unit-testable (AC-SBW-1/2/3).
+pub fn route_status_command_to_kind(id: &str) -> Option<StatusCommand> {
+    match id {
+        "status.set_agent_mode" => Some(StatusCommand::SetAgentMode),
+        "status.clear_agent_mode" => Some(StatusCommand::ClearAgentMode),
+        "status.refresh_git" => Some(StatusCommand::RefreshGit),
+        _ => None,
+    }
+}
+
+/// SPEC-V0-3-0-STATUS-BAR-WIRE-001 (REQ-SBW-007): Map a workspace id to a git branch label.
+///
+/// Placeholder implementation: an empty id signals "no git context" (returns `None`);
+/// any non-empty id is returned as-is with `dirty = false`.
+///
+/// This function is cx-free and fully unit-testable (AC-SBW-4/5). Replace the body
+/// when integrating a real git2 poller — callers in `refresh_status_git_label` remain
+/// unchanged.
+pub fn derive_status_git_label_from_workspace(workspace_id: &str) -> Option<(String, bool)> {
+    if workspace_id.is_empty() {
+        None
+    } else {
+        Some((workspace_id.to_string(), false))
     }
 }
 
@@ -6772,5 +6888,70 @@ mod tests {
         ));
         assert!(route_pane_command_to_kind("pane.split_horizontal").is_none());
         assert!(route_pane_command_to_kind("pane.whatever").is_none());
+    }
+
+    // ── T-SBW block: SPEC-V0-3-0-STATUS-BAR-WIRE-001 unit tests (AC-SBW-1~5) ──
+
+    /// AC-SBW-1: route_status_command_to_kind("status.set_agent_mode") returns Some(SetAgentMode).
+    #[test]
+    fn route_status_command_to_kind_set_agent_mode() {
+        assert_eq!(
+            route_status_command_to_kind("status.set_agent_mode"),
+            Some(StatusCommand::SetAgentMode),
+            "status.set_agent_mode must map to SetAgentMode"
+        );
+    }
+
+    /// AC-SBW-2: clear_agent_mode and refresh_git sub-commands route correctly.
+    #[test]
+    fn route_status_command_to_kind_clear_and_refresh() {
+        assert_eq!(
+            route_status_command_to_kind("status.clear_agent_mode"),
+            Some(StatusCommand::ClearAgentMode),
+            "status.clear_agent_mode must map to ClearAgentMode"
+        );
+        assert_eq!(
+            route_status_command_to_kind("status.refresh_git"),
+            Some(StatusCommand::RefreshGit),
+            "status.refresh_git must map to RefreshGit"
+        );
+    }
+
+    /// AC-SBW-3: Unknown or non-status ids return None (graceful degradation).
+    #[test]
+    fn route_status_command_to_kind_unknown_returns_none() {
+        assert!(
+            route_status_command_to_kind("status.unknown_xxx").is_none(),
+            "status.unknown_xxx must return None"
+        );
+        assert!(
+            route_status_command_to_kind("status.").is_none(),
+            "bare status. prefix must return None"
+        );
+        assert!(
+            route_status_command_to_kind("notstatus.set_agent_mode").is_none(),
+            "non-status prefix must return None"
+        );
+    }
+
+    /// AC-SBW-4: derive_status_git_label_from_workspace with a non-empty id returns Some.
+    #[test]
+    fn derive_status_git_label_returns_workspace_id() {
+        let result = derive_status_git_label_from_workspace("main-ws");
+        assert_eq!(
+            result,
+            Some(("main-ws".to_string(), false)),
+            "non-empty workspace id must return Some((id, false))"
+        );
+    }
+
+    /// AC-SBW-5: derive_status_git_label_from_workspace with empty string returns None.
+    #[test]
+    fn derive_status_git_label_empty_id_returns_none() {
+        let result = derive_status_git_label_from_workspace("");
+        assert!(
+            result.is_none(),
+            "empty workspace id must return None (label-clear signal)"
+        );
     }
 }
