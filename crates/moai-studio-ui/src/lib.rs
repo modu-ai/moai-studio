@@ -113,6 +113,7 @@ actions!(
     ]
 );
 use crate::onboarding::{RealCommandRunner, detect_with_runner};
+use moai_git::{GitError, GitRepo};
 use moai_studio_workspace::{Workspace, WorkspacesStore};
 use panes::PaneId;
 use std::collections::HashMap;
@@ -462,14 +463,20 @@ impl RootView {
         cx.notify();
     }
 
-    /// SPEC-V0-3-0-STATUS-BAR-WIRE-001 (REQ-SBW-003): Refresh the git branch label.
+    /// SPEC-V0-3-0-STATUS-BAR-WIRE-002 (REQ-SBW-013): Refresh the git branch label.
     ///
-    /// Calls `derive_status_git_label_from_workspace` with the active workspace id.
-    /// When the result is `Some((branch, dirty))`, sets the git branch; when `None`,
-    /// clears it. Triggers a GPUI repaint unconditionally.
+    /// Looks up the active workspace by `self.active_id` against the in-memory
+    /// `self.workspaces` list and passes its `project_path` to
+    /// `derive_status_git_label_from_workspace`. When the active id is missing,
+    /// the workspace is not found, or the path is not a git repo, the label is
+    /// cleared. `cx.notify()` is invoked unconditionally to guarantee a re-render.
     pub fn refresh_status_git_label(&mut self, cx: &mut Context<Self>) {
-        let workspace_id = self.active_id.as_deref().unwrap_or("").to_string();
-        match derive_status_git_label_from_workspace(&workspace_id) {
+        let label = self
+            .active_id
+            .as_deref()
+            .and_then(|id| self.workspaces.iter().find(|w| w.id == id))
+            .and_then(|ws| derive_status_git_label_from_workspace(&ws.project_path));
+        match label {
             Some((branch, dirty)) => self.status_bar.set_git_branch(branch, dirty),
             None => self.status_bar.clear_git_branch(),
         }
@@ -3842,20 +3849,37 @@ pub fn route_status_command_to_kind(id: &str) -> Option<StatusCommand> {
     }
 }
 
-/// SPEC-V0-3-0-STATUS-BAR-WIRE-001 (REQ-SBW-007): Map a workspace id to a git branch label.
+/// SPEC-V0-3-0-STATUS-BAR-WIRE-002 (REQ-SBW-008..012): Map a workspace path to a git
+/// branch label and dirty marker.
 ///
-/// Placeholder implementation: an empty id signals "no git context" (returns `None`);
-/// any non-empty id is returned as-is with `dirty = false`.
+/// Opens the directory as a git repository via `moai_git::GitRepo`. Returns:
+/// - `Some((branch, dirty))` when HEAD is on a named branch (REQ-SBW-010 happy path)
+/// - `Some(("detached".to_string(), dirty))` when HEAD is detached (REQ-SBW-010)
+/// - `None` when the path is not a git repo, the path does not exist, or libgit2
+///   reports any other error (REQ-SBW-009 graceful)
 ///
-/// This function is cx-free and fully unit-testable (AC-SBW-4/5). Replace the body
-/// when integrating a real git2 poller — callers in `refresh_status_git_label` remain
-/// unchanged.
-pub fn derive_status_git_label_from_workspace(workspace_id: &str) -> Option<(String, bool)> {
-    if workspace_id.is_empty() {
-        None
-    } else {
-        Some((workspace_id.to_string(), false))
-    }
+/// `is_dirty()` failures are swallowed and treated as `false` so the branch label
+/// is still surfaced even when the dirty walk cannot complete (REQ-SBW-011).
+/// Synchronous by design — invoked only on workspace switch events (REQ-SBW-014).
+///
+/// This function is cx-free and fully unit-testable (AC-SBW-7..11).
+pub fn derive_status_git_label_from_workspace(
+    workspace_path: &std::path::Path,
+) -> Option<(String, bool)> {
+    let repo = GitRepo::open(workspace_path).ok()?;
+    let branch = match repo.current_branch() {
+        // moai-git's current_branch() returns Ok("HEAD") for a detached HEAD
+        // (libgit2's `Reference::shorthand` of the HEAD ref itself is "HEAD"),
+        // not Err(DetachedHead). Map both shapes to the canonical "detached"
+        // label per REQ-SBW-010 so the StatusBar reflects the same string
+        // regardless of which path the wrapper takes.
+        Ok(name) if name == "HEAD" => "detached".to_string(),
+        Ok(name) => name,
+        Err(GitError::DetachedHead) => "detached".to_string(),
+        Err(GitError::Git(_)) => return None,
+    };
+    let dirty = repo.is_dirty().unwrap_or(false);
+    Some((branch, dirty))
 }
 
 /// SPEC-V0-3-0-PANE-WIRE-001 (REQ-PW-002): Return the next leaf id in a rotation.
@@ -6934,24 +6958,117 @@ mod tests {
         );
     }
 
-    /// AC-SBW-4: derive_status_git_label_from_workspace with a non-empty id returns Some.
+    // ── SPEC-V0-3-0-STATUS-BAR-WIRE-002 (T-SBW2): fixture-based git status tests
+    // ──
+    // These five tests replace the original placeholder pair
+    // (`derive_status_git_label_returns_workspace_id` /
+    // `derive_status_git_label_empty_id_returns_none`) which validated the
+    // string-echo behaviour of the placeholder body. They now exercise the real
+    // moai-git wrapper against tempfile fixtures (clean repo / dirty repo /
+    // non-git directory / detached HEAD / missing path).
+    //
+    // Test fixtures use git2 directly (not the moai-git wrapper) so we can drive
+    // low-level libgit2 operations such as `set_head_detached` that the wrapper
+    // does not expose.
+
+    /// Helper: initialise a tempdir as a git repo and create one empty commit.
+    /// Returns the tempdir handle (must be kept alive for the test) and the
+    /// commit OID for callers that need detached-HEAD setup.
+    fn make_committed_repo() -> (tempfile::TempDir, git2::Oid) {
+        let dir = tempfile::tempdir().expect("tempdir create failed");
+        let repo = git2::Repository::init(dir.path()).expect("git init failed");
+        let sig =
+            git2::Signature::now("test", "test@example.com").expect("signature create failed");
+        let tree_id = {
+            let mut index = repo.index().expect("index open failed");
+            index.write_tree().expect("empty tree write failed")
+        };
+        let tree = repo.find_tree(tree_id).expect("tree lookup failed");
+        let oid = repo
+            .commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[])
+            .expect("initial commit failed");
+        drop(tree);
+        drop(repo);
+        (dir, oid)
+    }
+
+    /// AC-SBW-7: clean repo returns Some((branch, false)).
+    /// Branch matcher allows both "main" and "master" because the libgit2
+    /// default depends on host git config (`init.defaultBranch`).
     #[test]
-    fn derive_status_git_label_returns_workspace_id() {
-        let result = derive_status_git_label_from_workspace("main-ws");
-        assert_eq!(
-            result,
-            Some(("main-ws".to_string(), false)),
-            "non-empty workspace id must return Some((id, false))"
+    fn derive_status_git_label_clean_repo_returns_branch_no_dirty() {
+        let (dir, _oid) = make_committed_repo();
+        let result = derive_status_git_label_from_workspace(dir.path());
+        let (branch, dirty) = result.expect("clean repo must return Some(_)");
+        assert!(
+            branch == "main" || branch == "master",
+            "branch must be main or master (host-default), got: {branch}"
+        );
+        assert!(!dirty, "freshly committed repo must not be dirty");
+    }
+
+    /// AC-SBW-8: dirty repo (untracked file present) returns Some((branch, true)).
+    #[test]
+    fn derive_status_git_label_dirty_repo_returns_dirty_true() {
+        let (dir, _oid) = make_committed_repo();
+        std::fs::write(dir.path().join("hello.txt"), b"world")
+            .expect("dirty fixture file write failed");
+        let result = derive_status_git_label_from_workspace(dir.path());
+        let (branch, dirty) = result.expect("dirty repo must return Some(_)");
+        assert!(
+            branch == "main" || branch == "master",
+            "branch must be main or master, got: {branch}"
+        );
+        assert!(dirty, "untracked file must mark repo as dirty");
+    }
+
+    /// AC-SBW-9: non-git directory returns None (no panic).
+    #[test]
+    fn derive_status_git_label_non_git_directory_returns_none() {
+        let dir = tempfile::tempdir().expect("tempdir create failed");
+        let result = derive_status_git_label_from_workspace(dir.path());
+        assert!(
+            result.is_none(),
+            "non-git directory must return None (label clear signal)"
         );
     }
 
-    /// AC-SBW-5: derive_status_git_label_from_workspace with empty string returns None.
+    /// AC-SBW-10: detached HEAD returns Some(("detached", _)) with the fixed label.
     #[test]
-    fn derive_status_git_label_empty_id_returns_none() {
-        let result = derive_status_git_label_from_workspace("");
+    fn derive_status_git_label_detached_head_returns_fixed_label() {
+        let (dir, oid) = make_committed_repo();
+        // Re-open the repo so we can detach HEAD without holding the prior handle.
+        let repo = git2::Repository::open(dir.path()).expect("repo reopen failed");
+        repo.set_head_detached(oid)
+            .expect("set_head_detached failed");
+        drop(repo);
+        let result = derive_status_git_label_from_workspace(dir.path());
+        let (branch, _dirty) = result.expect("detached HEAD must still return Some(_)");
+        assert_eq!(
+            branch, "detached",
+            "detached HEAD must surface the fixed label \"detached\""
+        );
+    }
+
+    /// AC-SBW-11: missing path returns None (graceful IO failure path).
+    #[test]
+    fn derive_status_git_label_missing_path_returns_none() {
+        // Construct a path that almost certainly does not exist on the host.
+        let nonexistent = std::path::PathBuf::from(format!(
+            "/tmp/moai-studio-ui-status-bar-002-missing-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        assert!(
+            !nonexistent.exists(),
+            "fixture path must not exist before test"
+        );
+        let result = derive_status_git_label_from_workspace(&nonexistent);
         assert!(
             result.is_none(),
-            "empty workspace id must return None (label-clear signal)"
+            "missing path must return None (graceful IO failure)"
         );
     }
 }
