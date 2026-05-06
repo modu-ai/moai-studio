@@ -87,6 +87,11 @@ criterion = "0.5"
 # V3-005/006 wiring integration test: 실제 파일 I/O 검증용 tempfile.
 tempfile = "3"
 
+# SPEC-V0-3-0-STATUS-BAR-WIRE-002 (AC-SBW-7..11): direct git2 access for fixture
+# creation in tests (Repository::init, set_head_detached). Production code uses
+# the moai-git wrapper above; git2 is dev-only.
+git2 = "0.20"
+
 # T1 (SPEC-V3-004 MS-1 AC-R-6): gpui test-support feature 채택.
 # USER-DECISION resolved: option (a) ADOPT. TestAppContext 기반 render integration test 활성화.
 # AC-P-5 carry-over (SPEC-V3-003) 해소.
